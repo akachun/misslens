@@ -31,13 +31,14 @@
 ## Phase 0 — 사전 확인 (블로커 해소)
 
 - [x] **T1-a** 오답 10개 직접 분류: 최근 틀린 문제 10개를 한국어로 다시 풀고 개념/해석으로 나눈 뒤, 놓친 영어 문구를 기록한다 → `tests/fixtures/eval_misses.yaml` (eval 픽스처로 재사용)
-  - 결과: 오답 4개(concept 1, uncertain 2, reading 1) + 미끼 3개. 해설을 이미 본 문제라 다시 풀지 않고 학습자가 직접 판정했다. 공부하면서 해설을 보기 전에 기록한 오답을 계속 추가한다
+  - 결과: **목표 10개 중 오답 4개**(concept 1, uncertain 2, reading 1) + 미끼 3개로 형식을 먼저 확정. 해설을 이미 본 문제라 다시 풀지 않고 학습자가 직접 판정했다(방식 변경)
+  - [ ] 공부하면서 **해설을 보기 전에** 기록한 오답을 계속 추가해 10개 이상으로 늘린다(T10 eval 전까지)
   - `key_constraints`·`violates`는 Claude 초안. `tests/test_eval_fixture.py`가 §7 validator 규칙과 맞는지 검사한다
   - 관찰: m02에서 규칙으로 정한 문구(처음 고른 보기의 `violates`)와 학습자가 놓쳤다고 한 문구가 다르다 → T10 eval에서 일치율로 확인한다
 - [x] **T1-b** 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지 확인: `scripts/probe_models.py` → `data/model_status.json` (ARCHITECTURE §6.2)
   - 엔드포인트: us-east-1 `us.`/`global.`, us-west-2 `us.`/`global.`, ap-northeast-2 `global.` (`apac.`에는 쓸 모델이 없어 제외)
   - 모델: Sonnet 4.6, Haiku 4.5, Sonnet 4.5, Nova 2 Lite (모델 존재 여부는 제공 목록으로 확인 완료)
-  - [x] 할당량 초과 상태인 조합을 이 문서의 '확인 대기' 아래에 기록한다 → 2026-11-04 16:20 기준 할당량 초과 없음(20개 조합 모두 응답)
+  - [x] 할당량 초과 상태인 조합을 기록한다 → 2026-11-04 16:20 기준 할당량 초과 없음(20개 조합 모두 응답). 기록할 조합이 없어 '확인 대기' 표에는 추가하지 않았다
   - 완료 기준: 역할마다 응답하는 조합이 1개 이상 있고, Sonnet 4.6의 구조화 출력이 1회 성공 → 충족(use1-us에서 성공)
   - 공용 모듈: `src/misslens/bedrock.py`(설정 로드, `BEDROCK_ENDPOINTS` 처리, §6.3 오류 분류, D27). T2-b의 `llm.py`가 그대로 쓴다
 - [x] **T1-c** bge-m3 다운로드와 로드 확인. 임베딩 차원을 출력한다
@@ -56,8 +57,8 @@
 - [x] **T2-b** 모델 설정: `config/models.yaml` + `src/misslens/llm.py` (ARCHITECTURE §6)
   - [x] 역할 → 기본 모델 ID, 타임아웃(Sonnet 180초, Haiku 60초), 모델 폴백
   - [x] 엔드포인트 5개 순차 전환(`us.` 2곳 → `global.` 3곳), `availability` 표에 없는 조합은 호출하지 않음, `BEDROCK_ENDPOINTS` 환경변수로 순서 덮어쓰기
-  - [x] 오류별 처리: 속도 제한은 라우터의 지수 백오프 재시도(최대 5회 시도, D32) 후 전환, 할당량 초과는 즉시 전환, 모델 없음·접근 거부는 '사용 불가' 표시 후 전환, 쿨다운 15분, 역할별 '최근 성공' 기억
-  - [x] `model_status.json`에서 할당량 초과로 확인된 조합은 시작부터 쿨다운
+  - [x] 오류별 처리: 속도 제한은 라우터의 지수 백오프 재시도(최대 5회 시도, D32) 후 전환, 할당량 초과는 즉시 전환, 모델 없음·접근 거부는 '사용 불가' 표시 후 전환, 타임아웃·연결·5xx는 1회 재시도 후 전환, 요청 오류·자격 증명 오류는 전환 없이 실패(D27), 쿨다운 15분(엔드포인트×모델 단위, D29), 역할별 '최근 성공' 기억
+  - [x] `model_status.json`에서 할당량 초과로 확인된 조합은 시작부터 쿨다운(24시간 넘은 probe 결과는 무시)
   - [x] 호출에 쓰인 엔드포인트와 모델을 로그로 남김
   - [x] 테스트: 가짜 예외로 전환 순서, 쿨다운, 모델 폴백, 전부 실패하는 경우 확인
   - [x] 실호출 스모크 `tests/test_llm_live.py`(router 일반 호출, generator 구조화 출력) 통과
@@ -74,17 +75,21 @@
 - [ ] **T4** Generator(`agents/generator/`)
   - [ ] `select_tasks`: 범위 먼저(영역 비중 순) → 가중 무작위(같은 항목은 한 번만) + 이번 세션의 실패 항목 제외
   - [ ] 문제 생성(Sonnet 4.6, `Question` 스키마, 이중 언어, 샘플 문제를 문체 예시로)
+    - 시험 팩의 `scenarios`로 상황을 잡고 `prompt_out_of_scope()`를 '내지 말 것'으로 넣는다. 정답 1개 문항만(D30)
+    - 구조화 출력 방식 확인: 기본(tool calling)과 `method="json_schema"`를 비교하고 ARCHITECTURE §1의 설명을 확인·수정한다
+  - 이미 있는 것: 항목 선택에 쓸 `ledger.task_accuracy`·`coverage`, `ExamPack.task_weight()`, 호출은 `get_llm("generator")`/`get_llm("verifier")`, 저장은 `Ledger.add_question()`(검증 통과한 문제만), 실패 기록은 `record_generation_failure()`
   - [ ] Pydantic validator(`violates`와 `key_constraints`의 정합성)
   - [ ] 근거 검증(Haiku 4.5: 근거·조건·다른 정답 여지)
   - [ ] 재생성 규칙(최초 1 + 2, 3회 실패 시 다음 항목, 2항목 연속 실패 시 중단)
   - [ ] 순차 스트리밍 큐(백그라운드 스레드, 예외가 나면 `failed`로 기록)
   - [ ] 테스트(GenericFakeChatModel)
 - [ ] **T5** Grader & Diagnostician(`agents/grader/`)
-  - [ ] 세트 제출 채점·저장(정답과 해설은 리뷰 전까지 숨김)
+  - 이미 있는 것(Phase 1 ledger): 채점·저장 `submit_set`(모든 ready 문제 답 필수), 판정 표 적용과 `missed_phrase` 기록 `record_review`(D28), 미끼 기준선 `miss_breakdown`, '문제 이상' `mark_invalid`, 문구 수정 `correct_missed_phrase`. **T5에서 판정 로직을 다시 만들지 않는다**
+  - [ ] 세트 제출 흐름(정답과 해설은 리뷰 전까지 숨김) → `submit_set` 호출
   - [ ] 재질문 폼 구성: 오답 + 미끼(약 30%, 최소 2개), 보기 섞기 + 대응표, 확신/추측
-  - [ ] 판정 표(reading/uncertain/concept), `missed_phrase` = 처음 고른 오답의 `violates`, 미끼 기준선
-  - [ ] 언어가 같은 시험이면 재질문 생략 분기
-  - [ ] 오답 해설(Sonnet 4.6), '문제 이상'(invalid) 처리
+  - [ ] 재질문 답을 원래 보기 순서로 되돌려 `record_review`에 넘김(판정은 ledger가 함). 화면 표시는 `ledger.judge`
+  - [ ] 언어가 같은 시험이면 재질문 생략 분기(`ExamPack.needs_reask`, `record_review(..., reask_skipped=True)`)
+  - [ ] 오답 해설(Sonnet 4.6, `get_llm("explainer")`), '문제 이상' 버튼 → `mark_invalid`
   - [ ] 테스트
 - [ ] **CLI**(`cli/`): 세트 생성 → 풀이(시간 기록) → 제출 → 리뷰 폼 → 진단 출력
   - 완료 기준: CLI에서 5문제 세트를 풀고 리뷰하면 attempts에 `miss_type`, `missed_phrase`, `is_decoy`가 기록된다
@@ -99,8 +104,9 @@
   - [ ] BM25(한국어 전처리) + EnsembleRetriever(RRF 0.5/0.5) + task_id 필터
   - [ ] 수집 본문은 '참고 자료' 블록으로 감싸기(프롬프트 주입 방어)
   - [ ] 테스트: 정확한 시험 용어가 들어간 문서가 상위 k에 포함되는지
-- [~] **T2-c** 첫 실제 세트 전에 `exam.yaml` 확정: 공식 가이드로 세부 항목 30개(추정)를 확정하고 `version`을 올린다
-  - [x] 시험 가이드 v1.0으로 확정 → version 2(final). 세부 항목 30개(ID 변화 없음, 2.5 제목만 수정), 공식 시나리오 6개, 출제 제외 주제 16개 추가. Domain 1은 공식 PDF, Domain 2~5 제목은 가이드를 그대로 옮긴 제3자 사이트(ccar-f.17labs.ai)로 확인
+- [~] **T2-c** 첫 실제 세트 전에 `exam.yaml` 확정: 공식 가이드로 세부 항목 30개를 확정하고 `version`을 올린다
+  - [x] 시험 가이드 v1.0으로 확정 → version 2(final). 세부 항목 30개(ID 변화 없음, 2.5 제목만 수정), 공식 시나리오 6개, 출제 제외 주제 16개 추가. Domain 1은 공식 PDF, Domain 2~5 제목은 가이드를 그대로 옮긴 제3자 사이트(ccar-f.17labs.ai)로 확인. 받은 자료는 `data/sources/exam_guide/`(git 제외)에 있다
+  - [ ] 전체 공식 PDF(Domain 2~5 포함)를 구하면 2~5 제목을 한 번 더 대조한다(받은 PDF는 8쪽, Domain 1까지만 있음)
   - [x] 실제 시험에 복수 정답 문항이 있음을 확인 → v1은 단일 정답만(D30)
   - 완료 기준: 자료를 넣으면 해당 세부 항목의 문제가 근거 검증을 통과한다
 
@@ -130,9 +136,9 @@
 ## Phase 6 — 마무리와 제출
 
 - [ ] **T10** 테스트 마무리
-  - [ ] 실호출 스모크(`pytest -m live`): Sonnet 4.6 구조화 출력이 스키마를 통과하는지
+  - [ ] 실호출 스모크(`pytest -m live`): Sonnet 4.6 구조화 출력이 **실제 `Question` 스키마**를 통과하는지 (간단한 스키마 스모크는 Phase 1에 있음: `tests/test_llm_live.py`)
   - [ ] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM)
-  - [ ] eval: T1-a의 오답 10개로 진단 일치율과 조건 문구 번역 보존을 확인(수동 실행)
+  - [ ] eval: T1-a 픽스처(현재 오답 4 + 미끼 3, 10개 이상으로 늘릴 예정)로 진단 일치율과 조건 문구 번역 보존을 확인(수동 실행)
 - [ ] **T11** 문서 갱신: README(설치·실행), 구현하면서 바뀐 점을 ARCHITECTURE에 반영, LangGraph 그래프 다이어그램
 - [ ] **T12** TODOS.md 작성(아래 'v1 이후' 항목)
 - [ ] 데모 시나리오: 자연어 지시 → 계획 승인(interrupt①) → 세트 풀이 → 리뷰·진단 → 현황 / 로그인 대기(interrupt②)
@@ -165,6 +171,7 @@
 - [ ] **시험 팩 템플릿·작성 가이드**: `exams/_template/`, 새 시험 추가 절차, 두 번째 시험으로 검증
 - [ ] Collector 고도화: 링크 따라가기, 사이트별 추출, AgentCore Browser 검토
 - [ ] 놓친 문구 드릴 모드
+- [ ] 비슷한 함정 문제 출제: 맞힌 문제의 해법을 다른 상황에 잘못 옮기는 실수(예: T1-a m03, 값이 없을 때의 nullable 해법을 값이 있는 상황에 적용)를 노리는 짝 문제
 - [ ] 복수 정답 문항(multiple-response) 출제·채점·진단(D30)
 - [ ] LLM 호출 모니터링: Langfuse 연동 검토(LangSmith는 쓰지 않음, `.env`의 LANGSMITH 항목은 주석 처리함). 시간이 남을 때
 
@@ -195,3 +202,4 @@
 | 2026-11-04 | Phase 1 완료: `llm.py`(엔드포인트 전환, D29), `exam_pack.py` + `exams/ccar-f/exam.yaml`(이때는 초안 v1, 아래 T2-c에서 v2로 확정), ledger(테이블 6개, 제출·리뷰 트랜잭션, 통계 6종, 판정 표 D28). 테스트 111개 + 실호출 2개 통과 |
 | 2026-11-04 | T2-c: 시험 가이드 v1.0으로 `exam.yaml` v2 확정(시나리오·출제 제외 주제 추가). 복수 정답 문항은 v1 제외(D30), 미끼 기준선은 보정식 없이 나란히 표시(D31) |
 | 2026-11-04 | 커밋 전 독립 리뷰 반영: 재시도를 라우터로 옮기고 botocore 재시도 끔(D32, probe도 실제로 1회 재시도하던 문제 수정), 세트 제출 시 모든 문제 답 필수, 문구 수정은 reading만, 재질문 답 범위 검사. 테스트 120개 + 실호출 2개 통과 |
+| 2026-11-04 | TASK.md 전체 대조: T1-a 미달(4/10) 명시, T4·T5에 Phase 1에서 이미 만든 함수 표시(판정 로직 중복 방지), T2-c·T10 잔여 작업 추가, 누락된 v1 이후 항목 추가 |
