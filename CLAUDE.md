@@ -45,10 +45,12 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 
 ## 명령어
 
-> 코드가 생기면 실제 명령으로 갱신한다.
+> 코드가 생기면 실제 명령으로 갱신한다. AWS 자격 증명은 저장소 루트의 `.env`(git 제외)에서 읽는다.
 
 ```bash
-pip install -e ".[dev]"            # 설치
+uv venv --python 3.12 .venv       # 가상환경(Python 3.11+)
+uv pip install -e ".[dev]"         # 설치(.venv에 설치됨)
+source .venv/bin/activate          # 아래 명령은 활성화된 상태 기준
 crawl4ai-setup                     # 브라우저 설치(설치 버전 문서로 확인)
 python scripts/probe_models.py     # 엔드포인트 × 모델 사용 가능 여부 확인
 pytest -m "not live"               # 기본 테스트(LLM 가짜 모델)

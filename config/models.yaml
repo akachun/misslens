@@ -1,0 +1,27 @@
+# Single source of model IDs, regions and timeouts (CLAUDE.md rule 5, ARCHITECTURE §6).
+# Model IDs are base IDs without the inference-profile prefix; the call ID is "<prefix>.<base id>".
+
+endpoints:            # tried top to bottom (§6.2). Override with BEDROCK_ENDPOINTS=usw2-us,use1-global
+  - {name: use1-us,      region: us-east-1,      prefix: us}
+  - {name: usw2-us,      region: us-west-2,      prefix: us}
+  - {name: use1-global,  region: us-east-1,      prefix: global}
+  - {name: usw2-global,  region: us-west-2,      prefix: global}
+  - {name: apne2-global, region: ap-northeast-2, prefix: global}
+
+# Models that exist per endpoint (account list, 2026-11-04). Combinations not listed here are never called.
+availability:
+  use1-us:      &all [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+  usw2-us:      *all
+  use1-global:  *all
+  usw2-global:  *all
+  apne2-global: *all
+
+cooldown_seconds: 900
+
+roles:
+  generator:  {model: anthropic.claude-sonnet-4-6, timeout: 180, fallback_model: anthropic.claude-sonnet-4-5-20250929-v1:0}
+  explainer:  {model: anthropic.claude-sonnet-4-6, timeout: 180, fallback_model: anthropic.claude-sonnet-4-5-20250929-v1:0}
+  verifier:   {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60}
+  tagger:     {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60, fallback_model: amazon.nova-2-lite-v1:0}
+  planner:    {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60, fallback_model: amazon.nova-2-lite-v1:0}
+  router:     {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60}

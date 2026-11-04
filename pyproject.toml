@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "misslens"
+version = "0.1.0"
+description = "Certification exam study coach that separates concept misses from reading misses"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-aws>=0.2",
+    "langchain-community>=0.3",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "boto3>=1.35",
+    "faiss-cpu>=1.8",
+    "sentence-transformers>=3.0",
+    "rank_bm25>=0.2.2",
+    "crawl4ai>=0.4",
+    "streamlit>=1.38",
+    "rich>=13",
+    "pydantic>=2.7",
+    "pypdf>=4",
+    "pyyaml>=6",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: calls real Amazon Bedrock (uses quota); run with -m live"]
+addopts = "-m 'not live'"

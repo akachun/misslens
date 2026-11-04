@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 0 — 사전 확인** (문서 작성 완료, 코드 없음) |
+| 현재 단계 | **Phase 1 — 기반** (Phase 0 완료) |
 | 마지막 갱신 | 2026-11-04 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -16,7 +16,7 @@
 
 | Phase | 내용 | 목표 시점 | 상태 |
 |---|---|---|---|
-| 0 | 사전 확인(모델 접근, 임베딩, 오답 10개 분류) | 11/4 저녁 첫 30분 | [ ] |
+| 0 | 사전 확인(모델 접근, 임베딩, 오답 10개 분류) | 11/4 저녁 첫 30분 | [x] |
 | 1 | 기반(프로젝트 구조, 시험 팩, 설정, ledger) | 11/4 저녁 | [ ] |
 | 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [ ] |
 | 3 | 자료(Ingest, 하이브리드 검색) + exam.yaml 확정 | 11/5 오전 | [ ] |
@@ -30,25 +30,29 @@
 
 ## Phase 0 — 사전 확인 (블로커 해소)
 
-- [ ] **T1-a** 오답 10개 직접 분류: 최근 틀린 문제 10개를 한국어로 다시 풀고 개념/해석으로 나눈 뒤, 놓친 영어 문구를 기록한다 → `tests/fixtures/eval_misses.yaml` (eval 픽스처로 재사용)
-- [ ] **T1-b** 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지 확인: `scripts/probe_models.py` → `data/model_status.json` (ARCHITECTURE §6.2)
+- [x] **T1-a** 오답 10개 직접 분류: 최근 틀린 문제 10개를 한국어로 다시 풀고 개념/해석으로 나눈 뒤, 놓친 영어 문구를 기록한다 → `tests/fixtures/eval_misses.yaml` (eval 픽스처로 재사용)
+  - 결과: 오답 4개(concept 1, uncertain 2, reading 1) + 미끼 3개. 해설을 이미 본 문제라 다시 풀지 않고 학습자가 직접 판정했다. 공부하면서 해설을 보기 전에 기록한 오답을 계속 추가한다
+  - `key_constraints`·`violates`는 Claude 초안. `tests/test_eval_fixture.py`가 §7 validator 규칙과 맞는지 검사한다
+  - 관찰: m02에서 규칙으로 정한 문구(처음 고른 보기의 `violates`)와 학습자가 놓쳤다고 한 문구가 다르다 → T10 eval에서 일치율로 확인한다
+- [x] **T1-b** 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지 확인: `scripts/probe_models.py` → `data/model_status.json` (ARCHITECTURE §6.2)
   - 엔드포인트: us-east-1 `us.`/`global.`, us-west-2 `us.`/`global.`, ap-northeast-2 `global.` (`apac.`에는 쓸 모델이 없어 제외)
   - 모델: Sonnet 4.6, Haiku 4.5, Sonnet 4.5, Nova 2 Lite (모델 존재 여부는 제공 목록으로 확인 완료)
-  - [ ] 할당량 초과 상태인 조합을 이 문서의 '확인 대기' 아래에 기록한다
-  - 완료 기준: 역할마다 응답하는 조합이 1개 이상 있고, Sonnet 4.6의 구조화 출력이 1회 성공
-- [ ] **T1-c** bge-m3 다운로드와 로드 확인. 임베딩 차원을 출력한다
-  - ⚠ 실패하면 검색 방식을 다시 결정한다(ARCHITECTURE §8, D17)
+  - [x] 할당량 초과 상태인 조합을 이 문서의 '확인 대기' 아래에 기록한다 → 2026-11-04 16:20 기준 할당량 초과 없음(20개 조합 모두 응답)
+  - 완료 기준: 역할마다 응답하는 조합이 1개 이상 있고, Sonnet 4.6의 구조화 출력이 1회 성공 → 충족(use1-us에서 성공)
+  - 공용 모듈: `src/misslens/bedrock.py`(설정 로드, `BEDROCK_ENDPOINTS` 처리, §6.3 오류 분류, D27). T2-b의 `llm.py`가 그대로 쓴다
+- [x] **T1-c** bge-m3 다운로드와 로드 확인. 임베딩 차원을 출력한다
+  - 결과: 차원 1024, max_seq_length 8192, MPS 사용, 첫 로드(다운로드 포함) 45.6초, 3문장 인코딩 1.5초. 영-한 같은 의미 유사도 0.84, 무관한 문장 0.34 → D17 유지
 
 ## Phase 1 — 기반
 
-- [ ] **T2** 프로젝트 골격
-  - [ ] `pyproject.toml`(의존성: langchain, langchain-aws, langchain-community, langgraph, langgraph-checkpoint-sqlite, faiss-cpu, sentence-transformers, rank_bm25, crawl4ai, streamlit, rich, pydantic, pypdf, pyyaml, pytest)
-  - [ ] `.gitignore`(`data/`, `secrets/`, `*.sqlite`, `.env`, 인덱스)
-  - [ ] pytest 설정(`live` 마커는 기본 실행에서 제외)
+- [x] **T2** 프로젝트 골격
+  - [x] `pyproject.toml`(의존성: langchain, langchain-aws, langchain-community, langgraph, langgraph-checkpoint-sqlite, faiss-cpu, sentence-transformers, rank_bm25, boto3, crawl4ai, streamlit, rich, pydantic, pypdf, pyyaml, python-dotenv, pytest)
+  - [x] `.gitignore`(`data/`, `secrets/`, `*.sqlite`, `.env`, 인덱스)
+  - [x] pytest 설정(`live` 마커는 기본 실행에서 제외)
 - [ ] **T2-a** 시험 팩: `exams/ccar-f/exam.yaml`
   - [ ] `version`, `exam_language: en`, `learner_language: ko`, `question_format: scenario_mcq_4`, `pass_criteria`, 영역별 비중, 세부 항목 목록과 ID
   - [ ] `src/misslens/exam_pack.py`(로드·검증, 프롬프트용 목록 제공)
-- [ ] **T2-b** 모델 설정: `config/models.yaml` + `src/misslens/llm.py` (ARCHITECTURE §6)
+- [~] **T2-b** 모델 설정: `config/models.yaml` + `src/misslens/llm.py` (ARCHITECTURE §6) — `config/models.yaml`은 작성 완료, `llm.py` 남음
   - [ ] 역할 → 기본 모델 ID, 타임아웃(Sonnet 180초, Haiku 60초), 모델 폴백
   - [ ] 엔드포인트 5개 순차 전환(`us.` 2곳 → `global.` 3곳), `availability` 표에 없는 조합은 호출하지 않음, `BEDROCK_ENDPOINTS` 환경변수로 순서 덮어쓰기
   - [ ] 오류별 처리: 속도 제한은 adaptive 재시도 5회 후 전환, 할당량 초과는 즉시 전환, 모델 없음·접근 거부는 '사용 불가' 표시 후 전환, 쿨다운 15분, 역할별 '최근 성공' 기억
@@ -155,6 +159,7 @@
 - [ ] **시험 팩 템플릿·작성 가이드**: `exams/_template/`, 새 시험 추가 절차, 두 번째 시험으로 검증
 - [ ] Collector 고도화: 링크 따라가기, 사이트별 추출, AgentCore Browser 검토
 - [ ] 놓친 문구 드릴 모드
+- [ ] LLM 호출 모니터링: Langfuse 연동 검토(LangSmith는 쓰지 않음, `.env`의 LANGSMITH 항목은 주석 처리함). 시간이 남을 때
 
 ---
 
@@ -176,3 +181,7 @@
 | 2026-11-04 | /office-hours로 서비스 정의, /plan-eng-review로 아키텍처 확정(결정 25개). 저장소 생성, SERVICE/ARCHITECTURE/TASK 문서 작성 |
 | 2026-11-04 | CLAUDE.md 작성. Sonnet 할당량 초과로 리전 추가 → 엔드포인트 순차 전환 설계(D26, ARCHITECTURE §6.2~6.3) |
 | 2026-11-04 | 리전별 사용 가능 모델 목록 반영. ap-northeast-2 `apac.`에는 쓸 모델이 없어 제외 → 엔드포인트 5개(`us.` 2곳 → `global.` 3곳) |
+| 2026-11-04 | Phase 0: T1-b(probe 20개 조합 모두 응답, Sonnet 4.6 구조화 출력 성공), T1-c(bge-m3 1024차원, MPS) 완료. T2 골격(pyproject, .gitignore, pytest 설정, Python 3.12 `.venv`)과 `config/models.yaml`, `src/misslens/bedrock.py`, 테스트 18개 추가 |
+| 2026-11-04 | CLAUDE.md 설치 명령을 uv 기준으로 갱신. LLM 모니터링은 LangSmith 대신 Langfuse로 하기로 하고 v1 이후 항목에 추가 |
+| 2026-11-04 | T1-a: `tests/fixtures/eval_misses.yaml`(오답 4 + 미끼 3)과 일관성 테스트 추가. Phase 0 완료 |
+| 2026-11-04 | Phase 0 문서 대조: `ValidationException` 분류를 §6.3대로 좁힘(D27), §1·§6.2·§6.3·§11 보강, T2 완료 처리 |

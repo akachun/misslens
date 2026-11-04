@@ -14,7 +14,7 @@
 
 | 영역 | 선택 | 비고 |
 |---|---|---|
-| 언어 | Python 3.11+ | 과정 지정 |
+| 언어 | Python 3.11+ | 과정 지정. 개발 환경은 uv + Python 3.12 `.venv` |
 | 에이전트 프레임워크 | LangChain, LangGraph | 과정 지정. `interrupt`/`Command(resume)`, `SqliteSaver` 사용 |
 | LLM | Amazon Bedrock `ChatBedrockConverse` (`langchain-aws`) | 과정 지정. 역할별 모델과 리전 전환은 §6 참고 |
 | 구조화 출력 | Pydantic + `with_structured_output` | Claude 4.5 이상은 `method="json_schema"` 사용 가능 |
@@ -24,7 +24,7 @@
 | 저장소 | SQLite 2개: `ledger.sqlite`(학습 기록), `checkpoints.sqlite`(LangGraph) | 로컬 파일 |
 | UI | Streamlit(탭 4개) + CLI(`rich`) | CLI는 개발과 대체 경로용 |
 | 테스트 | pytest, `GenericFakeChatModel` | 실호출은 `@pytest.mark.live`로 따로 실행 |
-| 설정 | YAML(`exams/`, `config/`), 환경변수 | |
+| 설정 | YAML(`exams/`, `config/`), 환경변수 | AWS 자격 증명은 저장소 루트 `.env`(git 제외)를 `python-dotenv`로 읽음 |
 
 ## 2. 시스템 구성
 
@@ -222,6 +222,8 @@ roles:
 
 - **환경변수로 순서 바꾸기:** `BEDROCK_ENDPOINTS=usw2-us,use1-global`처럼 쉼표로 나열하면 그 순서만 쓴다. 특정 엔드포인트가 막힌 것을 알고 있을 때 수동으로 피하는 용도다.
 - **사용 가능 모델:** `get_llm()`은 `availability`에 없는 조합을 호출하지 않는다. 모델 존재 여부는 위 표로 알고 있으므로, `scripts/probe_models.py`는 "지금 실제로 응답하는지(할당량 초과 여부 포함)"를 확인하는 용도로 쓴다. 결과는 `data/model_status.json`에 기록하고, 할당량 초과로 확인된 조합은 시작할 때부터 쿨다운 상태로 둔다.
+  - 파일 형식: `probed_at`, `endpoints_order`, `results`(조합별 `status`·`latency_ms`·`error`), `quota_exceeded`(`"<endpoint>:<model>"` 목록, `llm.py`가 시작 쿨다운에 사용), `structured_output`(generator 모델 1회 결과), `role_coverage`(역할별 응답 조합)
+  - probe는 재시도 없이(`max_attempts=1`) 첫 응답을 그대로 기록한다
 
 ### 6.3 전환 규칙
 
@@ -240,6 +242,12 @@ roles:
           ├─ ValidationException(모델 ID가 이 리전에 없음) / AccessDeniedException(모델 접근 없음)
           │     → 이 조합을 프로세스 동안 '사용 불가'로 표시 → i+1
           │
+          ├─ 그 밖의 ValidationException(입력 길이 초과 등 요청 오류)
+          │     → 전환하지 않고 바로 호출 실패 (다른 엔드포인트도 같은 이유로 실패하므로)
+          │
+          ├─ 자격 증명 오류(NoCredentials, UnrecognizedClient, ExpiredToken)
+          │     → 전환하지 않고 바로 중단, 자격 증명 확인 안내
+          │
           └─ 타임아웃·연결 오류 → 1회 재시도 → 실패하면 i+1
                     │
  모든 엔드포인트 실패 ──▶ fallback_model로 같은 순서 반복 ──▶ 그래도 실패하면 호출 실패
@@ -250,7 +258,8 @@ roles:
 - 속도 제한이 여러 엔드포인트에서 이어지면, 엔드포인트마다 재시도를 거치므로 한 번의 호출이 수 분까지 길어질 수 있다. 첫 사용일에 로그로 실제 대기 시간을 보고, 길면 재시도 횟수를 줄이는 결정을 §12에 추가한다.
 - 실제 호출에 쓰인 엔드포인트와 모델은 로그에 남기고, 생성 실패 시에는 `generation_failures.reason`에 함께 기록한다.
 - `ChatBedrockConverse` 인스턴스는 (리전, 모델 ID, 타임아웃) 조합마다 한 번만 만들고 재사용한다.
-- 자격 증명은 기본 AWS 자격 증명 체인(프로필 또는 환경변수)을 쓰고, 리전만 엔드포인트마다 바꾼다. 리전마다 다른 자격 증명이 필요하면 엔드포인트에 `profile` 필드를 추가한다.
+- 오류 분류는 `src/misslens/bedrock.py`의 `classify_error()` 한 곳에서 한다(probe와 `llm.py`가 같이 씀). 일일 토큰 한도는 `ThrottlingException`에 메시지로만 구분되어 오므로 메시지로 판별한다.
+- 자격 증명은 기본 AWS 자격 증명 체인(프로필 또는 환경변수)을 쓰고(`.env`는 시작 시 환경변수로 읽음), 리전만 엔드포인트마다 바꾼다. 리전마다 다른 자격 증명이 필요하면 엔드포인트에 `profile` 필드를 추가한다.
 
 ## 7. 문제 스키마와 생성 규칙
 
@@ -336,12 +345,12 @@ misslens/
 ├── config/models.yaml
 ├── exams/ccar-f/{exam.yaml, sources.yaml}
 ├── src/misslens/
-│   ├── exam_pack.py   llm.py   ledger/   retrieval/
+│   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   └── graph.py
 ├── app/            # Streamlit
 ├── cli/            # rich CLI
-├── tests/          # pytest (live 마커 분리)
+├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/  (git 제외)
 └── secrets/        # 로그인 프로필 (git 제외)
@@ -356,6 +365,7 @@ misslens/
 | D4 | 역할별 모델 | 모두 Sonnet, 출제만 Sonnet | 품질이 중요한 곳에만 Sonnet을 쓰고, 검증은 다른 모델로 해서 오류 상관을 줄임 |
 | D5 | `us.` 프로필 기본 | `global.` 기본 | 데이터 처리 지역을 좁게 유지. 호출 제한에 걸리면 전환 (D26으로 확장) |
 | D26 | 리전 3개 엔드포인트 순차 전환: us-east-1 `us.` → us-west-2 `us.` → 각 리전 `global.`. 리전별 사용 가능 모델 표(`availability`)에 없는 조합은 호출하지 않음 | 단일 리전 + `global.` 수동 전환(D5) | 과정 중 일부 Sonnet 할당량 초과로 리전 추가(사용자 요청). ap-northeast-2 `apac.`에는 이 프로젝트가 쓰는 모델이 없어 제외 |
+| D27 | Bedrock 설정 로드·엔드포인트 순서·오류 분류를 `bedrock.py`로 분리. `ValidationException`은 모델 ID 오류일 때만 '사용 불가', 나머지는 요청 오류로 즉시 실패. 자격 증명 오류는 전환 없이 중단 | 모든 `ValidationException`을 '사용 불가'로 처리, 분류를 `llm.py` 안에 둠 | 요청 오류를 엔드포인트 문제로 오인하면 정상 엔드포인트가 모두 막히고 폴백 모델로 잘못 넘어감. probe와 `llm.py`가 같은 규칙을 쓰게 함 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
@@ -374,8 +384,8 @@ misslens/
 
 | 항목 | 확인 방법 | 결과에 따른 영향 |
 |---|---|---|
-| 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료 |
-| bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정 |
+| 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료. **2026-11-04 확인: 20개 모두 응답, 할당량 초과 없음, Sonnet 4.6 구조화 출력 성공** |
+| bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정. **2026-11-04 확인: 1024차원, MPS 로드 성공 → D17 유지** |
 | CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전) |
 | 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용 |
 | 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용 |

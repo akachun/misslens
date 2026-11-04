@@ -1,0 +1,234 @@
+# T1-a eval fixture: real misses from the learner, labeled by the learner (ground truth).
+#
+# Source: practice questions generated while studying with Claude (no third-party prep site).
+# Labels were assigned retrospectively: the learner had already read the explanations,
+# so re-solving would have biased every miss toward "reading" (ARCHITECTURE §4.2, D14).
+#
+# Fields
+#   options_en / answer_index / first_choice : 0-based (A=0, B=1, C=2, D=3)
+#   key_constraints : exact substrings of stem_en (checked by tests/test_eval_fixture.py)
+#   violates        : per option, the key_constraint that option breaks; null only at answer_index
+#   self_label      : learner's own judgement. miss_type in {concept, reading, uncertain}; null for decoys
+#                     missed_phrase = phrase the learner says they missed (may differ from the rule below)
+#   Rule-derived missed_phrase (§4.2) = violates[first_choice]; compare with self_label.missed_phrase in eval.
+#   domain / task_id : filled at T2-c when exams/ccar-f/exam.yaml is finalized
+#   violates/key_constraints are a draft by Claude; edit if they do not match how you read the question.
+
+version: 1
+exam_id: ccar-f
+collected_at: 2026-11-04
+
+items:
+  - id: m01
+    is_decoy: false
+    domain: null
+    task_id: null
+    stem_en: |
+      Your team adds a GitHub Actions step that runs Claude Code to review every pull request and post its findings as a comment.
+
+      In testing, the step never finishes: the job hangs until it is killed by the workflow timeout. Locally, the same command opens an interactive session.
+
+      What should you change so the step works in the pipeline?
+    options_en:
+      - Run Claude Code with the -p (print) flag so it runs non-interactively, and use --output-format json if the next step needs to parse the result.
+      - Increase the GitHub Actions job timeout to 60 minutes.
+      - Send the review requests through the Message Batches API instead.
+      - Add "Do not wait for user input" to the project's CLAUDE.md.
+    answer_index: 0
+    key_constraints:
+      - the job hangs until it is killed by the workflow timeout
+      - Locally, the same command opens an interactive session
+      - runs Claude Code
+    violates:
+      - null
+      - the job hangs until it is killed by the workflow timeout
+      - runs Claude Code
+      - Locally, the same command opens an interactive session
+    first_choice: 2
+    self_label: {miss_type: concept, missed_phrase: null}
+    note: Did not know -p as the non-interactive mode for CI.
+
+  - id: m02
+    is_decoy: false
+    domain: null
+    task_id: null
+    stem_en: |
+      A developer migrating from another provider's chat API builds the request like this: messages: [{role: "system", content: "You are a code reviewer..."}, {role: "user", content: diff}].
+
+      Every request is rejected with a 400 invalid request error.
+
+      What change should the developer make?
+    options_en:
+      - Move the instructions out of the messages array into the top-level system parameter, and keep only user and assistant roles in messages.
+      - Change the role from "system" to "assistant" so the instructions come before the user message.
+      - Retry the request with exponential backoff, since 400 errors are usually transient.
+      - Merge the instructions and the diff into one long user message and remove the system prompt entirely.
+    answer_index: 0
+    key_constraints:
+      - 'role: "system"'
+      - rejected with a 400 invalid request error
+    violates:
+      - null
+      - 'role: "system"'
+      - rejected with a 400 invalid request error
+      - 'role: "system"'
+    first_choice: 3
+    self_label: {miss_type: uncertain, missed_phrase: rejected with a 400}
+    note: >-
+      Rule-derived phrase (violates[D] = role: "system") differs from the learner's phrase.
+      D removes the error but is a workaround, not the fix for the misplaced system role.
+
+  - id: m03
+    is_decoy: false
+    domain: null
+    task_id: null
+    stem_en: |
+      Scenario: Northwind Logistics document pipeline
+
+      Northwind Logistics processes about 40,000 shipping documents per day from roughly 300 carriers: bills of lading, commercial invoices, and customs declarations, most of them scanned PDFs. Each document type has its own extraction tool with a JSON schema, and Claude is called once per document as soon as it arrives. The extracted data feeds a customs filing system, which rejects any filing whose totals do not match or whose dates are not in YYYY-MM-DD format. Filings must be submitted within 12 hours of a document's arrival.
+
+      The six-person engineering team works mostly in TypeScript, and the company moved its infrastructure to the cloud in 2023.
+
+      The team has reported four problems:
+
+      (a) About 4% of commercial invoices are rejected because the extracted line-item amounts do not add up to the extracted total, even though the source documents are correct.
+      (b) Date fields come back in mixed formats, such as 03/04/2025, 4 March 2025, and 2025-03-04.
+      (c) For customs declarations from 12 recently added carriers with unusual layouts, the declared_value field is often filled with the freight charge instead.
+      (d) Monthly API spending is 40% over budget. All documents are currently processed with real-time requests.
+
+      Refer to the Northwind Logistics scenario above. Consider problem (c).
+
+      What is the most effective way to address problem (c)?
+    options_en:
+      - Fine-tune a custom model on documents from the 12 new carriers.
+      - Make declared_value nullable for the 12 new carriers.
+      - Increase max_tokens so the model can read the whole layout.
+      - Clarify in the declared_value field description how it differs from freight charges, and add few-shot examples from the new carriers' layouts that show which value is the declared value.
+    answer_index: 3
+    key_constraints:
+      - 12 recently added carriers with unusual layouts
+      - filled with the freight charge instead
+      - The extracted data feeds a customs filing system
+    violates:
+      - 12 recently added carriers with unusual layouts
+      - The extracted data feeds a customs filing system
+      - filled with the freight charge instead
+      - null
+    first_choice: 1
+    self_label: {miss_type: uncertain, missed_phrase: null}
+    note: >-
+      Possibly transferred the "make it nullable" fix from m05 (answered correctly).
+      There the value is absent; here it is present but mis-picked.
+
+  - id: m04
+    is_decoy: false
+    domain: null
+    task_id: null
+    stem_en: |
+      A support agent must verify a customer's identity with verify_account before it may call process_refund.
+
+      Which of the following is the LEAST effective way to guarantee this order?
+    options_en:
+      - A PreToolUse hook that blocks process_refund unless verify_account has returned a verified ID in this session.
+      - Making process_refund available only in a later workflow step that the code starts after verification succeeds.
+      - Having process_refund itself check for a valid verification token and reject the call without one.
+      - Adding a sentence to the system prompt that says "Always verify the customer before issuing a refund."
+    answer_index: 3
+    key_constraints:
+      - LEAST effective way
+      - guarantee this order
+    violates:
+      - LEAST effective way
+      - LEAST effective way
+      - LEAST effective way
+      - null
+    first_choice: 0
+    self_label: {miss_type: reading, missed_phrase: LEAST}
+    note: Negative question; every wrong option breaks the same constraint.
+
+  # Decoys: answered correctly the first time (baseline for re-ask accuracy).
+  - id: d01
+    is_decoy: true
+    domain: null
+    task_id: null
+    stem_en: |
+      You extract fields from supplier invoices into JSON using tool use with a JSON schema. All fields in the schema, including purchase_order_number, are marked as required.
+
+      About 15% of invoices do not contain a purchase order number. For those invoices, the output always contains a plausible-looking purchase order number that does not exist anywhere in the document.
+
+      What is the best way to fix this?
+    options_en:
+      - Add a validation step that retries the extraction until a purchase order number is found in the document.
+      - Increase max_tokens so the model has room to search the whole invoice.
+      - Remove purchase_order_number from the schema entirely.
+      - Make purchase_order_number nullable in the schema and instruct the model to return null when the field is not present in the document.
+    answer_index: 3
+    key_constraints:
+      - are marked as required
+      - do not contain a purchase order number
+      - does not exist anywhere in the document
+    violates:
+      - does not exist anywhere in the document
+      - are marked as required
+      - do not contain a purchase order number
+      - null
+    first_choice: 3
+    self_label: {miss_type: null, missed_phrase: null}
+    note: null
+
+  - id: d02
+    is_decoy: true
+    domain: null
+    task_id: null
+    stem_en: |
+      A web app generates detailed project reports with Claude. Reports take 30 to 45 seconds to generate. During that time, users see a blank panel, and many click "Generate" again, which creates duplicate requests.
+
+      The report length and quality are already what users want.
+
+      Which change best improves the user experience?
+    options_en:
+      - Lower max_tokens so reports finish faster.
+      - Generate reports through the Message Batches API and email them when they are done.
+      - Cache the reports so the same report is never generated twice.
+      - Use streaming to display the report text as it is generated, so users can see progress immediately.
+    answer_index: 3
+    key_constraints:
+      - The report length and quality are already what users want
+      - users see a blank panel
+    violates:
+      - The report length and quality are already what users want
+      - users see a blank panel
+      - users see a blank panel
+      - null
+    first_choice: 3
+    self_label: {miss_type: null, missed_phrase: null}
+    note: null
+
+  - id: d03
+    is_decoy: true
+    domain: null
+    task_id: null
+    stem_en: |
+      The get_customer tool's schema is {"customer_id": {"type": "string"}} and its description is "Gets a customer." Customer IDs look like C-10293.
+
+      When customers provide only their email address, the agent passes the email as customer_id, and the call fails. The system also has a find_customer_by_email tool that returns the ID.
+
+      What is the most effective fix?
+    options_en:
+      - Catch the failure and automatically retry get_customer three times.
+      - Set tool_choice to force find_customer_by_email on the first turn of every conversation.
+      - Merge the two tools into a single get_customer tool that accepts any string.
+      - "Expand the description and the customer_id property description: state that it requires an ID in the format C-12345, not an email, and that find_customer_by_email should be used first when only an email is available."
+    answer_index: 3
+    key_constraints:
+      - 'its description is "Gets a customer."'
+      - When customers provide only their email address
+      - find_customer_by_email tool that returns the ID
+    violates:
+      - 'its description is "Gets a customer."'
+      - When customers provide only their email address
+      - find_customer_by_email tool that returns the ID
+      - null
+    first_choice: 3
+    self_label: {miss_type: null, missed_phrase: null}
+    note: null
