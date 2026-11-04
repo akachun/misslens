@@ -41,7 +41,7 @@ PROBE_TIMEOUT = 60
 def _client(region: str, timeout: int):
     # No retries: the probe reports the first response as-is.
     cfg = Config(region_name=region, connect_timeout=10, read_timeout=timeout,
-                 retries={"max_attempts": 1, "mode": "standard"})
+                 retries={"total_max_attempts": 1, "mode": "standard"})
     return boto3.client("bedrock-runtime", config=cfg)
 
 
@@ -90,7 +90,7 @@ def probe_structured(config: ModelConfig, endpoints: list[Endpoint], results: li
             llm = ChatBedrockConverse(model=ep.model_id(base_model), region_name=ep.region,
                                       temperature=0, max_tokens=300,
                                       config=Config(read_timeout=role["timeout"],
-                                                    retries={"max_attempts": 1, "mode": "standard"}))
+                                                    retries={"total_max_attempts": 1, "mode": "standard"}))
             out = llm.with_structured_output(_ProbeAnswer).invoke(
                 "Give three color names and mark which one is the color of a clear daytime sky.")
             valid = isinstance(out, _ProbeAnswer) and len(out.options) == 3 and 0 <= out.answer_index < 3

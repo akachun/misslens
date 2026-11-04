@@ -11,7 +11,8 @@
 #   self_label      : learner's own judgement. miss_type in {concept, reading, uncertain}; null for decoys
 #                     missed_phrase = phrase the learner says they missed (may differ from the rule below)
 #   Rule-derived missed_phrase (§4.2) = violates[first_choice]; compare with self_label.missed_phrase in eval.
-#   domain / task_id : filled at T2-c when exams/ccar-f/exam.yaml is finalized
+#   domain / task_id : from exams/ccar-f/exam.yaml v2. null = no clear task statement
+#     (m02: system parameter placement; d02: streaming UX, and streaming implementation is out of scope)
 #   violates/key_constraints are a draft by Claude; edit if they do not match how you read the question.
 
 version: 1
@@ -21,8 +22,8 @@ collected_at: 2026-11-04
 items:
   - id: m01
     is_decoy: false
-    domain: null
-    task_id: null
+    domain: d3
+    task_id: "3.6"
     stem_en: |
       Your team adds a GitHub Actions step that runs Claude Code to review every pull request and post its findings as a comment.
 
@@ -80,8 +81,8 @@ items:
 
   - id: m03
     is_decoy: false
-    domain: null
-    task_id: null
+    domain: d4
+    task_id: "4.2"
     stem_en: |
       Scenario: Northwind Logistics document pipeline
 
@@ -122,8 +123,8 @@ items:
 
   - id: m04
     is_decoy: false
-    domain: null
-    task_id: null
+    domain: d1
+    task_id: "1.4"
     stem_en: |
       A support agent must verify a customer's identity with verify_account before it may call process_refund.
 
@@ -149,8 +150,8 @@ items:
   # Decoys: answered correctly the first time (baseline for re-ask accuracy).
   - id: d01
     is_decoy: true
-    domain: null
-    task_id: null
+    domain: d4
+    task_id: "4.3"
     stem_en: |
       You extract fields from supplier invoices into JSON using tool use with a JSON schema. All fields in the schema, including purchase_order_number, are marked as required.
 
@@ -206,8 +207,8 @@ items:
 
   - id: d03
     is_decoy: true
-    domain: null
-    task_id: null
+    domain: d2
+    task_id: "2.1"
     stem_en: |
       The get_customer tool's schema is {"customer_id": {"type": "string"}} and its description is "Gets a customer." Customer IDs look like C-10293.
 

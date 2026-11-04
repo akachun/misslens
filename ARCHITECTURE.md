@@ -86,7 +86,7 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
                                                     (정답·해설은 리뷰 전까지 숨김)
 ```
 
-- 호출은 순차로 한다(동시 실행 1). botocore `retries mode=adaptive, max_attempts=5`를 쓰고, 타임아웃은 Sonnet 180초, Haiku 60초다.
+- 호출은 순차로 한다(동시 실행 1). 재시도는 botocore가 아니라 `llm.py` 라우터가 오류 종류별로 한다(§6.3, D32). 타임아웃은 Sonnet 180초, Haiku 60초다.
 - `elapsed_ms`는 문제가 화면에 표시된 시점부터 잰다. 생성을 기다린 시간은 넣지 않는다.
 - 백그라운드 스레드에서 예외가 나면 해당 문제를 `failed` 상태로 기록하고 화면에 표시한다. 다음 문제가 영원히 "생성 중"으로 남는 일을 막기 위해서다.
 
@@ -105,9 +105,12 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 | 오답 | 정답 + 확신 | `reading` | 해석 실수 비율에 포함. `missed_phrase` = 처음 고른 오답 보기의 `violates` |
 | 오답 | 정답 + 추측 | `uncertain` | 해석 실수 비율의 분모와 분자에서 모두 빼고 따로 집계. 정답률에서는 오답으로 계산 |
 | 오답 | 오답 | `concept` | 개념 실수로 집계 |
-| 미끼(맞힌 문제) | 정답/오답 | 판정 없음 (`is_decoy=1`) | 세트별 **기준선** = 미끼 재질문 정답률. 현황에 해석 실수 비율과 기준선 대비 보정값을 함께 표시 |
+| 미끼(맞힌 문제) | 정답/오답 | 판정 없음 (`is_decoy=1`) | 세트별 **기준선** = 미끼 재질문 정답률. 현황에 해석 실수 비율과 기준선을 **나란히** 표시(보정식·목표값 없음, D31) |
 
 - 시험 팩에서 `exam_language`와 `learner_language`가 같으면 재질문을 건너뛰고, 오답을 모두 `concept`으로 기록한다.
+- 판정 표는 `ledger/judge.py`의 순수 함수로 구현하고, ledger가 리뷰를 저장할 때(`record_review`) 직접 적용한다. 호출하는 쪽은 재질문 답과 확신 여부만 넘긴다(D28).
+- `reask_choice`는 섞기 전의 **원래 보기 순서**로 바꿔서 저장한다. `missed_phrase`는 `reading`일 때만 기록한다(`uncertain`은 기록하지 않음).
+- 리뷰에는 세트의 오답이 모두 들어 있어야 하고, 미끼는 처음에 맞힌 문제여야 한다. 어기면 저장하지 않는다.
 
 ### 4.3 계획 승인 (interrupt①, D21)
 
@@ -143,6 +146,7 @@ Collector: URL i 수집
 | `generation_failures` | id, exam_id, task_id, tries, reason, created_at | 근거 검증에서 실패한 이유를 기록한다. 현황 탭에 표시 |
 
 - 인덱스: `attempts(question_id)`, `attempts(set_id)`, `questions(exam_id, task_id)`
+- 구현 세부(2026-11-04): 세트 제출에는 `ready` 문제 전부의 답이 있어야 한다(안 푼 문제는 `chosen_index=NULL`로 오답 처리, 빠뜨리면 제출 거부). `attempts.question_id`는 UNIQUE(문제당 시도 1개), `missed_phrases.attempt_id`가 기본 키(시도당 문구 1개, 사용자가 고치면 `user_corrected=1`, `reading` 판정에만 허용), `failed` 문제는 `payload_json`이 NULL, `materials`는 `(exam_id, content_hash)`로 중복 제거. 연결은 프로세스당 1개 + Lock, 쓰기는 `BEGIN IMMEDIATE` 트랜잭션.
 - `checkpoints.sqlite`: LangGraph `SqliteSaver` 전용이다(interrupt①·② 재개용).
 - FAISS 인덱스: `data/index/<exam_id>/`. BM25는 시작할 때 메모리에 만든다.
 - 시험 팩의 기준은 YAML 파일 하나다. SQLite에는 복사하지 않는다. 세부 항목이 바뀌면 version을 올리고 `task_id` 매핑표(old → new)로 기존 통계를 이어 붙인다.
@@ -223,7 +227,7 @@ roles:
 - **환경변수로 순서 바꾸기:** `BEDROCK_ENDPOINTS=usw2-us,use1-global`처럼 쉼표로 나열하면 그 순서만 쓴다. 특정 엔드포인트가 막힌 것을 알고 있을 때 수동으로 피하는 용도다.
 - **사용 가능 모델:** `get_llm()`은 `availability`에 없는 조합을 호출하지 않는다. 모델 존재 여부는 위 표로 알고 있으므로, `scripts/probe_models.py`는 "지금 실제로 응답하는지(할당량 초과 여부 포함)"를 확인하는 용도로 쓴다. 결과는 `data/model_status.json`에 기록하고, 할당량 초과로 확인된 조합은 시작할 때부터 쿨다운 상태로 둔다.
   - 파일 형식: `probed_at`, `endpoints_order`, `results`(조합별 `status`·`latency_ms`·`error`), `quota_exceeded`(`"<endpoint>:<model>"` 목록, `llm.py`가 시작 쿨다운에 사용), `structured_output`(generator 모델 1회 결과), `role_coverage`(역할별 응답 조합)
-  - probe는 재시도 없이(`max_attempts=1`) 첫 응답을 그대로 기록한다
+  - probe는 재시도 없이(`total_max_attempts=1`) 첫 응답을 그대로 기록한다
 
 ### 6.3 전환 규칙
 
@@ -233,11 +237,11 @@ roles:
           ├─ 성공 ─▶ 결과 반환, 이 엔드포인트를 역할별 '최근 성공'으로 기억(다음 호출은 여기서 시작)
           │
           ├─ ThrottlingException(속도 제한)
-          │     → botocore adaptive 재시도(최대 5회, D13)
+          │     → 같은 엔드포인트에서 지수 백오프 재시도(1·2·4·8초 + 지터, 최대 5회 시도, D13·D32)
           │     → 그래도 실패 → 엔드포인트 i 쿨다운(15분) → i+1
           │
           ├─ ServiceQuotaExceededException / 토큰 한도 초과 메시지(일일·누적 할당량)
-          │     → 재시도 없이 바로 쿨다운 → i+1
+          │     → 재시도 없이 바로 쿨다운 → i+1 (일일 한도는 ThrottlingException에 메시지로 와서 메시지로 구분)
           │
           ├─ ValidationException(모델 ID가 이 리전에 없음) / AccessDeniedException(모델 접근 없음)
           │     → 이 조합을 프로세스 동안 '사용 불가'로 표시 → i+1
@@ -254,7 +258,10 @@ roles:
                                                           (Generator: 생성 실패 1회로 처리, §4.1)
 ```
 
-- 쿨다운과 '최근 성공' 기록은 프로세스 메모리에만 둔다. 앱을 시작할 때는 `data/model_status.json`(있으면)으로 쿨다운을 초기화하고 1번부터 시도한다.
+- 쿨다운과 '사용 불가'는 **(엔드포인트, 모델) 조합 단위**로 건다. 할당량은 모델별이라 Sonnet이 막혀도 같은 엔드포인트의 Haiku는 쓸 수 있어야 하기 때문이다(D29). '최근 성공'은 역할별로 기억하고, 다음 호출은 그 엔드포인트부터 시작한 뒤 나머지를 원래 순서대로 시도한다.
+- 분류되지 않은 오류(구조화 출력 파싱 실패 등)는 전환하지 않고 바로 실패한다.
+- botocore 자체 재시도는 끈다(`retries={"mode": "standard", "total_max_attempts": 1}`). 켜 두면 타임아웃·5xx·일일 한도까지 botocore가 먼저 재시도해서 위 규칙이 깨진다(D32). botocore의 `max_attempts: 1`은 '재시도 1회'라는 뜻이라 쓰지 않는다.
+- 쿨다운과 '최근 성공' 기록은 프로세스 메모리에만 둔다. 앱을 시작할 때는 `data/model_status.json`(있으면)으로 쿨다운을 초기화하고 1번부터 시도한다. 단, probe 결과가 24시간보다 오래됐으면 쓰지 않는다.
 - 속도 제한이 여러 엔드포인트에서 이어지면, 엔드포인트마다 재시도를 거치므로 한 번의 호출이 수 분까지 길어질 수 있다. 첫 사용일에 로그로 실제 대기 시간을 보고, 길면 재시도 횟수를 줄이는 결정을 §12에 추가한다.
 - 실제 호출에 쓰인 엔드포인트와 모델은 로그에 남기고, 생성 실패 시에는 `generation_failures.reason`에 함께 기록한다.
 - `ChatBedrockConverse` 인스턴스는 (리전, 모델 ID, 타임아웃) 조합마다 한 번만 만들고 재사용한다.
@@ -275,7 +282,7 @@ class Question(BaseModel):
     stem_en: str
     stem_native: str          # key_constraint를 모두 담되, 정답 힌트는 넣지 않는다
     options: list[Option]     # 4개
-    answer_index: int
+    answer_index: int         # 정답 1개만(v1). 실제 시험의 복수 정답 문항은 v1에서 내지 않는다(D30)
     key_constraints: list[str]
     explanation_native: str
 
@@ -301,6 +308,7 @@ class Question(BaseModel):
 - 영역과 세부 항목 목록은 시험 팩에서 받아 프롬프트에 넣는다. 프롬프트 문자열에 직접 적지 않는다.
 - 수집한 본문은 "참고 자료(data)" 블록으로 감싸서 지시로 취급하지 않게 한다(프롬프트 주입 방어).
 - 학습자가 넣은 샘플 문제는 문체를 보여 주는 예시(few-shot)로 쓴다.
+- 시험 팩의 `scenarios`(공식 시나리오 6개, 영역별 `primary_domains`)로 문제 상황을 잡고, `out_of_scope`(출제 제외 주제 16개)는 프롬프트에 '내지 말 것'으로 넣는다(`prompt_out_of_scope()`).
 
 ## 8. 검색 (D3, D17)
 
@@ -366,6 +374,11 @@ misslens/
 | D5 | `us.` 프로필 기본 | `global.` 기본 | 데이터 처리 지역을 좁게 유지. 호출 제한에 걸리면 전환 (D26으로 확장) |
 | D26 | 리전 3개 엔드포인트 순차 전환: us-east-1 `us.` → us-west-2 `us.` → 각 리전 `global.`. 리전별 사용 가능 모델 표(`availability`)에 없는 조합은 호출하지 않음 | 단일 리전 + `global.` 수동 전환(D5) | 과정 중 일부 Sonnet 할당량 초과로 리전 추가(사용자 요청). ap-northeast-2 `apac.`에는 이 프로젝트가 쓰는 모델이 없어 제외 |
 | D27 | Bedrock 설정 로드·엔드포인트 순서·오류 분류를 `bedrock.py`로 분리. `ValidationException`은 모델 ID 오류일 때만 '사용 불가', 나머지는 요청 오류로 즉시 실패. 자격 증명 오류는 전환 없이 중단 | 모든 `ValidationException`을 '사용 불가'로 처리, 분류를 `llm.py` 안에 둠 | 요청 오류를 엔드포인트 문제로 오인하면 정상 엔드포인트가 모두 막히고 폴백 모델로 잘못 넘어감. probe와 `llm.py`가 같은 규칙을 쓰게 함 |
+| D28 | 판정 표를 `ledger/judge.py` 순수 함수로 두고 ledger가 리뷰 저장 시 직접 적용 | Grader가 판정해 결과만 넘김 | 판정 결과를 밖에서 받으면 표와 다른 값이 조용히 저장될 수 있음(규칙 3). Grader는 화면 표시용으로 같은 함수를 씀 |
+| D29 | 쿨다운·사용 불가를 (엔드포인트, 모델) 단위로 관리. 오래된(24시간 초과) probe 결과는 무시 | 엔드포인트 단위 쿨다운 | 할당량은 모델별. 엔드포인트 단위면 Sonnet 할당량 초과가 Haiku까지 막음 |
+| D30 | v1은 정답 1개 문항(`scenario_mcq_4`)만 출제 | 실제 시험처럼 복수 정답 문항도 출제 | 시험 가이드상 복수 정답 문항이 있지만, 스키마(`answer_index`)·`violates`·판정 표·채점이 모두 단일 정답 기준이라 바꾸면 마감 위험이 큼. v1 이후 과제로 둠 |
+| D31 | 미끼 기준선은 보정식이나 목표값 없이 해석 실수 비율과 나란히 보여 줌. 진단 효과는 같은 학습자의 기간별 변화로 판단 | 보정식(예: 해석 실수 비율 ÷ 기준선), 고정 목표값 | 기준선은 사람마다, 같은 사람도 학습 진행에 따라 달라짐(사용자 의견). 표본이 작은 초기에 보정식을 쓰면 값이 크게 흔들림 |
+| D32 | 재시도를 botocore가 아니라 라우터가 오류 종류별로 수행(속도 제한: 지수 백오프 최대 5회 시도, 일시 오류: 1회, 할당량 초과: 없음). botocore 재시도는 끔 | botocore adaptive 모드(D13 원안) | adaptive는 타임아웃·5xx·일일 한도도 5회씩 재시도해서 §6.3 규칙과 어긋나고, 타임아웃이면 엔드포인트 하나에 최악 약 30분이 걸림(코드 리뷰에서 발견). 대신 adaptive의 클라이언트 측 속도 조절은 잃지만 호출이 순차라 영향이 작음 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
@@ -386,7 +399,7 @@ misslens/
 |---|---|---|
 | 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료. **2026-11-04 확인: 20개 모두 응답, 할당량 초과 없음, Sonnet 4.6 구조화 출력 성공** |
 | bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정. **2026-11-04 확인: 1024차원, MPS 로드 성공 → D17 유지** |
-| CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전) |
+| CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전). **2026-11-04 확인: 시험 가이드 v1.0 기준 30개, `exam.yaml` version 2(final)** |
 | 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용 |
 | 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용 |
 | 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 확인 | 데모 시나리오 조정 |

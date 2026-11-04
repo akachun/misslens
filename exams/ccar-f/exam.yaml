@@ -1,0 +1,149 @@
+# Exam pack: the only place for exam-specific information (CLAUDE.md rule 6, ARCHITECTURE §5, §7).
+#
+# Source: Claude Certified Architect – Foundations Exam Guide v1.0 (effective July 2026, exam code CCAR-F).
+#   - Exam details, domains/weights, scenarios, Domain 1 task statements: official guide PDF (Skilljar course file).
+#   - Domain 2-5 task statement titles and the out-of-scope list: ccar-f.17labs.ai, which quotes guide v1.0
+#     verbatim (third party, not affiliated with Anthropic). Checked 2026-11-04.
+# Bump `version` whenever task statements change; add old -> new IDs to `task_id_map`.
+
+exam_id: ccar-f
+name: Claude Certified Architect – Foundations
+version: 2                # v1 = unverified draft; v2 = guide v1.0 (2.5 title corrected, IDs unchanged)
+status: final
+exam_language: en
+learner_language: ko
+# The real exam also has multiple-response items ("each item states how many responses to select").
+# MissLens v1 generates single-answer items only (D30).
+question_format: scenario_mcq_4
+
+pass_criteria:
+  scaled_score: 720
+  scale_min: 100
+  scale_max: 1000
+  questions: 60
+  minutes: 120
+  note: >-
+    Criterion-referenced scaled score; 720 is not 72% of items. Score report shows percent-correct
+    by domain (diagnostic only). 4 scenarios drawn at random from a bank of 6 (~15 items each).
+
+# Previous version's task_id -> current task_id (v1 -> v2 kept every ID).
+task_id_map: {}
+
+scenarios:
+  - id: s1
+    name: Customer Support Resolution Agent
+    description: >-
+      A customer support resolution agent built with the Claude Agent SDK handles high-ambiguity requests
+      (returns, billing disputes, account issues) through custom MCP tools (get_customer, lookup_order,
+      process_refund, escalate_to_human). Target: 80%+ first-contact resolution while knowing when to escalate.
+    primary_domains: [d1, d2, d5]
+  - id: s2
+    name: Code Generation with Claude Code
+    description: >-
+      A team uses Claude Code for code generation, refactoring, debugging and documentation, integrated into the
+      workflow with custom slash commands and CLAUDE.md configurations, choosing plan mode vs direct execution.
+    primary_domains: [d3, d5]
+  - id: s3
+    name: Multi-Agent Research System
+    description: >-
+      A coordinator agent (Claude Agent SDK) delegates to subagents that search the web, analyze documents,
+      synthesize findings and generate reports, producing comprehensive cited reports.
+    primary_domains: [d1, d2, d5]
+  - id: s4
+    name: Developer Productivity with Claude
+    description: >-
+      Agent SDK tools help engineers explore unfamiliar codebases, understand legacy systems, generate boilerplate
+      and automate repetitive tasks, using built-in tools (Read, Write, Bash, Grep, Glob) and MCP servers.
+    primary_domains: [d2, d3, d1]
+  - id: s5
+    name: Claude Code for Continuous Integration
+    description: >-
+      Claude Code in a CI/CD pipeline runs automated code reviews, generates test cases and gives feedback on pull
+      requests; prompts must give actionable feedback and minimize false positives.
+    primary_domains: [d3, d4]
+  - id: s6
+    name: Structured Data Extraction
+    description: >-
+      A system extracts information from unstructured documents, validates output with JSON schemas, keeps high
+      accuracy, handles edge cases gracefully and integrates with downstream systems.
+    primary_domains: [d4, d5]
+
+# "The following related topics will not appear on the exam." (guide appendix). Generator must avoid them.
+out_of_scope:
+  - Fine-tuning Claude models or training custom models
+  - Claude API authentication, billing, or account management
+  - Detailed implementation of specific programming languages or frameworks (beyond what's needed for tool and schema configuration)
+  - Deploying or hosting MCP servers (infrastructure, networking, container orchestration)
+  - Claude's internal architecture, training process, or model weights
+  - Constitutional AI, RLHF, or safety training methodologies
+  - Embedding models or vector database implementation details
+  - Computer use (browser automation, desktop interaction)
+  - Vision/image analysis capabilities
+  - Streaming API implementation or server-sent events
+  - Rate limiting, quotas, or API pricing calculations
+  - OAuth, API key rotation, or authentication protocol details
+  - Specific cloud provider configurations (AWS, GCP, Azure)
+  - Performance benchmarking or model comparison metrics
+  - Prompt caching implementation details (beyond knowing it exists)
+  - Token counting algorithms or tokenization specifics
+
+domains:
+  - id: d1
+    name: Agentic Architecture & Orchestration
+    name_native: 에이전트 아키텍처와 오케스트레이션
+    weight: 0.27
+    tasks:
+      - {id: "1.1", title: Design and implement agentic loops for autonomous task execution}
+      - {id: "1.2", title: Orchestrate multi-agent systems with coordinator-subagent patterns}
+      - {id: "1.3", title: Configure subagent invocation, context passing, and spawning}
+      - {id: "1.4", title: Implement multi-step workflows with enforcement and handoff patterns}
+      - {id: "1.5", title: Apply Agent SDK hooks for tool call interception and data normalization}
+      - {id: "1.6", title: Design task decomposition strategies for complex workflows}
+      - {id: "1.7", title: Manage session state, resumption, and forking}
+
+  - id: d2
+    name: Tool Design & MCP Integration
+    name_native: 도구 설계와 MCP 연동
+    weight: 0.18
+    tasks:
+      - {id: "2.1", title: Design effective tool interfaces with clear descriptions and boundaries}
+      - {id: "2.2", title: Implement structured error responses for MCP tools}
+      - {id: "2.3", title: Distribute tools appropriately across agents and configure tool choice}
+      - {id: "2.4", title: Integrate MCP servers into Claude Code and agent workflows}
+      - {id: "2.5", title: "Select and apply built-in tools (Read, Write, Edit, Bash, Grep, Glob) effectively"}
+
+  - id: d3
+    name: Claude Code Configuration & Workflows
+    name_native: Claude Code 설정과 워크플로
+    weight: 0.20
+    tasks:
+      - {id: "3.1", title: Configure CLAUDE.md files with appropriate hierarchy, scoping, and modular organization}
+      - {id: "3.2", title: Create and configure custom slash commands and skills}
+      - {id: "3.3", title: Apply path-specific rules for conditional convention loading}
+      - {id: "3.4", title: Determine when to use plan mode vs direct execution}
+      - {id: "3.5", title: Apply iterative refinement techniques for progressive improvement}
+      - {id: "3.6", title: Integrate Claude Code into CI/CD pipelines}
+
+  - id: d4
+    name: Prompt Engineering & Structured Output
+    name_native: 프롬프트 엔지니어링과 구조화 출력
+    weight: 0.20
+    tasks:
+      - {id: "4.1", title: Design prompts with explicit criteria to improve precision and reduce false positives}
+      - {id: "4.2", title: Apply few-shot prompting to improve output consistency and quality}
+      - {id: "4.3", title: Enforce structured output using tool use and JSON schemas}
+      - {id: "4.4", title: Implement validation, retry, and feedback loops for extraction quality}
+      - {id: "4.5", title: Design efficient batch processing strategies}
+      - {id: "4.6", title: Design multi-instance and multi-pass review architectures}
+
+  - id: d5
+    name: Context Management & Reliability
+    name_native: 컨텍스트 관리와 신뢰성
+    weight: 0.15
+    tasks:
+      - {id: "5.1", title: Manage conversation context to preserve critical information across long interactions}
+      - {id: "5.2", title: Design effective escalation and ambiguity resolution patterns}
+      - {id: "5.3", title: Implement error propagation strategies across multi-agent systems}
+      - {id: "5.4", title: Manage context effectively in large codebase exploration}
+      - {id: "5.5", title: Design human review workflows and confidence calibration}
+      - {id: "5.6", title: Preserve information provenance and handle uncertainty in multi-source synthesis}

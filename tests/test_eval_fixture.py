@@ -52,3 +52,12 @@ def test_labels_consistent_with_decoy_flag(item):
         assert label["miss_type"] in {"concept", "reading", "uncertain"}
         if label["miss_type"] == "concept":
             assert label["missed_phrase"] is None
+
+
+def test_task_ids_exist_in_exam_pack():
+    from misslens.exam_pack import load_exam_pack
+
+    pack = load_exam_pack("ccar-f")
+    for item in ITEMS:
+        if item["task_id"] is not None:
+            assert pack.domain_of(item["task_id"]).id == item["domain"], item["id"]
