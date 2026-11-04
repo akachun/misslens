@@ -1,0 +1,382 @@
+# MissLens — 아키텍처 정의서
+
+| 항목 | 내용 |
+|---|---|
+| 문서 상태 | v1 확정 (2026-11-04) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26) |
+| 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
+
+> 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
+
+---
+
+## 1. 기술 스택
+
+| 영역 | 선택 | 비고 |
+|---|---|---|
+| 언어 | Python 3.11+ | 과정 지정 |
+| 에이전트 프레임워크 | LangChain, LangGraph | 과정 지정. `interrupt`/`Command(resume)`, `SqliteSaver` 사용 |
+| LLM | Amazon Bedrock `ChatBedrockConverse` (`langchain-aws`) | 과정 지정. 역할별 모델과 리전 전환은 §6 참고 |
+| 구조화 출력 | Pydantic + `with_structured_output` | Claude 4.5 이상은 `method="json_schema"` 사용 가능 |
+| 임베딩 | 로컬 `BAAI/bge-m3` (sentence-transformers / HuggingFaceEmbeddings) | 계정에 Bedrock 임베딩 모델이 없음 |
+| 검색 | FAISS(의미 검색) + BM25(`rank_bm25`, 키워드 검색) → `EnsembleRetriever`(RRF) | `langchain-community` |
+| 웹 수집 | Crawl4AI (로그인 프로필, Markdown 추출) | 내부적으로 Playwright Chromium 사용 |
+| 저장소 | SQLite 2개: `ledger.sqlite`(학습 기록), `checkpoints.sqlite`(LangGraph) | 로컬 파일 |
+| UI | Streamlit(탭 4개) + CLI(`rich`) | CLI는 개발과 대체 경로용 |
+| 테스트 | pytest, `GenericFakeChatModel` | 실호출은 `@pytest.mark.live`로 따로 실행 |
+| 설정 | YAML(`exams/`, `config/`), 환경변수 | |
+
+## 2. 시스템 구성
+
+```
+                     exams/<exam_id>/exam.yaml   (시험 팩: 영역·비중·세부 항목·언어·형식·version)
+                     config/models.yaml          (역할 → 모델·타임아웃·폴백, 리전 엔드포인트·사용 가능 모델)
+                                   │
+ ┌─────────────────────────────────┴───────────────────────────────────────────┐
+ │                         Supervisor (LangGraph)                                │
+ │   입력: 탭 버튼·CLI 명령(intent 지정) ─▶ 조건 분기                             │
+ │         자유 발화 ─▶ Haiku 4.5 구조화 출력 {intent, domain?, count?, ...}      │
+ │                       └ 저신뢰 → 안내 후 종료(임의 실행 금지)                   │
+ └──┬──────────┬──────────┬───────────────┬────────────────┬──────────────┬─────┘
+    ▼          ▼          ▼               ▼                ▼              ▼
+ Collector   Ingest     Planner       Generator        Grader &        Reporter
+ (Crawl4AI)  (태깅·색인) (계획 제안)    (세트 출제)       Diagnostician    (현황)
+    │ ⏸interrupt②        │ ⏸interrupt①     │                 │               │
+    │ 로그인 대기         │ 계획 승인        │                 │               │
+    ▼                     ▼                  ▼                 ▼               ▼
+ ┌──────────────┐  ┌───────────────────────────────────────────────────────────┐
+ │ FAISS(시험별)  │  │ ledger 모듈 (SQLite: 모든 SQL·통계 단독 소유)               │
+ │ + BM25(메모리) │  │ quiz_sets · questions · attempts · missed_phrases ·       │
+ └──────────────┘  │ materials · generation_failures                          │
+                   └───────────────────────────────────────────────────────────┘
+          ▲
+   bge-m3 (프로세스당 1회 로드)
+```
+
+- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다.
+- **통계는 ledger 모듈 한 곳에서만 계산한다**(D9). Generator, Planner, Reporter는 ledger의 통계 함수만 호출한다.
+- **interrupt는 두 곳에만 둔다**(D20, D21). ① Planner의 계획 승인, ② Collector의 로그인 대기. 문제 풀이와 리뷰 흐름에는 interrupt가 없다.
+
+## 3. 에이전트별 역할
+
+| 에이전트 | 역할 | 입력 → 출력 | 모델 |
+|---|---|---|---|
+| **Supervisor** | intent가 지정된 입력은 조건 분기로 라우팅. 자유 발화는 의도와 인자를 추출해 라우팅 | 요청 → 대상 서브그래프 | Haiku 4.5 (자유 발화만) |
+| **Collector** | `sources.yaml`의 URL을 로그인 프로필로 읽기 전용 수집, Markdown 추출, 세션 만료 감지 | URL 목록 → 문서(원본 URL, 수집 시각, content_hash) | 없음 |
+| **Ingest** | 청크 분할 → 세부 항목(task_id) 태깅(묶음 호출, 'unassigned' 허용) → 임베딩·색인 | 파일·텍스트·문서 → FAISS·BM25·materials | Haiku 4.5 (태깅) |
+| **Planner** | 남은 범위·정답률·실수 비율로 오늘의 계획 제안 → interrupt① → 승인된 계획으로 세트 생성 요청 | ledger 통계 → 계획 | Haiku 4.5 |
+| **Generator** | 세부 항목 선택 → 검색 → 이중 언어 문제 생성 → validator → 근거 검증 → 순차·스트리밍 제공 | 계획·세부 항목 → questions | Sonnet 4.6 (생성), Haiku 4.5 (검증) |
+| **Grader & Diagnostician** | 세트 제출 채점·저장 → 리뷰 시 재질문 폼(오답 + 미끼) → 판정·놓친 문구·해설 | 답안 → attempts·missed_phrases·해설 | Sonnet 4.6 (해설) |
+| **Reporter** | 현황 지표 표시 | ledger 통계 → 화면 | 없음 |
+
+## 4. 핵심 흐름
+
+### 4.1 세트 출제와 풀이 (D8, D13, D18)
+
+```
+Generator                                   학습 탭 (Streamlit)
+─────────                                   ──────────────────
+select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 ─▶ 통과 ─▶ Q1 표시, 타이머 시작
+                    Q2 … (백그라운드 스레드, 순차) ─────────────▶ 준비되면 다음 문제
+                                                                  미준비면 '생성 중'
+                    실패: 같은 항목 재생성(최초 1 + 2)                 │
+                          3회 실패 → 다음 항목, generation_failures 기록
+                          2항목 연속 실패 → 중단 메시지               ▼
+                                                    세트 제출 → quiz_sets 1 + attempts N (트랜잭션 1회)
+                                                    (정답·해설은 리뷰 전까지 숨김)
+```
+
+- 호출은 순차로 한다(동시 실행 1). botocore `retries mode=adaptive, max_attempts=5`를 쓰고, 타임아웃은 Sonnet 180초, Haiku 60초다.
+- `elapsed_ms`는 문제가 화면에 표시된 시점부터 잰다. 생성을 기다린 시간은 넣지 않는다.
+- 백그라운드 스레드에서 예외가 나면 해당 문제를 `failed` 상태로 기록하고 화면에 표시한다. 다음 문제가 영원히 "생성 중"으로 남는 일을 막기 위해서다.
+
+### 4.2 리뷰와 진단 (D8, D14, D20)
+
+```
+'리뷰 요청' → 재질문 폼 1장 구성
+   = 오답 전체 + 미끼(맞힌 문제 약 30%, 최소 2개, 부족하면 있는 만큼), 무작위 순서
+   - 각 문항: stem_native + options_native, 보기 순서 섞기(대응표 저장), 오답 여부 표시 안 함
+   - 입력: 답 + 확신/추측
+→ 폼 제출(일반 제출, interrupt 없음) → diagnose() 실행
+```
+
+| 대상 | 재질문 결과 | 판정 `miss_type` | 통계 처리 |
+|---|---|---|---|
+| 오답 | 정답 + 확신 | `reading` | 해석 실수 비율에 포함. `missed_phrase` = 처음 고른 오답 보기의 `violates` |
+| 오답 | 정답 + 추측 | `uncertain` | 해석 실수 비율의 분모와 분자에서 모두 빼고 따로 집계. 정답률에서는 오답으로 계산 |
+| 오답 | 오답 | `concept` | 개념 실수로 집계 |
+| 미끼(맞힌 문제) | 정답/오답 | 판정 없음 (`is_decoy=1`) | 세트별 **기준선** = 미끼 재질문 정답률. 현황에 해석 실수 비율과 기준선 대비 보정값을 함께 표시 |
+
+- 시험 팩에서 `exam_language`와 `learner_language`가 같으면 재질문을 건너뛰고, 오답을 모두 `concept`으로 기록한다.
+
+### 4.3 계획 승인 (interrupt①, D21)
+
+```
+Planner: ledger 통계 → 계획 초안 {domain: count, ...}
+  → interrupt(계획 초안) ⏸  화면: 계획 표, 수정 가능
+  ← Command(resume=승인된 계획)
+  → Generator에 세트 생성 요청
+```
+
+### 4.4 로그인 대기 (interrupt②, D21)
+
+```
+Collector: URL i 수집
+  ├─ 정상 → Markdown → content_hash가 다르면 Ingest로 전달
+  ├─ 프로필 없음 / 로그인 URL로 리다이렉트 / 401·403
+  │     → interrupt({site, url_index}) ⏸  화면: "브라우저 창에서 로그인 후 [완료]"
+  │     ← Command(resume="done") → 같은 URL i부터 이어서 수집
+  └─ 본문이 비었거나 너무 짧음 → 실패 표시, PDF/HTML 업로드 안내
+```
+
+## 5. 데이터 모델 (D10, D22)
+
+`ledger.sqlite`는 ledger 모듈만 읽고 쓴다.
+
+| 테이블 | 주요 컬럼 | 비고 |
+|---|---|---|
+| `quiz_sets` | id, exam_id, size, status(`generating`/`in_progress`/`submitted`/`reviewed`), created_at, submitted_at, reviewed_at | 이중 제출은 status로 막는다 |
+| `questions` | id, set_id, exam_id, task_id, domain, blueprint_version, seq, status(`ready`/`failed`), payload_json | payload는 §7의 `Question` 문서 전체 |
+| `attempts` | id, set_id, question_id, chosen_index, is_correct, elapsed_ms, is_decoy, reask_choice, reask_confident, miss_type, invalid | 통계는 `invalid=0`인 행만 쓴다 |
+| `missed_phrases` | attempt_id(FK), phrase, user_corrected | 순위를 낼 때 invalid인 attempt는 조인에서 뺀다 |
+| `materials` | id, exam_id, source_type(`upload`/`paste`/`collect`), source_uri, content_hash, task_id(NULL 허용), collected_at | |
+| `generation_failures` | id, exam_id, task_id, tries, reason, created_at | 근거 검증에서 실패한 이유를 기록한다. 현황 탭에 표시 |
+
+- 인덱스: `attempts(question_id)`, `attempts(set_id)`, `questions(exam_id, task_id)`
+- `checkpoints.sqlite`: LangGraph `SqliteSaver` 전용이다(interrupt①·② 재개용).
+- FAISS 인덱스: `data/index/<exam_id>/`. BM25는 시작할 때 메모리에 만든다.
+- 시험 팩의 기준은 YAML 파일 하나다. SQLite에는 복사하지 않는다. 세부 항목이 바뀌면 version을 올리고 `task_id` 매핑표(old → new)로 기존 통계를 이어 붙인다.
+
+## 6. 모델 설정 (D4, D5, D19, D26)
+
+모델 호출은 모두 `src/misslens/llm.py`의 `get_llm(role)`을 거친다. 모델 ID, 리전, 타임아웃은 `config/models.yaml` 한 곳에서 관리한다. 코드에 모델 ID나 리전을 직접 적지 않는다.
+
+### 6.1 역할별 모델
+
+모델은 접두사(`us.`, `apac.`, `global.`)를 뺀 **기본 ID**로 적고, 실제 호출 ID는 엔드포인트의 접두사를 붙여서 만든다(예: `us.` + `anthropic.claude-sonnet-4-6`).
+
+| 역할 | 기본 모델 | 타임아웃 | 모델 폴백(모든 엔드포인트를 시도한 뒤에만) |
+|---|---|---|---|
+| 출제(Generator), 오답 해설(Diagnostician) | `anthropic.claude-sonnet-4-6` | 180초 | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| 근거 검증, Ingest 태깅, Planner, Supervisor(자유 발화) | `anthropic.claude-haiku-4-5-20251001-v1:0` | 60초 | 태깅과 Planner만 `amazon.nova-2-lite-v1:0` |
+| Reporter, Collector | (LLM 없음) | — | — |
+
+- 출제와 근거 검증처럼 구조화 출력의 정확성이 중요한 역할에는 Nova를 폴백으로 쓰지 않는다.
+- Nova Pro, Nova Lite(v1), Nova Micro, gpt-oss는 쓰지 않는다.
+
+### 6.2 리전·추론 프로필 엔드포인트 (D26)
+
+할당받은 리전은 3개다. 데이터 처리 지역이 좁은 프로필(`us.`, `apac.`)을 먼저 쓰고, 모두 막히면 `global.`로 넘어간다. 다만 아래 표처럼 `apac.`에는 쓸 모델이 없어서, 실제로는 `us.` 두 곳 다음에 `global.`로 넘어간다.
+
+**리전별 사용 가능 모델** (계정 기준, 2026-11-04 제공 목록. ✓ = 사용 가능, — = 없음)
+
+| 모델(기본 ID) | 이 프로젝트의 용도 | us-east-1 `us.` | us-east-1 `global.` | us-west-2 `us.` | us-west-2 `global.` | ap-northeast-2 `apac.` | ap-northeast-2 `global.` |
+|---|---|---|---|---|---|---|---|
+| `anthropic.claude-sonnet-4-6` | 출제·해설 | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `anthropic.claude-sonnet-4-5-20250929-v1:0` | Sonnet 폴백 | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `anthropic.claude-haiku-4-5-20251001-v1:0` | 검증·태깅·계획·라우팅 | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `amazon.nova-2-lite-v1:0` | 태깅·계획 폴백 | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `amazon.nova-pro-v1:0` | 사용 안 함 | ✓ | — | ✓ | — | ✓ | — |
+| `amazon.nova-lite-v1:0` | 사용 안 함 | ✓ | — | ✓ | — | ✓ | — |
+| `amazon.nova-micro-v1:0` | 사용 안 함 | ✓ | — | ✓ | — | ✓ | — |
+| `openai.gpt-oss-120b-1:0`, `openai.gpt-oss-20b-1:0` | 사용 안 함 | 접두사 없이 us-east-1만 | | | | | |
+
+- ap-northeast-2의 `apac.` 프로필에는 이 프로젝트가 쓰는 모델(Claude 4.5/4.6, Nova 2 Lite)이 없다. 그래서 기본 전환 순서에서 뺀다. ap-northeast-2는 `global.`로만 쓴다.
+- 결과적으로 `us.`로 처리할 수 있는 곳은 us-east-1과 us-west-2 두 곳이다. 둘 다 막히면 `global.`로 넘어간다.
+
+**기본 전환 순서**
+
+| 순서 | 엔드포인트 | 리전 | 접두사 | 데이터 처리 지역 |
+|---|---|---|---|---|
+| 1 | `use1-us` | us-east-1 | `us.` | 미국 리전 |
+| 2 | `usw2-us` | us-west-2 | `us.` | 미국 리전 |
+| 3 | `use1-global` | us-east-1 | `global.` | 전 세계 상용 리전 |
+| 4 | `usw2-global` | us-west-2 | `global.` | 전 세계 상용 리전 |
+| 5 | `apne2-global` | ap-northeast-2 | `global.` | 전 세계 상용 리전 |
+| (제외) | `apne2-apac` | ap-northeast-2 | `apac.` | 사용할 모델이 없어 기본 순서에서 뺌. Nova Pro/Lite/Micro를 쓰게 되면 다시 검토 |
+
+```yaml
+# config/models.yaml (예시)
+endpoints:            # 위에서부터 시도
+  - {name: use1-us,      region: us-east-1,      prefix: us}
+  - {name: usw2-us,      region: us-west-2,      prefix: us}
+  - {name: use1-global,  region: us-east-1,      prefix: global}
+  - {name: usw2-global,  region: us-west-2,      prefix: global}
+  - {name: apne2-global, region: ap-northeast-2, prefix: global}
+# 리전별로 존재하는 모델 (위 표와 같음). 여기에 없는 조합은 호출하지 않는다.
+availability:
+  use1-us:      [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+  usw2-us:      [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+  use1-global:  [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+  usw2-global:  [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+  apne2-global: [anthropic.claude-sonnet-4-6, anthropic.claude-sonnet-4-5-20250929-v1:0, anthropic.claude-haiku-4-5-20251001-v1:0, amazon.nova-2-lite-v1:0]
+cooldown_seconds: 900
+roles:
+  generator:  {model: anthropic.claude-sonnet-4-6, timeout: 180, fallback_model: anthropic.claude-sonnet-4-5-20250929-v1:0}
+  explainer:  {model: anthropic.claude-sonnet-4-6, timeout: 180, fallback_model: anthropic.claude-sonnet-4-5-20250929-v1:0}
+  verifier:   {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60}
+  tagger:     {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60, fallback_model: amazon.nova-2-lite-v1:0}
+  planner:    {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60, fallback_model: amazon.nova-2-lite-v1:0}
+  router:     {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60}
+```
+
+- **환경변수로 순서 바꾸기:** `BEDROCK_ENDPOINTS=usw2-us,use1-global`처럼 쉼표로 나열하면 그 순서만 쓴다. 특정 엔드포인트가 막힌 것을 알고 있을 때 수동으로 피하는 용도다.
+- **사용 가능 모델:** `get_llm()`은 `availability`에 없는 조합을 호출하지 않는다. 모델 존재 여부는 위 표로 알고 있으므로, `scripts/probe_models.py`는 "지금 실제로 응답하는지(할당량 초과 여부 포함)"를 확인하는 용도로 쓴다. 결과는 `data/model_status.json`에 기록하고, 할당량 초과로 확인된 조합은 시작할 때부터 쿨다운 상태로 둔다.
+
+### 6.3 전환 규칙
+
+```
+호출 ──▶ 엔드포인트 i (쿨다운 중이거나 사용 불가 조합이면 건너뜀)
+          │
+          ├─ 성공 ─▶ 결과 반환, 이 엔드포인트를 역할별 '최근 성공'으로 기억(다음 호출은 여기서 시작)
+          │
+          ├─ ThrottlingException(속도 제한)
+          │     → botocore adaptive 재시도(최대 5회, D13)
+          │     → 그래도 실패 → 엔드포인트 i 쿨다운(15분) → i+1
+          │
+          ├─ ServiceQuotaExceededException / 토큰 한도 초과 메시지(일일·누적 할당량)
+          │     → 재시도 없이 바로 쿨다운 → i+1
+          │
+          ├─ ValidationException(모델 ID가 이 리전에 없음) / AccessDeniedException(모델 접근 없음)
+          │     → 이 조합을 프로세스 동안 '사용 불가'로 표시 → i+1
+          │
+          └─ 타임아웃·연결 오류 → 1회 재시도 → 실패하면 i+1
+                    │
+ 모든 엔드포인트 실패 ──▶ fallback_model로 같은 순서 반복 ──▶ 그래도 실패하면 호출 실패
+                                                          (Generator: 생성 실패 1회로 처리, §4.1)
+```
+
+- 쿨다운과 '최근 성공' 기록은 프로세스 메모리에만 둔다. 앱을 시작할 때는 `data/model_status.json`(있으면)으로 쿨다운을 초기화하고 1번부터 시도한다.
+- 속도 제한이 여러 엔드포인트에서 이어지면, 엔드포인트마다 재시도를 거치므로 한 번의 호출이 수 분까지 길어질 수 있다. 첫 사용일에 로그로 실제 대기 시간을 보고, 길면 재시도 횟수를 줄이는 결정을 §12에 추가한다.
+- 실제 호출에 쓰인 엔드포인트와 모델은 로그에 남기고, 생성 실패 시에는 `generation_failures.reason`에 함께 기록한다.
+- `ChatBedrockConverse` 인스턴스는 (리전, 모델 ID, 타임아웃) 조합마다 한 번만 만들고 재사용한다.
+- 자격 증명은 기본 AWS 자격 증명 체인(프로필 또는 환경변수)을 쓰고, 리전만 엔드포인트마다 바꾼다. 리전마다 다른 자격 증명이 필요하면 엔드포인트에 `profile` 필드를 추가한다.
+
+## 7. 문제 스키마와 생성 규칙
+
+```python
+class Option(BaseModel):
+    text_en: str
+    text_native: str          # 학습자 언어
+    violates: str | None      # 오답 보기가 어기는 key_constraint (정답은 None)
+
+class Question(BaseModel):
+    task_id: str              # exam.yaml의 세부 항목 ID
+    domain: str
+    stem_en: str
+    stem_native: str          # key_constraint를 모두 담되, 정답 힌트는 넣지 않는다
+    options: list[Option]     # 4개
+    answer_index: int
+    key_constraints: list[str]
+    explanation_native: str
+
+    # validator(필수): violates=None인 보기는 정답 보기 하나뿐이고,
+    # 나머지 보기의 violates는 모두 key_constraints 안에 있어야 한다.
+    # 어기면 생성 실패 1회로 센다.
+```
+
+**근거 검증 (D15).** Haiku 4.5에 검색한 청크, 문제, 정답, 오답별 `violates`를 함께 주고 아래 세 가지를 구조화 출력으로 판정하게 한다. 하나라도 실패하면 다시 생성한다. Haiku가 정답을 가린 채 문제를 푸는 방식(blind solve)은 쓰지 않는다.
+1. 정답이 청크로 뒷받침되는가
+2. 각 `violates`가 지문의 key_constraint로 실제로 있는가
+3. 다른 보기가 정답일 여지는 없는가
+
+**세부 항목 선택 (D11).**
+1. 아직 한 번도 출제되지 않은 세부 항목이 있으면, 그중에서 영역 비중이 높은 순서로 세트를 채운다.
+2. 모든 항목이 한 번 이상 출제됐으면, 가중치를 매겨 무작위로 뽑는다(같은 항목은 한 세트에 한 번만).
+   - `weight = (영역 비중 ÷ 영역 내 항목 수) × (1 − 정답률)`
+   - `정답률 = (정답 + 1) / (유효 시도 + 2)`
+   - 항목별 최근 10회만 센다. `uncertain`은 오답으로 보고, `invalid`는 뺀다.
+3. 이번 세션(thread_id 하나)에서 생성에 실패한 항목은 뺀다. '다시 시도'를 눌러도 제외 목록은 유지한다.
+
+**프롬프트 규칙.**
+- 영역과 세부 항목 목록은 시험 팩에서 받아 프롬프트에 넣는다. 프롬프트 문자열에 직접 적지 않는다.
+- 수집한 본문은 "참고 자료(data)" 블록으로 감싸서 지시로 취급하지 않게 한다(프롬프트 주입 방어).
+- 학습자가 넣은 샘플 문제는 문체를 보여 주는 예시(few-shot)로 쓴다.
+
+## 8. 검색 (D3, D17)
+
+```
+질의(세부 항목 설명 + 키워드) ──┬─▶ FAISS(bge-m3) 상위 k
+  task_id 필터(태그가 있으면)    └─▶ BM25(한국어 처리 포함) 상위 k
+                                       └─▶ EnsembleRetriever(RRF, 0.5/0.5) → 상위 k 청크
+```
+
+- bge-m3는 프로세스당 한 번만 불러온다. Streamlit에서는 `st.cache_resource`를 쓴다.
+- BM25는 공백으로만 단어를 나누면 한국어를 제대로 다루지 못한다. 그래서 한국어 전처리(형태소 분석 또는 글자 n-gram)를 거쳐 단어를 나눈다.
+
+## 9. Collector (D12, D14, D16)
+
+| 항목 | 규칙 |
+|---|---|
+| 로그인 | `collect login <site>` → Crawl4AI 프로필 기능으로 브라우저 창을 띄우고 사용자가 직접 로그인 |
+| 프로필 위치 | `secrets/profiles/<site>/` (권한 0700, git 제외, 로그에 남기지 않음) |
+| 수집 대상 | `exams/<exam_id>/sources.yaml`에 적힌 URL만, headless, `BrowserConfig(user_data_dir=…, use_managed_browser=True)` |
+| 안전 | 읽기 전용(폼 제출·클릭·다운로드 없음), 요청 간격 2초 이상, 적힌 도메인 밖으로 나가지 않음 |
+| 중복 | 같은 URL의 `content_hash`가 같으면 다시 넣지 않음 |
+| 반입 조건 | 사내 자료는 반입 승인 전에는 수집하지 않음 |
+| 대체 경로 | 3시간 안에 구현이 끝나지 않거나 추출에 실패하면, 페이지를 PDF/HTML로 저장해 업로드 |
+| 확인 필요 | CLI 명령과 프로필 경로는 설치하는 버전의 문서로 확인(`crawl4ai-setup`은 문서에서 확인되지 않음) |
+
+## 10. Streamlit 연동
+
+| 항목 | 방식 |
+|---|---|
+| 탭 | 학습(세트 풀이·리뷰 폼) / 자료(업로드·붙여넣기·수집·세션 만료 표시) / 현황 / 계획(interrupt① 승인) |
+| interrupt 재개 | 퀴즈 1회 = thread_id 1개. thread_id를 `st.session_state`와 URL(`st.query_params`)에 보관해서, 새로고침해도 URL로 같은 지점에서 이어간다 |
+| DB 연결 | `st.cache_resource`로 연결을 하나만 만들고 `check_same_thread=False`와 `threading.Lock`으로 보호. 학습 기록 DB와 체크포인트 DB는 따로 둔다 |
+| 세트 스트리밍 | 백그라운드 스레드가 `questions`에 순서대로 기록하고, 화면은 `seq`와 `status`를 보고 다음 문제를 보여 준다 |
+
+## 11. 디렉토리 구조 (예정)
+
+```
+misslens/
+├── CLAUDE.md       # 에이전트 작업 지침 (매 세션 로드)
+├── SERVICE.md  ARCHITECTURE.md  TASK.md  README.md  TODOS.md
+├── pyproject.toml
+├── config/models.yaml
+├── exams/ccar-f/{exam.yaml, sources.yaml}
+├── src/misslens/
+│   ├── exam_pack.py   llm.py   ledger/   retrieval/
+│   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
+│   └── graph.py
+├── app/            # Streamlit
+├── cli/            # rich CLI
+├── tests/          # pytest (live 마커 분리)
+├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
+├── data/           # ledger.sqlite, checkpoints.sqlite, index/  (git 제외)
+└── secrets/        # 로그인 프로필 (git 제외)
+```
+
+## 12. 기술 결정 기록
+
+| ID | 결정 | 검토한 대안 | 이유 |
+|---|---|---|---|
+| D1 | 서브그래프 6개 + Supervisor | 단일 그래프 + 모듈 소유 | 멀티 에이전트 구조를 그대로 보여 줌 (사용자 선택) |
+| D3/D17 | bge-m3 + BM25 하이브리드 | Titan 임베딩, BM25만, 태그 필터 + BM25 | 임베딩 모델 접근 없음. 조건 문구는 키워드 검색이 강하고, 태그가 틀렸을 때 의미 검색이 안전망이 됨 |
+| D4 | 역할별 모델 | 모두 Sonnet, 출제만 Sonnet | 품질이 중요한 곳에만 Sonnet을 쓰고, 검증은 다른 모델로 해서 오류 상관을 줄임 |
+| D5 | `us.` 프로필 기본 | `global.` 기본 | 데이터 처리 지역을 좁게 유지. 호출 제한에 걸리면 전환 (D26으로 확장) |
+| D26 | 리전 3개 엔드포인트 순차 전환: us-east-1 `us.` → us-west-2 `us.` → 각 리전 `global.`. 리전별 사용 가능 모델 표(`availability`)에 없는 조합은 호출하지 않음 | 단일 리전 + `global.` 수동 전환(D5) | 과정 중 일부 Sonnet 할당량 초과로 리전 추가(사용자 요청). ap-northeast-2 `apac.`에는 이 프로젝트가 쓰는 모델이 없어 제외 |
+| D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
+| D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
+| D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
+| D10 | 세트 + 문제별 행(6개 테이블) | 세트를 JSON 1행으로 저장 | 질의하는 값은 컬럼으로, 문제 본문만 JSON으로 |
+| D11 | 범위 먼저, 그다음 약점 | 처음부터 가중 무작위 | 범위 80% 목표를 보장 |
+| D12/D23 | pytest 단위 + E2E 2 + 스모크 + eval, 기능별로 함께 작성 | 단위만, 수동, 위험 순 작성 | 조용히 틀리는 규칙을 테스트로 고정 |
+| D13/D18/D19 | 순차 생성 + 스트리밍 + 타임아웃 180/60초 | 동시 3, 다음 세트 미리 생성 | 호출 제한 안전성을 지키면서 첫 문제 대기를 줄임 |
+| D14 | 재질문에 미끼 섞기 + 기준선 | 오답만 재질문 | '틀린 문제'라는 단서와 재독 효과를 보정 |
+| D15 | 근거 자료로 검증 | 정답 가리고 풀기 | 사실 근거를 확인하고, 어려운 문제가 걸러지지 않게 함 |
+| D16 | Collector v1 포함 | 시험 후로 연기 | 교안 대부분이 로그인 웹에 있음 (사용자 선택) |
+| D21 | interrupt: 계획 승인 + 로그인 대기 | 되묻기, 태그 확인 | 사람이 직접 해야 하는 지점에만 둠 |
+| D22 | exam.yaml version + 첫 세트 전 확정 | 나중에 확정 | 학습 기록의 기준 키를 보호 |
+| Crawl4AI | Crawl4AI | Playwright 직접, AgentCore Browser, ego lite, browser-use, Stagehand | URL을 이미 알고 있고 본문만 필요함. Python 네이티브. 실패 시 Playwright로 내려갈 수 있음 |
+
+## 13. 확인이 필요한 사항
+
+| 항목 | 확인 방법 | 결과에 따른 영향 |
+|---|---|---|
+| 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료 |
+| bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정 |
+| CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전) |
+| 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용 |
+| 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용 |
+| 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 확인 | 데모 시나리오 조정 |
