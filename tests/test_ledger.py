@@ -16,6 +16,7 @@ from misslens.ledger import (
     judge,
     miss_breakdown,
     missed_phrase,
+    set_score,
     task_accuracy,
     top_missed_phrases,
 )
@@ -295,3 +296,10 @@ def test_file_db_persists(tmp_path):
     lg2 = Ledger(path)
     assert task_accuracy(lg2, EXAM)["1.1"].attempts == 1
     lg2.close()
+
+
+def test_set_score_counts_valid_first_answers(ledger):
+    sid, a = submitted_set(ledger)          # 2 misses, 2 correct
+    assert (set_score(ledger, sid).correct, set_score(ledger, sid).total) == (2, 4)
+    ledger.mark_invalid(a[0])
+    assert (set_score(ledger, sid).correct, set_score(ledger, sid).total) == (2, 3)

@@ -5,19 +5,21 @@ from misslens.ledger.stats import (
     AvgTime,
     Coverage,
     MissBreakdown,
+    SetScore,
     TaskAccuracy,
     avg_time,
     coverage,
     generation_failures,
     laplace,
     miss_breakdown,
+    set_score,
     task_accuracy,
     top_missed_phrases,
 )
 from misslens.ledger.store import Answer, Ledger, LedgerError, ReaskAnswer, SetStateError
 
 __all__ = [
-    "Answer", "AvgTime", "Coverage", "Ledger", "LedgerError", "MissBreakdown", "ReaskAnswer", "SetStateError",
+    "Answer", "AvgTime", "Coverage", "Ledger", "LedgerError", "MissBreakdown", "ReaskAnswer", "SetScore", "SetStateError",
     "TaskAccuracy", "avg_time", "coverage", "generation_failures", "judge", "laplace", "miss_breakdown",
-    "missed_phrase", "task_accuracy", "top_missed_phrases",
+    "missed_phrase", "set_score", "task_accuracy", "top_missed_phrases",
 ]

@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 2 — 핵심 루프** (Phase 1 완료, `exam.yaml` v2 확정) |
+| 현재 단계 | **Phase 3 — 자료와 검색** (Phase 2 완료. 근거 자료가 없으면 문제 검증이 제 역할을 못 하므로 Phase 3가 실사용의 전제) |
 | 마지막 갱신 | 2026-11-04 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | 0 | 사전 확인(모델 접근, 임베딩, 오답 10개 분류) | 11/4 저녁 첫 30분 | [x] |
 | 1 | 기반(프로젝트 구조, 시험 팩, 설정, ledger) | 11/4 저녁 | [x] |
-| 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [ ] |
+| 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [x] |
 | 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [ ] |
 | 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [ ] |
 | 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [ ] |
@@ -72,27 +72,27 @@
 
 ## Phase 2 — 핵심 루프 (CLI)
 
-- [ ] **T4** Generator(`agents/generator/`)
-  - [ ] `select_tasks`: 범위 먼저(영역 비중 순) → 가중 무작위(같은 항목은 한 번만) + 이번 세션의 실패 항목 제외
-  - [ ] 문제 생성(Sonnet 4.6, `Question` 스키마, 이중 언어, 샘플 문제를 문체 예시로)
-    - 시험 팩의 `scenarios`로 상황을 잡고 `prompt_out_of_scope()`를 '내지 말 것'으로 넣는다. 정답 1개 문항만(D30)
-    - 구조화 출력 방식 확인: 기본(tool calling)과 `method="json_schema"`를 비교하고 ARCHITECTURE §1의 설명을 확인·수정한다
-  - 이미 있는 것: 항목 선택에 쓸 `ledger.task_accuracy`·`coverage`, `ExamPack.task_weight()`, 호출은 `get_llm("generator")`/`get_llm("verifier")`, 저장은 `Ledger.add_question()`(검증 통과한 문제만), 실패 기록은 `record_generation_failure()`
-  - [ ] Pydantic validator(`violates`와 `key_constraints`의 정합성)
-  - [ ] 근거 검증(Haiku 4.5: 근거·조건·다른 정답 여지)
-  - [ ] 재생성 규칙(최초 1 + 2, 3회 실패 시 다음 항목, 2항목 연속 실패 시 중단)
-  - [ ] 순차 스트리밍 큐(백그라운드 스레드, 예외가 나면 `failed`로 기록)
-  - [ ] 테스트(GenericFakeChatModel)
-- [ ] **T5** Grader & Diagnostician(`agents/grader/`)
-  - 이미 있는 것(Phase 1 ledger): 채점·저장 `submit_set`(모든 ready 문제 답 필수), 판정 표 적용과 `missed_phrase` 기록 `record_review`(D28), 미끼 기준선 `miss_breakdown`, '문제 이상' `mark_invalid`, 문구 수정 `correct_missed_phrase`. **T5에서 판정 로직을 다시 만들지 않는다**
-  - [ ] 세트 제출 흐름(정답과 해설은 리뷰 전까지 숨김) → `submit_set` 호출
-  - [ ] 재질문 폼 구성: 오답 + 미끼(약 30%, 최소 2개), 보기 섞기 + 대응표, 확신/추측
-  - [ ] 재질문 답을 원래 보기 순서로 되돌려 `record_review`에 넘김(판정은 ledger가 함). 화면 표시는 `ledger.judge`
-  - [ ] 언어가 같은 시험이면 재질문 생략 분기(`ExamPack.needs_reask`, `record_review(..., reask_skipped=True)`)
-  - [ ] 오답 해설(Sonnet 4.6, `get_llm("explainer")`), '문제 이상' 버튼 → `mark_invalid`
-  - [ ] 테스트
-- [ ] **CLI**(`cli/`): 세트 생성 → 풀이(시간 기록) → 제출 → 리뷰 폼 → 진단 출력
-  - 완료 기준: CLI에서 5문제 세트를 풀고 리뷰하면 attempts에 `miss_type`, `missed_phrase`, `is_decoy`가 기록된다
+- [x] **T4** Generator(`agents/generator/`)
+  - [x] `select_tasks`: 범위 먼저(영역 비중 순) → 가중 무작위(같은 항목은 한 번만) + 이번 세션의 실패 항목 제외
+  - [x] 문제 생성(Sonnet 4.6, `QuestionDraft` → `Question`, 이중 언어, 샘플 문제를 문체 예시로 받는 인자)
+    - [x] 시험 팩의 `scenarios`로 상황을 잡고 `prompt_out_of_scope()`를 '내지 말 것'으로 넣는다. 정답 1개 문항만(D30)
+    - [x] 구조화 출력 방식 확인: tool calling과 `json_schema` 둘 다 동작(11.0초 대 12.1초). 기본 방식 유지, §1 수정
+  - [x] Pydantic validator(`violates`와 `key_constraints`의 정합성 + key_constraints가 지문에 글자 그대로, D33), 통과 후 보기 순서 섞기
+  - [x] 근거 검증(Haiku 4.5: 근거·조건·다른 정답 여지 + 지어낸 플래그·보기 내부 모순, D34)
+  - [x] 재생성 규칙(최초 1 + 2, 직전 실패 이유를 다음 프롬프트에 넣음, 3회 실패 시 다음 항목 + `generation_failures`, 2항목 연속 실패 시 중단)
+  - [x] 순차 스트리밍 큐(`QuestionStream`, 백그라운드 스레드 1개, 예외가 나면 `failed`로 기록, 취소 지원)
+  - [x] 테스트(GenericFakeChatModel 기반 `tests/fakes.py`) + 실호출 1문제 생성 `tests/test_generator_live.py`
+  - ⚠ **근거 자료 없이는 실사용 불가(D34).** 세부 항목 설명만 주면 지어낸 플래그가 검증을 통과하거나(검사 3개일 때), 실제 플래그까지 떨어진다(검사 4개일 때). 문서 한 단락을 주면 정확히 구분했다 → Phase 3를 먼저 끝내야 CLI로 실제 공부를 할 수 있다
+- [x] **T5** Grader & Diagnostician(`agents/grader/`)
+  - 판정·채점·기준선·문제 이상 처리는 ledger가 한다(D28). Grader는 폼 구성과 입력 변환만 한다
+  - [x] 세트 제출 흐름(정답과 해설은 리뷰 전까지 숨김) → `submit_set`
+  - [x] 재질문 폼 구성: 오답 + 미끼(약 30%, 최소 2개), 보기 섞기 + 대응표, 확신/추측 (`reask.py`)
+  - [x] 재질문 답을 원래 보기 순서로 되돌려 `record_review`에 넘김. '문제 이상'으로 먼저 표시한 오답은 재질문하지 않음
+  - [x] 언어가 같은 시험이면 재질문 생략 분기(`submit_review`)
+  - [x] 오답 해설(Sonnet 4.6, 판정 유형별 초점, 실패하면 저장된 해설), 놓친 문구를 지문 안에 강조, '문제 이상' → `mark_invalid`
+  - [x] 테스트
+- [x] **CLI**(`src/misslens/cli.py`, D35): 세트 생성 → 풀이(시간 기록) → 제출 → 리뷰 폼 → 진단 출력, `status`(현황 요약)
+  - 완료 기준: CLI에서 5문제 세트를 풀고 리뷰하면 attempts에 `miss_type`, `missed_phrase`, `is_decoy`가 기록된다 → `tests/test_cli_e2e.py`로 확인(가짜 LLM). 실제 모델로 CLI 전체를 돌리는 것은 Phase 3 이후
 
 ## Phase 3 — 자료와 검색
 
@@ -137,7 +137,7 @@
 
 - [ ] **T10** 테스트 마무리
   - [ ] 실호출 스모크(`pytest -m live`): Sonnet 4.6 구조화 출력이 **실제 `Question` 스키마**를 통과하는지 (간단한 스키마 스모크는 Phase 1에 있음: `tests/test_llm_live.py`)
-  - [ ] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM)
+  - [x] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM) → `tests/test_cli_e2e.py`(Phase 2에서 작성)
   - [ ] eval: T1-a 픽스처(현재 오답 4 + 미끼 3, 10개 이상으로 늘릴 예정)로 진단 일치율과 조건 문구 번역 보존을 확인(수동 실행)
 - [ ] **T11** 문서 갱신: README(설치·실행), 구현하면서 바뀐 점을 ARCHITECTURE에 반영, LangGraph 그래프 다이어그램
 - [ ] **T12** TODOS.md 작성(아래 'v1 이후' 항목)
@@ -203,3 +203,5 @@
 | 2026-11-04 | T2-c: 시험 가이드 v1.0으로 `exam.yaml` v2 확정(시나리오·출제 제외 주제 추가). 복수 정답 문항은 v1 제외(D30), 미끼 기준선은 보정식 없이 나란히 표시(D31) |
 | 2026-11-04 | 커밋 전 독립 리뷰 반영: 재시도를 라우터로 옮기고 botocore 재시도 끔(D32, probe도 실제로 1회 재시도하던 문제 수정), 세트 제출 시 모든 문제 답 필수, 문구 수정은 reading만, 재질문 답 범위 검사. 테스트 120개 + 실호출 2개 통과 |
 | 2026-11-04 | TASK.md 전체 대조: T1-a 미달(4/10) 명시, T4·T5에 Phase 1에서 이미 만든 함수 표시(판정 로직 중복 방지), T2-c·T10 잔여 작업 추가, 누락된 v1 이후 항목 추가 |
+| 2026-11-04 | Phase 2 완료: Generator(선택·생성·validator·근거 검증·재생성·스트리밍), Grader(재질문 폼·리뷰·해설), CLI(`quiz`, `status`). 실호출로 문제 생성 확인 중 근거 없는 검증의 한계를 발견해 4번째 검사 추가(D33~D35). 테스트 160개 + 실호출 3개 |
+| 2026-11-04 | Phase 2 독립 리뷰 반영: 구조화 출력이 비어 오면(`None`) 재생성으로 처리, 실패 칸은 세트 크기에 세지 않음, CLI 문제 번호를 `seq`로 통일('문제 이상' 번호 어긋남 수정), 세트 점수를 ledger `set_score`로 이동(규칙 1), Ctrl-C 시 생성 취소 후 ledger 닫기, key_constraints 2~4개 검사. 테스트 165개 |

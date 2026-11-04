@@ -17,7 +17,7 @@
 | 언어 | Python 3.11+ | 과정 지정. 개발 환경은 uv + Python 3.12 `.venv` |
 | 에이전트 프레임워크 | LangChain, LangGraph | 과정 지정. `interrupt`/`Command(resume)`, `SqliteSaver` 사용 |
 | LLM | Amazon Bedrock `ChatBedrockConverse` (`langchain-aws`) | 과정 지정. 역할별 모델과 리전 전환은 §6 참고 |
-| 구조화 출력 | Pydantic + `with_structured_output` | Claude 4.5 이상은 `method="json_schema"` 사용 가능 |
+| 구조화 출력 | Pydantic + `with_structured_output` | 기본 방식(tool calling)을 쓴다. Sonnet 4.6에서 `method="json_schema"`도 동작함을 확인(2026-11-04, 문제 1개 기준 11.0초 대 12.1초, 둘 다 validator 통과) |
 | 임베딩 | 로컬 `BAAI/bge-m3` (sentence-transformers / HuggingFaceEmbeddings) | 계정에 Bedrock 임베딩 모델이 없음 |
 | 검색 | FAISS(의미 검색) + BM25(`rank_bm25`, 키워드 검색) → `EnsembleRetriever`(RRF) | `langchain-community` |
 | 웹 수집 | Crawl4AI (로그인 프로필, Markdown 추출) | 내부적으로 Playwright Chromium 사용 |
@@ -88,7 +88,9 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 
 - 호출은 순차로 한다(동시 실행 1). 재시도는 botocore가 아니라 `llm.py` 라우터가 오류 종류별로 한다(§6.3, D32). 타임아웃은 Sonnet 180초, Haiku 60초다.
 - `elapsed_ms`는 문제가 화면에 표시된 시점부터 잰다. 생성을 기다린 시간은 넣지 않는다.
-- 백그라운드 스레드에서 예외가 나면 해당 문제를 `failed` 상태로 기록하고 화면에 표시한다. 다음 문제가 영원히 "생성 중"으로 남는 일을 막기 위해서다.
+- 백그라운드 스레드에서 예외가 나면 해당 문제를 `failed` 상태로 기록하고 화면에 표시한다. 다음 문제가 영원히 "생성 중"으로 남는 일을 막기 위해서다. `failed` 칸은 세트 크기 N에 세지 않고(준비된 문제가 N개가 될 때까지 다음 항목으로 진행), 연속 실패에는 센다. 문제 번호는 `seq`(실패 칸 포함)를 그대로 쓴다.
+- 모델이 구조화 출력 없이 답하면(tool calling에서 도구를 부르지 않음) 생성 실패 1회로 세고 다시 생성한다.
+- CLI에서 Ctrl-C를 누르면 생성을 취소하고 백그라운드 스레드가 멈춘 뒤에 ledger를 닫는다. 제출하지 않은 세트는 `generating`/`in_progress` 상태로 남고 통계에는 들어가지 않는다.
 
 ### 4.2 리뷰와 진단 (D8, D14, D20)
 
@@ -110,7 +112,8 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 - 시험 팩에서 `exam_language`와 `learner_language`가 같으면 재질문을 건너뛰고, 오답을 모두 `concept`으로 기록한다.
 - 판정 표는 `ledger/judge.py`의 순수 함수로 구현하고, ledger가 리뷰를 저장할 때(`record_review`) 직접 적용한다. 호출하는 쪽은 재질문 답과 확신 여부만 넘긴다(D28).
 - `reask_choice`는 섞기 전의 **원래 보기 순서**로 바꿔서 저장한다. `missed_phrase`는 `reading`일 때만 기록한다(`uncertain`은 기록하지 않음).
-- 리뷰에는 세트의 오답이 모두 들어 있어야 하고, 미끼는 처음에 맞힌 문제여야 한다. 어기면 저장하지 않는다.
+- 리뷰에는 세트의 오답이 모두 들어 있어야 하고, 미끼는 처음에 맞힌 문제여야 한다. 어기면 저장하지 않는다. 리뷰 전에 '문제 이상'으로 표시한 오답은 재질문하지 않는다.
+- 구현: 재질문 폼과 대응표는 `agents/grader/reask.py`, 저장과 진단 화면 데이터는 `agents/grader/review.py`. 오답 해설은 explainer 역할(Sonnet 4.6)이 판정 유형(해석/불확실/개념)에 맞춰 쓰고, 호출이 실패하면 문제에 저장된 해설을 보여 준다.
 
 ### 4.3 계획 승인 (interrupt①, D21)
 
@@ -276,25 +279,36 @@ class Option(BaseModel):
     text_native: str          # 학습자 언어
     violates: str | None      # 오답 보기가 어기는 key_constraint (정답은 None)
 
-class Question(BaseModel):
-    task_id: str              # exam.yaml의 세부 항목 ID
-    domain: str
+class QuestionDraft(BaseModel):  # 생성 모델이 채우는 부분
     stem_en: str
     stem_native: str          # key_constraint를 모두 담되, 정답 힌트는 넣지 않는다
     options: list[Option]     # 4개
     answer_index: int         # 정답 1개만(v1). 실제 시험의 복수 정답 문항은 v1에서 내지 않는다(D30)
-    key_constraints: list[str]
-    explanation_native: str
+    key_constraints: list[str]  # 2~4개, stem_en에서 글자 그대로 옮긴 짧은 구절(D33)
+    explanation_native: str   # 보기 순서를 섞으므로 A/B 같은 글자로 보기를 가리키지 않는다
 
-    # validator(필수): violates=None인 보기는 정답 보기 하나뿐이고,
-    # 나머지 보기의 violates는 모두 key_constraints 안에 있어야 한다.
-    # 어기면 생성 실패 1회로 센다.
+class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(questions.payload_json)
+    task_id: str              # exam.yaml의 세부 항목 ID
+    domain: str               # 영역 ID(d1~d5)
+    scenario_id: str | None   # exam.yaml의 공식 시나리오
+    grounding: str            # "retrieved" 또는 Phase 3 전의 "task_statement_only"
+
+    # validator(필수, schema.validation_errors): 보기 4개, violates=None인 보기는 정답 하나뿐,
+    # 나머지 violates는 모두 key_constraints 안에 있고, key_constraints는 모두 stem_en에 글자 그대로 있으며
+    # (대소문자·공백 무시), 보기 문장은 서로 달라야 한다. 어기면 생성 실패 1회로 센다.
+    # 통과하면 코드가 보기 순서를 섞는다(정답 위치 편향 제거, D33).
 ```
 
-**근거 검증 (D15).** Haiku 4.5에 검색한 청크, 문제, 정답, 오답별 `violates`를 함께 주고 아래 세 가지를 구조화 출력으로 판정하게 한다. 하나라도 실패하면 다시 생성한다. Haiku가 정답을 가린 채 문제를 푸는 방식(blind solve)은 쓰지 않는다.
+- 구현: `src/misslens/agents/generator/`(`schema.py`, `select.py`, `prompts.py`, `context.py`, `pipeline.py`). 다시 생성할 때는 직전 실패 이유를 프롬프트에 넣는다.
+- 근거 자료는 `ContextProvider` 인터페이스로 받는다. Phase 3 전에는 세부 항목 설명만 주는 `TaskStatementContext`를 쓴다.
+
+**근거 검증 (D15).** Haiku 4.5에 검색한 청크, 문제, 정답, 오답별 `violates`를 함께 주고 아래 네 가지를 구조화 출력으로 판정하게 한다. 하나라도 실패하면 다시 생성한다. Haiku가 정답을 가린 채 문제를 푸는 방식(blind solve)은 쓰지 않는다.
 1. 정답이 청크로 뒷받침되는가
 2. 각 `violates`가 지문의 key_constraint로 실제로 있는가
 3. 다른 보기가 정답일 여지는 없는가
+4. 지문과 보기의 CLI 플래그·API 파라미터·파일 이름이 실제로 있고, 보기 안의 명령과 설명이 서로 맞는가(D34)
+
+- **근거 자료가 없으면 이 검증은 제 역할을 못 한다(2026-11-04 실측).** 세부 항목 설명만 주면 Sonnet이 없는 플래그(`--no-interactive`)를 정답으로 낸 문제를 Haiku가 통과시켰다. 4번 검사를 넣자 이번에는 실제 플래그(`-p`)까지 지어낸 것으로 보고 떨어뜨렸다. 공식 문서 한 단락을 근거로 주면 둘을 정확히 구분했다. 그래서 검증은 엄격하게 두고, 실제 사용 전에 Phase 3(자료·검색)을 반드시 끝낸다.
 
 **세부 항목 선택 (D11).**
 1. 아직 한 번도 출제되지 않은 세부 항목이 있으면, 그중에서 영역 비중이 높은 순서로 세트를 채운다.
@@ -355,9 +369,9 @@ misslens/
 ├── src/misslens/
 │   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
+│   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status`)
 │   └── graph.py
 ├── app/            # Streamlit
-├── cli/            # rich CLI
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/  (git 제외)
@@ -379,6 +393,9 @@ misslens/
 | D30 | v1은 정답 1개 문항(`scenario_mcq_4`)만 출제 | 실제 시험처럼 복수 정답 문항도 출제 | 시험 가이드상 복수 정답 문항이 있지만, 스키마(`answer_index`)·`violates`·판정 표·채점이 모두 단일 정답 기준이라 바꾸면 마감 위험이 큼. v1 이후 과제로 둠 |
 | D31 | 미끼 기준선은 보정식이나 목표값 없이 해석 실수 비율과 나란히 보여 줌. 진단 효과는 같은 학습자의 기간별 변화로 판단 | 보정식(예: 해석 실수 비율 ÷ 기준선), 고정 목표값 | 기준선은 사람마다, 같은 사람도 학습 진행에 따라 달라짐(사용자 의견). 표본이 작은 초기에 보정식을 쓰면 값이 크게 흔들림 |
 | D32 | 재시도를 botocore가 아니라 라우터가 오류 종류별로 수행(속도 제한: 지수 백오프 최대 5회 시도, 일시 오류: 1회, 할당량 초과: 없음). botocore 재시도는 끔 | botocore adaptive 모드(D13 원안) | adaptive는 타임아웃·5xx·일일 한도도 5회씩 재시도해서 §6.3 규칙과 어긋나고, 타임아웃이면 엔드포인트 하나에 최악 약 30분이 걸림(코드 리뷰에서 발견). 대신 adaptive의 클라이언트 측 속도 조절은 잃지만 호출이 순차라 영향이 작음 |
+| D33 | `key_constraints`는 지문에 글자 그대로 있어야 하고(validator), 보기 순서는 코드가 섞는다 | 모델이 쓴 그대로 사용 | 리뷰에서 놓친 문구를 지문 안에 강조하려면 글자 그대로 있어야 함. 모델은 정답을 앞쪽에 두는 경향이 있음 |
+| D34 | 근거 검증에 4번째 검사(지어낸 플래그·파라미터, 보기 내부 모순) 추가. 근거 자료 없이는 실사용하지 않음 | 3가지 검사 유지, 근거 없을 때 느슨하게 통과 | 실측에서 없는 플래그를 정답으로 한 문제가 통과됨. 틀린 사실을 외우게 하는 것은 시험 준비에 해로움 |
+| D35 | CLI는 `src/misslens/cli.py` 모듈(`python -m misslens.cli`) | 저장소 루트 `cli/` 디렉터리(§11 원안) | CLAUDE.md의 실행 명령과 맞추고 패키지 안에서 import 경로를 단순하게 유지 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |

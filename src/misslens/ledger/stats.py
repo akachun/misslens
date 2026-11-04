@@ -137,6 +137,18 @@ def avg_time(ledger: Ledger, exam_id: str) -> AvgTime:
                    by_domain_ms={d: sum(v) / len(v) for d, v in by_domain.items()})
 
 
+@dataclass(frozen=True)
+class SetScore:
+    correct: int
+    total: int
+
+
+def set_score(ledger: Ledger, set_id: int) -> SetScore:
+    """First-answer score of one set over valid attempts (shown right after submission)."""
+    rows = ledger._query("SELECT is_correct FROM attempts WHERE set_id = ? AND invalid = 0", (set_id,))
+    return SetScore(correct=sum(r["is_correct"] for r in rows), total=len(rows))
+
+
 def generation_failures(ledger: Ledger, exam_id: str, limit: int = 20) -> list[dict]:
     return [dict(r) for r in ledger._query(
         "SELECT task_id, tries, reason, created_at FROM generation_failures WHERE exam_id = ? "

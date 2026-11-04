@@ -225,7 +225,7 @@ class Ledger:
     def record_review(self, set_id: int, reasks: list[ReaskAnswer], *, reask_skipped: bool = False) -> None:
         """Apply the §4.2 table and store the review in one transaction.
 
-        Every miss of the set must be included. Decoys must be attempts answered correctly.
+        Every valid miss of the set must be included. Decoys must be attempts answered correctly.
         reask_skipped=True (exam and learner language are the same): pass misses with
         reask_choice=None; they are all stored as concept, and no decoys are allowed.
         """
@@ -235,9 +235,10 @@ class Ledger:
             if cur.rowcount != 1:
                 raise SetStateError(f"set {set_id} is {self._set_status(c, set_id)}; cannot review")
             rows = {r["id"]: r for r in c.execute(
-                "SELECT a.id, a.chosen_index, a.is_correct, q.payload_json FROM attempts a "
+                "SELECT a.id, a.chosen_index, a.is_correct, a.invalid, q.payload_json FROM attempts a "
                 "JOIN questions q ON q.id = a.question_id WHERE a.set_id=?", (set_id,))}
-            misses = {i for i, r in rows.items() if not r["is_correct"]}
+            # Misses already flagged '문제 이상' are not re-asked (they are out of every statistic).
+            misses = {i for i, r in rows.items() if not r["is_correct"] and not r["invalid"]}
             given = [r.attempt_id for r in reasks]
             if len(given) != len(set(given)):
                 raise LedgerError("attempt listed twice in review")
