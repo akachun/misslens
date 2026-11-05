@@ -72,7 +72,8 @@ HANDOFF = r"""# MissLens 평가용 패키지
 
 ## 실행
 
-[uv](https://docs.astral.sh/uv/)와 Python 3.11 이상이 필요합니다. 압축을 푼 `misslens` 폴더에서 실행합니다.
+Python 3.11 이상이 필요합니다. 압축을 푼 `misslens` 폴더에서 실행합니다. 아래는 [uv](https://docs.astral.sh/uv/) 기준이고,
+uv가 없으면 맨 아래 'uv 없이'를 따릅니다. 의존성(torch, sentence-transformers 등) 설치에 몇 분 걸립니다.
 
 **macOS · Linux (bash/zsh)**
 
@@ -93,6 +94,16 @@ pytest
 ```
 
 (명령 프롬프트 cmd.exe에서는 `.venv\Scripts\activate.bat`. PowerShell 5.1은 `&&`를 지원하지 않으니 한 줄에 하나씩 실행합니다.)
+
+**uv 없이 (Python 기본 venv + pip)**
+
+```
+python -m venv .venv
+.venv\Scripts\activate            (macOS·Linux: source .venv/bin/activate)
+python -m pip install -U pip
+pip install -e ".[dev]"
+pytest                             기대 결과: 308 passed, 1 skipped
+```
 
 모델 호출에는 저장소 루트의 `.env`에 Amazon Bedrock 자격 증명이 필요합니다(Sonnet 4.6, Haiku 4.5 사용 승인).
 

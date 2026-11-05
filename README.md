@@ -269,6 +269,8 @@ uv venv --python 3.12 .venv
 uv pip install -e ".[dev]"
 ```
 
+uv가 없으면 Python 기본 도구로도 됩니다: `python -m venv .venv` → 활성화(Windows `.venv\Scripts\activate`, macOS·Linux `source .venv/bin/activate`) → `python -m pip install -U pip` → `pip install -e ".[dev]"`.
+
 환경변수를 붙이는 명령(예: `MISSLENS_SANDBOX=1 streamlit run app/main.py`)은 PowerShell에서 `$env:MISSLENS_SANDBOX="1"; streamlit run app/main.py`로 씁니다. 교안 수집(`collect login`)은 브라우저 창이 뜨는 컴퓨터에서만 됩니다.
 
 저장소 루트에 `.env`를 만들고 Amazon Bedrock 자격 증명을 넣습니다(git 제외).
