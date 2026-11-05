@@ -93,6 +93,7 @@ def test_cli_five_question_set_records_diagnosis(monkeypatch):
     assert all(a["elapsed_ms"] is not None for a in attempts.values())
     assert ledger.get_set(sid)["status"] == "reviewed"
     assert learner.self_checks == 2                                    # asked once per miss (reading + concept)
+    assert ledger.list_sets(PACK.exam_id)[0]["origin"] == "cli"         # CLI sets show up in the history (D53)
     from misslens.ledger import diagnosis_agreement
     labeled = ledger.labeled_misses(PACK.exam_id)
     assert len(labeled) == 1 and labeled[0]["learner_label"] in ("reading",)

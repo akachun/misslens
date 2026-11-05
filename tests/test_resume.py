@@ -100,3 +100,24 @@ def test_generate_records_quick_and_plan_sets(ledger):
     p = ledger.plan_for_set(out["set_id"])
     assert p["kind"] == "quick" and p["counts"] == {"d2": 2} and p["thread_id"] == "q"
     assert ledger.list_plans(PACK.exam_id) == []                     # quick sets are not shown as plans
+
+
+def test_set_history_shows_every_origin(ledger):
+    """D53: planned, quick, free-text and CLI sets all appear in the history with where they came from."""
+    def submitted(kind, thread_id):
+        sid = ledger.create_set(PACK.exam_id, 1)
+        if kind:
+            ledger.record_plan(PACK.exam_id, set_id=sid, kind=kind, total=1, counts={"d1": 1}, thread_id=thread_id)
+        run(ledger, sid, 1)
+        (q,) = ledger.set_questions(sid)
+        ledger.submit_set(sid, [Answer(q["id"], 0, 100)])
+        return sid
+
+    ids = {"plan": submitted("plan", "ui-plan-1"), "ask": submitted("quick", "ui-ask-1"),
+           "quick": submitted("quick", "ui-quiz-1"), "cli": submitted("quick", "cli-quiz"),
+           "unknown": submitted(None, None)}
+    hist = ledger.list_sets(PACK.exam_id)
+    assert {h["id"]: h["origin"] for h in hist} == {v: k for k, v in ids.items()}
+    assert [h["id"] for h in hist] == sorted(ids.values(), reverse=True)
+    open_one = ledger.create_set(PACK.exam_id, 1)
+    assert open_one not in [h["id"] for h in ledger.list_sets(PACK.exam_id)]   # open sets are in "이어 풀기"

@@ -25,7 +25,7 @@ from langgraph.types import Command
 from misslens.agents.grader import build_reask_form, diagnosis_rows, highlight, submit_review
 from misslens.agents.grader.coach import coach_ask, coach_explain, coach_history, coach_thread
 from misslens.bedrock import PROJECT_ROOT
-from misslens.ledger import miss_breakdown
+from misslens.ledger import miss_breakdown, set_score
 
 LETTERS = "ABCD"
 POLL_SECONDS = 1.5
@@ -207,6 +207,28 @@ def open_sets_panel(r: Resources) -> None:
             st.rerun()
 
 
+ORIGIN_KO = {"plan": "계획", "quick": "바로 풀기", "ask": "자연어 요청", "cli": "CLI", "unknown": "이전 기록"}
+
+
+def past_sets_panel(r: Resources) -> None:
+    """Every submitted set, whichever way it was made (plan, quick start, free text, CLI), newest first (D53)."""
+    sets = r.ledger.list_sets(r.pack.exam_id)
+    if not sets:
+        return
+    st.subheader("지난 세트")
+    for p in sets:
+        score = set_score(r.ledger, p["id"])
+        mb = miss_breakdown(r.ledger, r.pack.exam_id, set_id=p["id"])
+        doms = ", ".join(f"{d} {n}" for d, n in (p["counts"] or {}).items() if n)
+        c1, c2 = st.columns([4, 1])
+        c1.markdown(f"**세트 #{p['id']}** · {ORIGIN_KO[p['origin']]}{' (' + doms + ')' if doms else ''} · "
+                    f"{score.correct}/{score.total} 정답 · 개념 {mb.concept} · 해석 {mb.reading} · "
+                    f"{STATUS_KO.get(p['status'], p['status'])} · {p['created_at'][:16].replace('T', ' ')} UTC")
+        if c2.button("리뷰하기" if p["status"] == "submitted" else "진단 보기", key=f"past_{p['id']}"):
+            start_quiz(r, p["id"])
+            st.rerun()
+
+
 def study_start(r: Resources) -> None:
     open_sets_panel(r)
     st.subheader("바로 풀기")
@@ -233,6 +255,7 @@ def study_start(r: Resources) -> None:
             adopt_result(val, tid)
             st.rerun()
     st.caption("계획을 세우고 싶으면 '계획' 탭, 자연어로 요청하려면 왼쪽 입력창을 쓰세요.")
+    past_sets_panel(r)
 
 
 def study_solve(r: Resources, quiz: dict) -> None:
@@ -246,7 +269,10 @@ def study_solve(r: Resources, quiz: dict) -> None:
                 quiz["notes"].append(ev.message)
     generating = stream is not None and stream.running
     ready = ready_questions(r, sid)
-    st.subheader(f"세트 #{sid} · {len(ready)}/{quiz['n']}문제 준비 · 푼 문제 {len(quiz['answers'])}")
+    head, back = st.columns([5, 1])
+    head.subheader(f"세트 #{sid} · {len(ready)}/{quiz['n']}문제 준비 · 푼 문제 {len(quiz['answers'])}")
+    if back.button("목록으로", key=f"to_list_{sid}", help="푼 답은 저장돼 있어 '이어 풀기'로 돌아올 수 있습니다"):
+        reset_quiz()
     for note in quiz["notes"]:
         st.caption(note)
     # The next question is the first one without an answer, so a resumed set continues where it stopped.
@@ -396,7 +422,7 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
             if row.attempt_id not in invalid and st.button("문제 이상(통계에서 빼기)", key=f"inv_{row.attempt_id}"):
                 r.ledger.mark_invalid(row.attempt_id)
                 st.rerun()
-    if st.button("새 세트", key="new_set", type="primary"):
+    if st.button("세트 목록으로", key="new_set", type="primary"):
         reset_quiz()
 
 

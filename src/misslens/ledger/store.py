@@ -411,6 +411,28 @@ class Ledger:
                 "failed": n("SELECT count(*) FROM questions WHERE set_id=? AND status='failed'"),
                 "drafts": n("SELECT count(*) FROM draft_answers WHERE set_id=?")}
 
+    def list_sets(self, exam_id: str, *, statuses: tuple[str, ...] = ("submitted", "reviewed"),
+                  limit: int = 30) -> list[dict[str, Any]]:
+        """Sets in the given states, newest first, with progress and how they were made (D53).
+        origin: plan | quick | ask (free-text request) | cli | unknown (made before plans were recorded)."""
+        marks = ",".join("?" * len(statuses))
+        rows = self._query(f"SELECT id FROM quiz_sets WHERE exam_id=? AND status IN ({marks}) ORDER BY id DESC LIMIT ?",
+                           (exam_id, *statuses, limit))
+        out = []
+        for r in rows:
+            d = self.set_progress(r["id"])
+            plan = self._query("SELECT kind, thread_id, counts_json FROM plans WHERE set_id=? ORDER BY id DESC LIMIT 1",
+                               (r["id"],))
+            if not plan:
+                d["origin"], d["counts"] = "unknown", None
+            else:
+                kind, tid = plan[0]["kind"], plan[0]["thread_id"] or ""
+                d["origin"] = ("plan" if kind == "plan" else "ask" if tid.startswith("ui-ask")
+                               else "cli" if tid.startswith("cli") else "quick")
+                d["counts"] = json.loads(plan[0]["counts_json"]) if plan[0]["counts_json"] else None
+            out.append(d)
+        return out
+
     def open_sets(self, exam_id: str) -> list[dict[str, Any]]:
         """Sets not submitted yet (generating / in_progress), newest first, with progress."""
         rows = self._query("SELECT id FROM quiz_sets WHERE exam_id=? AND status IN ('generating','in_progress')"

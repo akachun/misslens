@@ -296,3 +296,16 @@ def test_plan_history_lists_approved_plan_with_its_set(res):
     assert p["set_id"] == sid and p["thread_id"] == tid
     assert any(f"세트 #{sid}" in e.label for e in at.expander)
     assert at.button(key=f"plan_go_{p['id']}")
+
+
+def test_past_sets_panel_reopens_a_quick_set(res):
+    """D53: a set made with '바로 풀기' is listed after submission and reopens at review/diagnosis."""
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    att = _diagnosis(at, res, wrong=True)
+    sid = att["set_id"]
+    run(at.button(key="new_set").click())                            # back to the list
+    assert at.session_state.get("quiz") is None
+    assert at.button(key=f"past_{sid}").label == "진단 보기"
+    assert any(f"세트 #{sid}" in m.value and "바로 풀기" in m.value for m in at.markdown)
+    run(at.button(key=f"past_{sid}").click())
+    assert at.session_state["quiz"]["set_id"] == sid and at.session_state["quiz"]["phase"] == "diagnosis"

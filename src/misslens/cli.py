@@ -76,6 +76,8 @@ class CLI:
 
     def quiz(self, n: int, generator: Generator, *, explainer: Any = None) -> int | None:
         set_id = self.ledger.create_set(self.pack.exam_id, n)
+        self.ledger.record_plan(self.pack.exam_id, set_id=set_id, kind="quick", total=n, counts=None,
+                                thread_id="cli-quiz")       # so the set shows up in the history with its origin
         stream = QuestionStream(generator, set_id, n).start()
         return self.run_stream(set_id, n, stream, explainer=explainer)
 
