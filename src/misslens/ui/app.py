@@ -33,6 +33,28 @@ LETTERS = "ABCD"
 POLL_SECONDS = 1.5
 UPLOAD_DIR = PROJECT_ROOT / "data" / "sources" / "uploads"
 LABELS = {"reading": "해석 실수", "uncertain": "불확실", "concept": "개념 실수"}
+USAGE_HELP = """| 탭 | 무엇을 하나 |
+|---|---|
+| **학습** | '이어 풀기'(제출 전 세트), '바로 풀기'(문제 수·영역), '지난 세트'(리뷰·진단 다시 보기). 풀이 → 제출 → 한국어 재질문 → 자기 판단 → 진단 → 코치에게 질문 → 이번 세트 단어장 |
+| **단어장** | 세트에서 정답을 가른 영어 표현 누적. '외웠어요'로 숨기기 |
+| **자료** | 파일·텍스트를 색인에 넣기, 로그인 세션으로 교안 수집 |
+| **현황** | 범위, 정답률, 해석 실수 비율과 미끼 기준선, 놓친 문구, 진단 일치율 |
+| **계획** | 오늘의 계획 제안 → 문제 수 고쳐 승인 → 세트 생성. '최근 계획' |
+
+- 왼쪽 **MissLens에게 요청**: 자연어로 지시(예: \"도구 설계 영역 5문제\"). **Ctrl+Enter**(macOS ⌘+Enter)로 보내기, Enter는 줄바꿈.
+- 코치 질문 칸도 Ctrl+Enter로 보냅니다.
+- 푼 답은 문제를 넘길 때마다 저장되어, 창을 닫아도 '이어 풀기'로 돌아올 수 있습니다.
+- 위쪽 ⏳ 줄에 진행 중인 작업(문제 생성, 단어장 등)이 한곳에 표시됩니다.
+- 오른쪽 위 ⋮ 메뉴는 Streamlit 기본 메뉴입니다(화면 설정·인쇄 등). 학습 기능은 모두 위 탭에 있습니다."""
+VERDICT_HELP = """처음 영어로 틀린 문제를 리뷰에서 **한국어로 다시** 풀어 판정합니다.
+
+| 한국어로 다시 풀었을 때 | 판정 | 반영 |
+|---|---|---|
+| 맞힘 + 확신 | 해석 실수 | 해석 실수 비율, 처음 고른 오답이 어긴 조건을 '놓친 문구'로 기록 |
+| 맞힘 + 추측 | 불확실 | 해석 비율에서 빼고 따로 셈(정답률에서는 오답) |
+| 또 틀림 | 개념 실수 | 개념 실수로 셈 |
+
+**미끼**는 처음에 맞힌 문제를 섞어 다시 물은 것입니다. 미끼를 한국어로 다시 맞힌 비율이 **미끼 기준선**이고, '다시 보면 맞히는 효과'를 따로 보여 줍니다. 해석 실수 비율은 이 기준선과 나란히 봅니다."""
 SUBMIT_HINT = "Ctrl+Enter(macOS는 ⌘+Enter)로 보내기 · Enter는 줄바꿈"
 # Wider sidebar so a long request stays readable (users can still drag it wider). Only while expanded: Streamlit
 # hides a collapsed sidebar by shifting it by its own width, so a fixed width there left an empty 380px strip and
@@ -138,8 +160,48 @@ def job_state(r: Resources, thread_id: str) -> tuple[str, Any]:
 
 
 def wait_rerun() -> None:
-    """Ask for a rerun after every tab has rendered (a long job in one tab must not hide the others)."""
+    """A panel is waiting for background work. The page then polls through one small status fragment and reruns
+    only when something actually changed (D55); a long job in one tab never hides the others."""
     st.session_state["_poll"] = True
+
+
+# "fragment": poll in a status fragment, full rerun only on change (browser). "rerun": sleep + full rerun after
+# every render (AppTest cannot drive run_every fragments, so tests use this).
+POLL_MODE = "fragment"
+JOB_LABELS = {"ui-ask": "요청 처리", "ui-plan": "계획 세우기", "ui-quiz": "세트 준비", "ui-resume": "문제 생성 재개",
+              "ui-collect": "교안 수집", "ui-ingest": "자료 색인", "vocab": "단어장 만들기"}
+
+
+def background_signature(r: Resources) -> tuple:
+    """What the waiting panels depend on: which jobs are alive or failed, and how far each live stream got."""
+    jobs = tuple(sorted((k, bool(j.get("thread") and j["thread"].is_alive()), bool(j.get("error")))
+                        for k, j in r.jobs.items()))
+    streams = tuple(sorted((sid, s.running, r.ledger.set_progress(sid)["ready"])
+                           for sid, s in r.svc.streams.items() if s.running))
+    return jobs, streams
+
+
+def activity_lines(r: Resources) -> list[str]:
+    out = [f"세트 #{sid} 문제 생성 {p['ready']}/{p['size']}"
+           for sid, s in sorted(r.svc.streams.items()) if s.running for p in [r.ledger.set_progress(sid)]]
+    for k, j in r.jobs.items():
+        if j.get("thread") and j["thread"].is_alive():
+            label = next((v for pre, v in JOB_LABELS.items() if k.startswith(pre)), "작업")
+            if label not in out:
+                out.append(label)
+    return out
+
+
+def status_ticker(r: Resources) -> None:
+    """The single loading indicator: refreshes itself every POLL_SECONDS without redrawing the page."""
+    @st.fragment(run_every=POLL_SECONDS)
+    def _tick() -> None:
+        lines = activity_lines(r)
+        st.caption("⏳ 진행 중: " + " · ".join(lines) if lines else " ")
+        if background_signature(r) != st.session_state.get("_sig"):
+            st.rerun(scope="app")
+
+    _tick()
 
 
 # --- quiz session ------------------------------------------------------------------------------
@@ -395,12 +457,19 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
     c[1].metric("해석 실수", mb.reading)
     c[2].metric("불확실", mb.uncertain)
     c[3].metric("미끼 기준선", "-" if mb.baseline is None else f"{mb.baseline:.0%}")
+    with st.expander("판정은 어떻게 정해지나요?"):
+        st.markdown(VERDICT_HELP)
     invalid = {a["id"] for a in r.ledger.set_attempts(sid) if a["invalid"]}
     for row in rows:
         q = row.question
         if row.is_correct:
-            with st.expander(f"✅ 문제 {row.seq + 1} 정답" + (" (미끼)" if row.is_decoy else "")
+            decoy = ""
+            if row.is_decoy and row.reask_choice is not None:
+                decoy = " · 한국어로 다시 " + ("맞힘" if row.reask_choice == q["answer_index"] else "틀림")
+            with st.expander(f"✅ 문제 {row.seq + 1} 정답" + (" (미끼)" if row.is_decoy else "") + decoy
                              + f" · 정답 {LETTERS[q['answer_index']]}", expanded=False):
+                if row.reask_text:
+                    st.caption(row.reask_text + " — 미끼 기준선에 들어갑니다")
                 st.write(q["stem_en"])
                 for i, o in enumerate(q["options"]):
                     mark = "**" if i == q["answer_index"] else ""
@@ -417,6 +486,8 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
             stem = highlight(html.escape(q["stem_en"]), html.escape(row.missed_phrase) if row.missed_phrase else None,
                              "<mark>", "</mark>")
             st.markdown(stem, unsafe_allow_html=True)
+            if row.reask_text:
+                st.caption(row.reask_text + f" → {LABELS.get(row.miss_type, '-')}")
             if row.missed_phrase:
                 st.markdown(f"**놓친 조건:** <mark>{html.escape(row.missed_phrase)}</mark>", unsafe_allow_html=True)
             st.markdown("**해설**")
@@ -854,7 +925,9 @@ def sidebar_request(r: Resources) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="MissLens", page_icon="🔎", layout="wide")
+    st.set_page_config(page_title="MissLens", page_icon="🔎", layout="wide", menu_items={
+        "About": "**MissLens** — 자격증 시험 대비 학습 코치. 틀린 문제를 한국어로 다시 풀어 **개념 실수와 해석 실수**를 "
+                 "나누고, 놓친 조건 문구와 영어 표현을 정리해 약점 위주로 다시 출제합니다. 사용법은 화면 위 '사용법'을 펼치세요."})
     st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
     r = resources()
     st.session_state["_poll"] = False
@@ -862,8 +935,11 @@ def main() -> None:
 
     st.title("MissLens")
     st.caption(f"{r.pack.name} · 개념 실수와 해석 실수를 나눠 보는 학습 코치")
+    with st.expander("사용법"):
+        st.markdown(USAGE_HELP)
     if sandbox():
         st.warning("샌드박스 모드: 학습 기록·체크포인트는 data/sandbox/에 따로 저장되고, 자료 넣기·수집은 꺼져 있습니다.")
+    status_box = st.container()
     sidebar_request(r)
     t_study, t_vocab, t_material, t_status, t_plan = st.tabs(["학습", "단어장", "자료", "현황", "계획"])
     with t_plan:
@@ -877,5 +953,10 @@ def main() -> None:
     with t_study:
         tab_study(r)
     if st.session_state.pop("_poll", False):
-        time.sleep(POLL_SECONDS)
-        st.rerun()
+        if POLL_MODE == "fragment":
+            st.session_state["_sig"] = background_signature(r)     # what this render already shows
+            with status_box:
+                status_ticker(r)
+        else:
+            time.sleep(POLL_SECONDS)
+            st.rerun()

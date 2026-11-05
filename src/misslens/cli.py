@@ -182,6 +182,8 @@ class CLI:
                 continue
             chosen = "-" if r.chosen_index is None else LETTERS[r.chosen_index]
             head = f"문제 {r.seq + 1} · {labels.get(r.miss_type, r.miss_type)} · 고른 답 {chosen} → 정답 {LETTERS[q['answer_index']]}"
+            if r.reask_text:
+                head += f" · {r.reask_text}"
             stem = highlight(escape(q["stem_en"]), escape(r.missed_phrase) if r.missed_phrase else None)
             extra = f"\n\n놓친 조건: [bold yellow]{escape(r.missed_phrase)}[/]" if r.missed_phrase else ""
             if explainer is not None:

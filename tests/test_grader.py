@@ -126,3 +126,15 @@ def test_highlight_tolerates_backticks():
 
     out = highlight("Loop while `stop_reason` is tool_use.", "stop_reason is tool_use", "<b>", "</b>")
     assert out == "Loop while <b>`stop_reason` is tool_use</b>."
+
+
+def test_diagnosis_rows_carry_the_korean_reask_result():
+    """The verdict comes from the Korean re-ask; the diagnosis now shows it (learner rehearsal question)."""
+    from misslens.agents.grader.review import DiagnosisRow
+
+    q = {**draft(0)}
+    row = DiagnosisRow(0, 1, q, 1, False, False, "reading", "x", 100, reask_choice=0, reask_confident=True)
+    assert row.reask_text == "한국어 재질문: A 선택(정답) · 확신"
+    assert DiagnosisRow(0, 1, q, 1, False, False, "concept", None, 100, 2, False).reask_text == \
+        "한국어 재질문: C 선택(오답) · 추측"
+    assert DiagnosisRow(0, 1, q, 0, True, False, None, None, 100).reask_text is None

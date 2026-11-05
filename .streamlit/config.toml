@@ -1,0 +1,9 @@
+# Streamlit settings for MissLens (read when `streamlit run app/main.py` starts from the repo root).
+
+[client]
+# Hide Deploy and developer options in the top-right menu; keep only the links set in st.set_page_config
+# (menu_items). Learning features all live in the app's tabs (see the 사용법 expander).
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

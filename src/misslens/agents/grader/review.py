@@ -50,6 +50,17 @@ class DiagnosisRow:
     miss_type: str | None
     missed_phrase: str | None
     elapsed_ms: int | None
+    reask_choice: int | None = None       # original option order; None = not re-asked
+    reask_confident: bool | None = None
+
+    @property
+    def reask_text(self) -> str | None:
+        """'한국어 재질문: B 선택(정답) · 확신' — what decided the verdict (§4.2). None when not re-asked."""
+        if self.reask_choice is None:
+            return None
+        right = self.reask_choice == self.question["answer_index"]
+        conf = "" if self.reask_confident is None else (" · 확신" if self.reask_confident else " · 추측")
+        return f"한국어 재질문: {'ABCD'[self.reask_choice]} 선택({'정답' if right else '오답'}){conf}"
 
 
 def diagnosis_rows(ledger: Ledger, set_id: int) -> list[DiagnosisRow]:
@@ -58,7 +69,9 @@ def diagnosis_rows(ledger: Ledger, set_id: int) -> list[DiagnosisRow]:
     for a in ledger.set_attempts(set_id):
         q = questions[a["question_id"]]
         rows.append(DiagnosisRow(q["seq"], a["id"], q["payload"], a["chosen_index"], bool(a["is_correct"]),
-                                 bool(a["is_decoy"]), a["miss_type"], a["missed_phrase"], a["elapsed_ms"]))
+                                 bool(a["is_decoy"]), a["miss_type"], a["missed_phrase"], a["elapsed_ms"],
+                                 a["reask_choice"],
+                                 None if a["reask_confident"] is None else bool(a["reask_confident"])))
     return sorted(rows, key=lambda r: r.seq)
 
 

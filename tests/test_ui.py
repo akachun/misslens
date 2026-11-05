@@ -46,6 +46,7 @@ def res(tmp_path, monkeypatch):
     r.ingested = ingested
     monkeypatch.setattr(ui, "RESOURCE_FACTORY", lambda: r)
     monkeypatch.setattr(ui, "POLL_SECONDS", 0.05)
+    monkeypatch.setattr(ui, "POLL_MODE", "rerun")       # AppTest cannot drive run_every fragments
     st.cache_resource.clear()
     yield r
     st.cache_resource.clear()
@@ -330,3 +331,26 @@ def test_vocab_panel_and_word_book(res):
     assert not any("must not store passwords" in m.value and "회(세트" in m.value for m in at.markdown)  # hidden in book
     run(at.checkbox(key="vb_hide").uncheck())
     assert any("must not store passwords" in m.value and "1회(세트 1개)" in m.value for m in at.markdown)
+
+
+def test_background_signature_and_activity_lines(res):
+    """D55: the status fragment reruns the page only when this signature changes, and lists work in one line."""
+    import threading
+
+    idle = ui.background_signature(res)
+    assert ui.activity_lines(res) == []
+    gate = threading.Event()
+    t = threading.Thread(target=gate.wait, daemon=True)
+    t.start()
+    res.jobs["vocab-7"] = {"thread": t, "out": None, "error": None}
+    res.jobs["ui-ask-1"] = {"thread": t, "out": None, "error": None}
+    busy = ui.background_signature(res)
+    assert busy != idle and ui.activity_lines(res) == ["단어장 만들기", "요청 처리"]
+    gate.set()
+    t.join(timeout=5)
+    assert ui.background_signature(res) != busy and ui.activity_lines(res) == []
+
+
+def test_usage_help_is_on_the_page(res):
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    assert any(e.label == "사용법" for e in at.expander)
