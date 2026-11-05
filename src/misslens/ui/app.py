@@ -208,6 +208,11 @@ def study_solve(r: Resources, quiz: dict) -> None:
     for note in quiz["notes"]:
         st.caption(note)
     if quiz["idx"] < len(ready):
+        if not quiz.get("started"):
+            # First question on screen: generating -> in_progress, as the CLI does (§4.1).
+            if r.ledger.get_set(sid)["status"] == "generating":
+                r.ledger.start_set(sid)
+            quiz["started"] = True
         q = ready[quiz["idx"]]
         p = q["payload"]
         quiz["shown"].setdefault(q["id"], time.monotonic())

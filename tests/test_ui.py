@@ -84,6 +84,7 @@ def test_plan_refresh_then_full_loop(res):
             if radios:
                 break
             run(at2)
+        assert res.ledger.get_set(sid)["status"] == "in_progress"     # shown -> started, like the CLI
         radios[0].set_value(0)
         run(at2.button(key=f"next_{radios[0].key[4:]}").click())
     run(at2.button(key="submit_set").click())
