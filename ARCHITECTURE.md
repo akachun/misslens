@@ -2,8 +2,8 @@
 
 | 항목 | 내용 |
 |---|---|
-| 문서 상태 | v1 확정 (2026-11-04) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26) |
+| 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D40) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -18,8 +18,8 @@
 | 에이전트 프레임워크 | LangChain, LangGraph | 과정 지정. `interrupt`/`Command(resume)`, `SqliteSaver` 사용 |
 | LLM | Amazon Bedrock `ChatBedrockConverse` (`langchain-aws`) | 과정 지정. 역할별 모델과 리전 전환은 §6 참고 |
 | 구조화 출력 | Pydantic + `with_structured_output` | 기본 방식(tool calling)을 쓴다. Sonnet 4.6에서 `method="json_schema"`도 동작함을 확인(2026-11-04, 문제 1개 기준 11.0초 대 12.1초, 둘 다 validator 통과) |
-| 임베딩 | 로컬 `BAAI/bge-m3` (sentence-transformers / HuggingFaceEmbeddings) | 계정에 Bedrock 임베딩 모델이 없음 |
-| 검색 | FAISS(의미 검색) + BM25(`rank_bm25`, 키워드 검색) → `EnsembleRetriever`(RRF) | `langchain-community` |
+| 임베딩 | 로컬 `BAAI/bge-m3` (sentence-transformers 직접 사용, 모델 이름은 `config/models.yaml`의 `embedding`) | 계정에 Bedrock 임베딩 모델이 없음 |
+| 검색 | FAISS(`faiss-cpu`, 의미 검색) + BM25(`rank_bm25`, 키워드 검색) → 가중 RRF 직접 구현(D36) | 청크 분할은 `langchain-text-splitters` |
 | 웹 수집 | Crawl4AI (로그인 프로필, Markdown 추출) | 내부적으로 Playwright Chromium 사용 |
 | 저장소 | SQLite 2개: `ledger.sqlite`(학습 기록), `checkpoints.sqlite`(LangGraph) | 로컬 파일 |
 | UI | Streamlit(탭 4개) + CLI(`rich`) | CLI는 개발과 대체 경로용 |
@@ -127,13 +127,19 @@ Planner: ledger 통계 → 계획 초안 {domain: count, ...}
 ### 4.4 로그인 대기 (interrupt②, D21)
 
 ```
-Collector: URL i 수집
-  ├─ 정상 → Markdown → content_hash가 다르면 Ingest로 전달
-  ├─ 프로필 없음 / 로그인 URL로 리다이렉트 / 401·403
-  │     → interrupt({site, url_index}) ⏸  화면: "브라우저 창에서 로그인 후 [완료]"
-  │     ← Command(resume="done") → 같은 URL i부터 이어서 수집
-  └─ 본문이 비었거나 너무 짧음 → 실패 표시, PDF/HTML 업로드 안내
+Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
+  fetch: queue[0] 수집
+  ├─ 코스 페이지(expand: lessons) → 같은 코스의 레슨 링크를 queue 앞에 추가(D38)
+  ├─ 레슨 → 메뉴 줄 제거 → data/sources/collected/<site>/*.md 저장 → 끝나면 Ingest로 전달
+  ├─ 로그인 URL로 리다이렉트 / 401·403 / 레슨 0개인데 'Sign In' 링크만 있음(로그아웃 상태 코스 페이지)
+  │     → wait_login: headless 브라우저를 닫고 interrupt({kind, site, login_url, url, attempt}) ⏸
+  │       CLI: "y=로그인 창 열기 / n=이미 로그인함 / q=중단" → 보이는 브라우저에서 직접 로그인
+  │     ← Command(resume="done") → 같은 URL부터 다시 / "abort" → 중단. 연속 3회 넘으면 중단
+  ├─ checkout으로 리다이렉트 / 레슨 0개에 등록 링크만 → '수강 등록 필요'로 표시하고 다음 URL
+  └─ 본문 200자 미만(영상만 있는 레슨 등) → '본문 없음'으로 표시, PDF/HTML 업로드 안내
 ```
+- 상태는 `data/checkpoints.sqlite`(SqliteSaver)에 thread_id(`collect-<site>-<시각>`)별로 남는다. 로그인 대기에서 프로세스를 끄더라도 `collect run --thread <id>`로 멈춘 URL부터 이어간다.
+- 페이지 하나가 그래프 한 단계라서 `recursion_limit`을 2000으로 올린다(기본값 25면 코스 중간에 멈춘다).
 
 ## 5. 데이터 모델 (D10, D22)
 
@@ -279,12 +285,12 @@ class Option(BaseModel):
     text_native: str          # 학습자 언어
     violates: str | None      # 오답 보기가 어기는 key_constraint (정답은 None)
 
-class QuestionDraft(BaseModel):  # 생성 모델이 채우는 부분
+class QuestionDraft(BaseModel):  # 생성 모델이 채우는 부분. 필드 순서 = 생성 순서(D40)
     stem_en: str
+    key_constraints: list[str]  # 2~4개, stem_en에서 글자 그대로 옮긴 짧은 구절(D33). 보기보다 먼저 쓰게 함
     stem_native: str          # key_constraint를 모두 담되, 정답 힌트는 넣지 않는다
     options: list[Option]     # 4개
     answer_index: int         # 정답 1개만(v1). 실제 시험의 복수 정답 문항은 v1에서 내지 않는다(D30)
-    key_constraints: list[str]  # 2~4개, stem_en에서 글자 그대로 옮긴 짧은 구절(D33)
     explanation_native: str   # 보기 순서를 섞으므로 A/B 같은 글자로 보기를 가리키지 않는다
 
 class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(questions.payload_json)
@@ -300,7 +306,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 ```
 
 - 구현: `src/misslens/agents/generator/`(`schema.py`, `select.py`, `prompts.py`, `context.py`, `pipeline.py`). 다시 생성할 때는 직전 실패 이유를 프롬프트에 넣는다.
-- 근거 자료는 `ContextProvider` 인터페이스로 받는다. Phase 3 전에는 세부 항목 설명만 주는 `TaskStatementContext`를 쓴다.
+- 근거 자료는 `ContextProvider` 인터페이스로 받는다. 색인이 있으면 `RetrievalContext`(§8, `grounding="retrieved"`), 없으면 세부 항목 설명만 주는 `TaskStatementContext`(`task_statement_only`)를 쓴다.
 
 **근거 검증 (D15).** Haiku 4.5에 검색한 청크, 문제, 정답, 오답별 `violates`를 함께 주고 아래 네 가지를 구조화 출력으로 판정하게 한다. 하나라도 실패하면 다시 생성한다. Haiku가 정답을 가린 채 문제를 푸는 방식(blind solve)은 쓰지 않는다.
 1. 정답이 청크로 뒷받침되는가
@@ -321,32 +327,45 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 **프롬프트 규칙.**
 - 영역과 세부 항목 목록은 시험 팩에서 받아 프롬프트에 넣는다. 프롬프트 문자열에 직접 적지 않는다.
 - 수집한 본문은 "참고 자료(data)" 블록으로 감싸서 지시로 취급하지 않게 한다(프롬프트 주입 방어).
-- 학습자가 넣은 샘플 문제는 문체를 보여 주는 예시(few-shot)로 쓴다.
+- 학습자가 넣은 샘플 문제는 문체를 보여 주는 예시(few-shot)로 쓴다(D39). 연습 문제 은행(`data/practice/<exam_id>/bank.jsonl`, `practice import`로 생성)에서 같은 세부 항목의 문항 2개를 골라 넣고, "사실의 근거가 아니며 상황·문장·보기를 재사용하지 말 것"을 함께 적는다. 중복 지문, 정답과 해설이 맞지 않는 문항, 출처가 주의를 표시한 문항은 예시로 쓰지 않는다.
+- 베끼기 검사(D39): 생성한 지문이 같은 세부 항목의 은행 문항 지문 단어를 60% 넘게 담고 있으면 validator 실패와 같이 재생성한다(포함률. 실제 서로 다른 문항끼리는 최대 50%).
+- 연습 문제 은행은 검색 색인에 넣지 않는다. 정답이 검증되지 않았으므로 근거 검증이 그것에 기대면 안 된다. 은행 문항을 그대로 학습자에게 출제하지도 않는다(규칙 2).
 - 시험 팩의 `scenarios`(공식 시나리오 6개, 영역별 `primary_domains`)로 문제 상황을 잡고, `out_of_scope`(출제 제외 주제 16개)는 프롬프트에 '내지 말 것'으로 넣는다(`prompt_out_of_scope()`).
 
-## 8. 검색 (D3, D17)
+## 8. 검색 (D3, D17, D36)
 
 ```
-질의(세부 항목 설명 + 키워드) ──┬─▶ FAISS(bge-m3) 상위 k
-  task_id 필터(태그가 있으면)    └─▶ BM25(한국어 처리 포함) 상위 k
-                                       └─▶ EnsembleRetriever(RRF, 0.5/0.5) → 상위 k 청크
+질의(영역 이름 + 세부 항목 제목) ──┬─▶ FAISS(bge-m3, 코사인) 순위
+                                  └─▶ BM25(한국어 글자 bigram 포함) 순위
+                                         └─▶ 가중 RRF(0.5/0.5, c=60) → task_id 태그가 있는 청크 먼저, 모자라면 전체 순위로 채움 → 상위 k(기본 6)
 ```
 
-- bge-m3는 프로세스당 한 번만 불러온다. Streamlit에서는 `st.cache_resource`를 쓴다.
-- BM25는 공백으로만 단어를 나누면 한국어를 제대로 다루지 못한다. 그래서 한국어 전처리(형태소 분석 또는 글자 n-gram)를 거쳐 단어를 나눈다.
+- 구현: `src/misslens/retrieval/`(`tokenize.py`, `embed.py`, `index.py`), Generator 연결은 `agents/generator/context.py`의 `RetrievalContext`. 세부 항목 설명 1개 + 검색 청크 k개를 근거로 넘기고 `grounding="retrieved"`로 표시한다. 색인이 비었으면 세부 항목 설명만 쓰고 `task_statement_only`로 표시한다.
+- 색인 파일: `data/index/<exam_id>/`(`chunks.jsonl`, `faiss.index`, `meta.json`). 다른 임베딩 모델로 만든 색인은 열지 않는다(다시 넣어야 함). BM25는 열 때와 추가할 때 메모리에 다시 만든다.
+- bge-m3는 프로세스당 한 번만 불러온다(`get_embedder()`, Streamlit에서는 `st.cache_resource`로 감싼다). 모델 이름은 `config/models.yaml`의 `embedding`에 둔다. 로컬 캐시를 먼저 쓰고, 없을 때만 내려받는다.
+- BM25는 공백으로만 단어를 나누면 한국어를 제대로 다루지 못한다(조사가 붙음). 그래서 한글은 글자 bigram으로, 영어는 `tool_choice`, `--allowedTools`, `.claude/settings.json` 같은 시험 용어를 한 단어로 두고 부분 단어도 함께 넣는다.
+- task_id 필터를 '태그가 있는 청크만'으로 하지 않고 '먼저 + 채움'으로 한 이유: 태그가 틀리거나 없을 때 의미·키워드 검색이 안전망이 되게 하려는 것이다(D17).
 
-## 9. Collector (D12, D14, D16)
+**Ingest.** `agents/ingest/`(`loaders.py`, `tagger.py`, `pipeline.py`).
+- 형식: PDF(쪽 번호 표시), MD/TXT, HTML(script·nav·header·footer 제거), 붙여넣기. 웹에서 저장한 파일 앞의 `BEGIN UNTRUSTED EXTERNAL CONTENT (source: URL)` 표시는 지우고 URL을 출처로 쓴다.
+- 청크: `RecursiveCharacterTextSplitter`, 1200자, 겹침 150자, 40자 미만은 버림.
+- 태깅: Haiku 4.5(`tagger` 역할), 8개씩 묶어 호출, 청크당 최대 3개, 시험 팩에 없는 ID는 버림, 호출이 실패하면 그 묶음은 미분류로 두고 계속한다. 청크 태그는 색인(`chunks.jsonl`)에 두고, `materials`에는 문서 단위 행만 둔다(`task_id`는 NULL).
+- 중복: 공백을 정규화한 본문의 sha256(`content_hash`). 색인을 먼저 쓰고 `materials` 행을 나중에 넣는다. 중복 판단은 색인 기준이라, 중간에 멈춰도 '행은 있는데 청크는 없는' 상태가 생기지 않는다.
+- CLI: `python -m misslens.cli ingest <파일|폴더>...`, `--paste <이름>`(표준 입력), `search "<질의>" [--task 2.1]`. `quiz`는 색인이 있으면 자동으로 검색 근거를 쓴다.
+
+## 9. Collector (D12, D14, D16, D38)
 
 | 항목 | 규칙 |
 |---|---|
-| 로그인 | `collect login <site>` → Crawl4AI 프로필 기능으로 브라우저 창을 띄우고 사용자가 직접 로그인 |
-| 프로필 위치 | `secrets/profiles/<site>/` (권한 0700, git 제외, 로그에 남기지 않음) |
-| 수집 대상 | `exams/<exam_id>/sources.yaml`에 적힌 URL만, headless, `BrowserConfig(user_data_dir=…, use_managed_browser=True)` |
-| 안전 | 읽기 전용(폼 제출·클릭·다운로드 없음), 요청 간격 2초 이상, 적힌 도메인 밖으로 나가지 않음 |
-| 중복 | 같은 URL의 `content_hash`가 같으면 다시 넣지 않음 |
-| 반입 조건 | 사내 자료는 반입 승인 전에는 수집하지 않음 |
-| 대체 경로 | 3시간 안에 구현이 끝나지 않거나 추출에 실패하면, 페이지를 PDF/HTML로 저장해 업로드 |
-| 확인 필요 | CLI 명령과 프로필 경로는 설치하는 버전의 문서로 확인(`crawl4ai-setup`은 문서에서 확인되지 않음) |
+| 로그인 | `collect login <site>` → Crawl4AI `BrowserProfiler`로 보이는 Chromium을 띄우고 사용자가 직접 로그인·수강 등록, 터미널에서 q로 종료. 에이전트는 비밀번호를 입력·저장하지 않음 |
+| 프로필 위치 | `secrets/profiles/<site>/` (권한 0700, git 제외, 로그에 남기지 않음). 쿠키는 OS 키체인 대신 Crawl4AI의 이식형 설정(`--use-mock-keychain`)으로 저장되고, 수집 브라우저도 같은 설정으로 읽는다 |
+| 수집 대상 | `exams/<exam_id>/sources.yaml`에 적힌 URL만, headless, `BrowserConfig(user_data_dir=…, use_managed_browser=True)`. `expand: lessons`인 코스 페이지는 **같은 호스트·같은 코스 경로 바로 아래 한 단계** 링크만 레슨으로 추가(D38). 쿼리 문자열, logout·checkout 등 경로는 제외 |
+| 대기 방식 | `wait_until="domcontentloaded"` + 2초. 분석 스크립트가 계속 통신하는 사이트에서는 `networkidle`이 끝나지 않음(Skilljar 실측) |
+| 안전 | 읽기 전용(폼 제출·클릭·다운로드·스크립트 주입 없음), 요청 간격 `delay_seconds`(2초 이상, 설정 검증), https이고 `allowed_domains` 안의 URL만 |
+| 중복 | 저장 파일은 내용이 같으면 그대로 둠. Ingest가 `content_hash`로 다시 한 번 거름 |
+| 반입 조건 | 사내 자료 반입 승인·교안 사이트 약관 확인 완료(2026-11-05) |
+| 대체 경로 | 추출이 실패하거나 본문이 없는 레슨은 페이지를 PDF/HTML로 저장해 `ingest`로 업로드 |
+| 구현 | `agents/collector/`(`sources.py` 설정 검증, `browser.py` 로그인·수집기, `graph.py` 서브그래프, `runner.py` interrupt 처리·재개). CLI `collect login|run [site] [--thread] [--limit] [--no-ingest]` |
 
 ## 10. Streamlit 연동
 
@@ -365,16 +384,17 @@ misslens/
 ├── SERVICE.md  ARCHITECTURE.md  TASK.md  README.md  TODOS.md
 ├── pyproject.toml
 ├── config/models.yaml
-├── exams/ccar-f/{exam.yaml, sources.yaml}
+├── exams/ccar-f/{exam.yaml, sources.yaml}   # sources.yaml: Collector 대상(§9)
 ├── src/misslens/
-│   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/
+│   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/(tokenize·embed·index)
+│   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
-│   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status`)
+│   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status|ingest|search`)
 │   └── graph.py
 ├── app/            # Streamlit
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
-├── data/           # ledger.sqlite, checkpoints.sqlite, index/  (git 제외)
+├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
 └── secrets/        # 로그인 프로필 (git 제외)
 ```
 
@@ -396,6 +416,11 @@ misslens/
 | D33 | `key_constraints`는 지문에 글자 그대로 있어야 하고(validator), 보기 순서는 코드가 섞는다 | 모델이 쓴 그대로 사용 | 리뷰에서 놓친 문구를 지문 안에 강조하려면 글자 그대로 있어야 함. 모델은 정답을 앞쪽에 두는 경향이 있음 |
 | D34 | 근거 검증에 4번째 검사(지어낸 플래그·파라미터, 보기 내부 모순) 추가. 근거 자료 없이는 실사용하지 않음 | 3가지 검사 유지, 근거 없을 때 느슨하게 통과 | 실측에서 없는 플래그를 정답으로 한 문제가 통과됨. 틀린 사실을 외우게 하는 것은 시험 준비에 해로움 |
 | D35 | CLI는 `src/misslens/cli.py` 모듈(`python -m misslens.cli`) | 저장소 루트 `cli/` 디렉터리(§11 원안) | CLAUDE.md의 실행 명령과 맞추고 패키지 안에서 import 경로를 단순하게 유지 |
+| D36 | 하이브리드 검색을 직접 구현: FAISS(`IndexFlatIP`)를 바로 쓰고, RRF(가중치 0.5/0.5, c=60)는 EnsembleRetriever와 같은 공식으로 직접 계산. task_id 필터는 '태그 청크 먼저 + 전체 순위로 채움' | LangChain `EnsembleRetriever` + `langchain_community` FAISS·BM25Retriever(§8 원안) | langchain 1.x에서 `EnsembleRetriever`는 레거시 패키지(`langchain-classic`)로 옮겨졌고 `langchain-community`는 지원 종료 예정. 직접 구현이 30줄 정도이고 가짜 임베더로 테스트하기 쉬움. 필터만 쓰면 태그가 틀렸을 때 근거가 사라짐 |
+| D37 | 시험 팩의 세부 항목 모델에 `extra="forbid"`, 제목은 따옴표로 감쌈(exam.yaml v3) | 기본값(모르는 키 무시) | YAML 흐름 매핑 `{id: x, title: A, B, C}`에서 쉼표 뒤가 별도 키로 읽혀 제목 4개(1.3·1.7·3.1·4.4)가 첫 쉼표에서 잘린 채 프롬프트에 들어가고 있었음. 전체 가이드 PDF(39쪽)와 30개 제목을 대조해 발견 |
+| D38 | Collector가 `expand: lessons` 코스 페이지에서 그 코스의 레슨 링크(바로 아래 한 단계)만 따라감 | v1은 적힌 URL만(링크 따라가기는 v1 이후), 레슨 URL을 사람이 모두 적기 | Skilljar 레슨 URL은 로그인·수강 등록 후에만 보이고 코스 7개에 레슨이 수십 개라 손으로 적을 수 없음. 범위를 같은 코스 경로 한 단계로 묶어 도메인 밖이나 다른 페이지로 번지지 않게 함 |
+| D39 | 학습자가 브라우저에서 직접 저장한 제3자 연습 문제(CertSafari 250문항, 자동 수집 아님: 규칙 7)를 구조화해 문체 예시와 베끼기 검사에만 사용 | 검색 색인에 추가, 변환해 바로 출제, 사용 안 함 | 형식·세부 항목 태그가 정확해 문체 예시로 좋음. 정답이 사이트 것이라 근거로 쓰면 검증이 순환하고, 그대로 출제하면 규칙 2(검증 통과 문제만)를 우회함. 실측에서 예시를 넣어도 validator 통과율은 떨어지지 않음(3/4 대 3/4) |
+| D40 | `QuestionDraft` 필드 순서를 `stem_en → key_constraints → … → options`로 바꿈, 리스트 필드가 JSON 문자열로 오면 풀어서 받음 | 기존 순서(보기 다음에 key_constraints) | 근거 자료를 붙인 뒤 첫 시도 validator 통과율이 1/8로 떨어짐(모델이 가이드 문장을 key_constraints로 씀). 순서를 바꾸자 6/8. tool calling이 리스트를 문자열로 보내 실패하는 경우를 실측으로 확인 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
@@ -416,7 +441,7 @@ misslens/
 |---|---|---|
 | 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료. **2026-11-04 확인: 20개 모두 응답, 할당량 초과 없음, Sonnet 4.6 구조화 출력 성공** |
 | bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정. **2026-11-04 확인: 1024차원, MPS 로드 성공 → D17 유지** |
-| CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전). **2026-11-04 확인: 시험 가이드 v1.0 기준 30개, `exam.yaml` version 2(final)** |
-| 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용 |
-| 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용 |
-| 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 확인 | 데모 시나리오 조정 |
+| CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전). **2026-11-04 확인: 시험 가이드 v1.0 기준 30개, `exam.yaml` version 2(final). 2026-11-05 전체 가이드 PDF로 재대조, 제목 잘림 수정해 version 3(D37)** |
+| 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용. **2026-11-05 승인** |
+| 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용. **2026-11-05 확인, Collector로 수집** |
+| 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 확인 | 데모 시나리오 조정. **여러 패턴 권장, 학습자 우선순위: 멀티 에이전트 > RAG > HITL** |

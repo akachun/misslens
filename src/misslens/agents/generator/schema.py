@@ -6,10 +6,11 @@ A draft that fails validation counts as one generation failure and is never show
 
 from __future__ import annotations
 
+import json
 import random
 import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 N_OPTIONS = 4
 MIN_KEY_CONSTRAINTS, MAX_KEY_CONSTRAINTS = 2, 4
@@ -27,12 +28,27 @@ class Option(BaseModel):
 class QuestionDraft(BaseModel):
     """What the generator model returns."""
 
+    # Field order is generation order: key_constraints right after stem_en, BEFORE the options, so the model picks
+    # phrases from the stem it just wrote and then builds each wrong option around one of them (D40). With options
+    # first, it invented `violates` reasons (often from the reference material) that were not in the stem.
     stem_en: str = Field(min_length=1, description="Scenario and question in English")
+    key_constraints: list[str] = Field(
+        description="2-4 short phrases (3-12 words) copied character for character from stem_en above. Not from "
+                    "the reference material or the task statement: every phrase must already appear in stem_en")
     stem_native: str = Field(min_length=1, description="Faithful translation of stem_en in the learner's language")
     options: list[Option] = Field(description="Exactly 4 options")
     answer_index: int = Field(description="0-based index of the single correct option")
-    key_constraints: list[str] = Field(
-        description="2-4 short phrases copied verbatim from stem_en that decide the answer")
+
+    @field_validator("key_constraints", "options", mode="before")
+    @classmethod
+    def _json_string_list(cls, v):
+        """Tool calling sometimes sends a list field as a JSON string ('["a", "b"]'); unwrap it (seen live)."""
+        if isinstance(v, str) and v.lstrip().startswith("["):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v
+        return v
     explanation_native: str = Field(
         min_length=1, description="Why the answer is right and which constraint each wrong option breaks, "
                                   "in the learner's language, without option letters")

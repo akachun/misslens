@@ -1,6 +1,6 @@
 # MissLens
 
-MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 지정한 자료로 실전형 문제 세트를 내고, 오답을 **개념 실수와 해석 실수**로 진단하며, 놓친 조건 문구를 기록해 약점 위주로 다시 출제한다. 첫 시험 팩은 CCA-F다.
+MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 지정한 자료로 실전형 문제 세트를 내고, 오답을 **개념 실수와 해석 실수**로 진단하며, 놓친 조건 문구를 기록해 약점 위주로 다시 출제한다. 첫 시험 팩은 CCA-F(Claude Certified Architect – Foundations, 시험 코드 CCAR-F, `exam_id: ccar-f`)다.
 스택: Python 3.11+, LangChain, LangGraph, Amazon Bedrock(`ChatBedrockConverse`), SQLite, FAISS + BM25, Crawl4AI, Streamlit.
 
 ## 문서 지도
@@ -57,4 +57,10 @@ pytest -m "not live"               # 기본 테스트(LLM 가짜 모델)
 pytest -m live                     # Bedrock 실호출 스모크
 streamlit run app/main.py          # UI
 python -m misslens.cli quiz        # CLI 세트 풀이
+python -m misslens.cli ingest data/sources/exam_guide   # 자료 넣기(파일·폴더, --paste 이름)
+python -m misslens.cli search "tool_choice" --task 2.3  # 검색 결과 확인
+python -m misslens.cli status      # 현황 요약
+python -m misslens.cli collect login skilljar   # 보이는 브라우저에서 직접 로그인(프로필만 저장)
+python -m misslens.cli collect run             # sources.yaml 수집 → 색인(로그인 만료 시 interrupt②, --thread로 재개)
+python -m misslens.cli practice import         # 연습 문제 파일 → 문체 예시 은행(data/practice/)
 ```

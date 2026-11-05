@@ -2,8 +2,15 @@
 
     python -m misslens.cli quiz [-n 5] [--exam ccar-f]   # set -> solve -> submit -> re-ask -> diagnosis
     python -m misslens.cli status [--exam ccar-f]        # quick numbers from the ledger
+    python -m misslens.cli ingest PATH... [--paste]      # add study material (files or folders) to the index
+    python -m misslens.cli search "query" [--task 2.1]   # inspect what retrieval returns
+    python -m misslens.cli practice import [DIR]         # parse learner-supplied practice sets into the style bank
+    python -m misslens.cli collect login skilljar        # sign in by hand in a visible browser (profile only)
+    python -m misslens.cli collect run [--site skilljar] # collect sources.yaml pages, then ingest them
 
-No interrupts here (CLAUDE.md rule 4): solving and review are plain prompts.
+Interrupts exist only in `collect run` (login wait, interrupt②) and later in the Planner (CLAUDE.md rule 4).
+
+Solving and review are plain prompts, never interrupts.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ import logging
 import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -183,6 +191,94 @@ class CLI:
             c.print(f"[red]생성 실패[/] {f['task_id']} ({f['tries']}회): {escape(f['reason'][:160])}")
 
 
+# --- material ------------------------------------------------------------------------------
+
+def expand_paths(paths: list[str]) -> list[Path]:
+    """Files as given, and supported files inside folders (sorted, recursive)."""
+    from misslens.agents.ingest.loaders import SUPPORTED
+
+    out: list[Path] = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            out.extend(sorted(f for f in p.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED))
+        else:
+            out.append(p)
+    return out
+
+
+def run_ingest(ingestor: Any, docs: list[Any], console: Console) -> int:
+    """Ingest documents and print one line each plus the per-task material counts. Returns chunks added."""
+    added = 0
+    for doc in docs:
+        r = ingestor.ingest(doc)
+        label = {"added": f"[green]추가[/] {r.chunks}개 청크", "duplicate": "[yellow]이미 있음[/]",
+                 "empty": "[red]본문 없음[/]"}[r.status]
+        console.print(f"{label} · {escape(r.source)}")
+        added += r.chunks
+    counts = ingestor.index.tag_counts()
+    pack = ingestor.pack
+    missing = [t for t in pack.task_ids if t not in counts]
+    console.print(f"색인 {len(ingestor.index)}개 청크 · 자료가 있는 세부 항목 {len(pack.task_ids) - len(missing)}"
+                  f"/{len(pack.task_ids)} · 미분류 {counts.get('unassigned', 0)}")
+    if missing:
+        console.print("자료 없는 세부 항목: " + ", ".join(missing))
+    return added
+
+
+def open_index(exam_id: str, *, must_exist: bool = False):
+    """The exam's index, or None if nothing was ingested yet (avoids loading bge-m3 for nothing)."""
+    from misslens.retrieval.index import INDEX_ROOT, ChunkIndex
+
+    if not (INDEX_ROOT / exam_id / "meta.json").exists() and not must_exist:
+        return None
+    from misslens.retrieval.embed import get_embedder
+
+    return ChunkIndex(exam_id, get_embedder())
+
+
+# --- collector -----------------------------------------------------------------------------
+
+STATUS_LABEL = {"saved": "[green]저장[/]", "expanded": "[cyan]레슨 목록[/]", "empty": "[yellow]본문 없음[/]",
+                "not_enrolled": "[yellow]수강 등록 필요[/]", "error": "[red]오류[/]", "blocked": "[red]차단[/]"}
+
+
+def login_prompt(console: Console, ask: Ask, open_login: Callable[[], Any]) -> Callable[[dict], str]:
+    """interrupt② handler for the CLI: explain, let the learner log in, return the resume value."""
+
+    def on_login(payload: dict) -> str:
+        console.print(Panel(f"세션이 만료됐거나 로그인이 필요합니다.\n사이트: {escape(payload['site'])}\n"
+                            f"멈춘 페이지: {escape(payload['url'])}\n로그인 주소: {escape(payload['login_url'])}",
+                            title=f"로그인 대기 ({payload.get('attempt', 1)}회째)", border_style="yellow"))
+        while True:
+            a = ask("y=로그인 창 열기, n=이미 로그인함(바로 재개), q=수집 중단 > ").strip().lower()
+            if a in ("y", "yes", ""):
+                open_login()
+                return "done"
+            if a in ("n", "no"):
+                return "done"
+            if a in ("q", "quit"):
+                return "abort"
+
+    return on_login
+
+
+def print_collect_summary(console: Console, state: dict) -> list[str]:
+    """One line per URL; returns the saved file paths."""
+    saved: list[str] = []
+    counts: dict[str, int] = {}
+    for r in state.get("results", []):
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+        if r["status"] == "saved":
+            saved.append(r["path"])
+        else:
+            console.print(f"{STATUS_LABEL.get(r['status'], r['status'])} {escape(r['url'])} "
+                          f"{escape(r.get('note') or '')}")
+    console.print("수집 결과: " + (", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "없음"))
+    if state.get("stopped"):
+        console.print(f"[red]{escape(state['stopped'])}[/]")
+    return saved
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="misslens")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -192,6 +288,26 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--no-explain", action="store_true", help="LLM 해설 대신 저장된 해설만 보여 준다")
     s = sub.add_parser("status", help="현황 요약")
     s.add_argument("--exam", default="ccar-f")
+    g = sub.add_parser("ingest", help="자료 넣기(PDF/MD/TXT/HTML 파일이나 폴더, --paste면 표준 입력)")
+    g.add_argument("paths", nargs="*")
+    g.add_argument("--paste", metavar="LABEL", help="표준 입력의 텍스트를 이 이름으로 넣는다")
+    g.add_argument("--exam", default="ccar-f")
+    pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
+    pr.add_argument("action", choices=["import"])
+    pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
+    pr.add_argument("--exam", default="ccar-f")
+    co = sub.add_parser("collect", help="로그인 세션으로 sources.yaml의 페이지 수집")
+    co.add_argument("action", choices=["login", "run"])
+    co.add_argument("site", nargs="?", help="sources.yaml의 사이트 이름(생략하면 전부)")
+    co.add_argument("--thread", help="이어서 실행할 thread_id(로그인 대기에서 멈춘 실행)")
+    co.add_argument("--limit", type=int, help="처음 N개 소스만(시험 실행용)")
+    co.add_argument("--no-ingest", action="store_true", help="저장만 하고 색인에 넣지 않는다")
+    co.add_argument("--exam", default="ccar-f")
+    r = sub.add_parser("search", help="검색 결과 확인")
+    r.add_argument("query")
+    r.add_argument("--task", help="세부 항목 ID로 태그 우선")
+    r.add_argument("-k", type=int, default=6)
+    r.add_argument("--exam", default="ccar-f")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
@@ -203,16 +319,103 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cmd == "status":
             cli.status()
+        elif args.cmd == "ingest":
+            from misslens.agents.ingest import Ingestor, UnsupportedFile, from_paste, load_file
+
+            docs = []
+            if args.paste:
+                docs.append(from_paste(sys.stdin.read(), args.paste))
+            for path in expand_paths(args.paths):
+                try:
+                    docs.append(load_file(path))
+                except (UnsupportedFile, OSError) as exc:
+                    cli.console.print(f"[red]건너뜀[/] {escape(str(exc))}")
+            if not docs:
+                cli.console.print("넣을 자료가 없습니다.")
+                return 1
+            run_ingest(Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)), docs, cli.console)
+        elif args.cmd == "practice":
+            from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
+
+            bank = parse_dir(Path(args.dir) if args.dir else SOURCE_DIR, valid_task_ids=set(pack.task_ids))
+            path = save_bank(bank, pack.exam_id)
+            s = summarize(bank)
+            thin = [t for t in pack.task_ids if s["usable_by_task"].get(t, 0) < 2]
+            cli.console.print(f"{s['total']}문항 → {path}\n문체 예시로 사용 {s['usable']}개 (제외: 중복 {s['duplicates']}, "
+                              f"정답·해설 불일치 {s['unconfirmed']}, 주의 표시 {s['disputed']})\n"
+                              f"정답 분포 {s['answer_letters']}")
+            if thin:
+                cli.console.print("예시가 2개 미만인 세부 항목: " + ", ".join(thin))
+        elif args.cmd == "collect":
+            return collect_command(args, pack, ledger, cli)
+        elif args.cmd == "search":
+            index = open_index(pack.exam_id)
+            if index is None:
+                cli.console.print("색인이 없습니다. 먼저 `ingest`로 자료를 넣으세요.")
+                return 1
+            for h in index.search(args.query, k=args.k, task_id=args.task):
+                tag = "태그 일치" if h.tagged else ",".join(h.task_ids) or "미분류"
+                cli.console.print(Panel(escape(h.text[:600]), title=f"{escape(h.source)} · {tag} · {h.score:.4f}"))
         else:
+            from misslens.agents.generator.context import RetrievalContext
             from misslens.llm import get_llm
 
+            index = open_index(pack.exam_id)
+            if index is None or len(index) == 0:
+                cli.console.print("[yellow]자료 색인이 없어 세부 항목 설명만으로 출제합니다. 사실 검증이 약하니 "
+                                  "먼저 `ingest`로 자료를 넣으세요(D34).[/]")
+                context = None
+            else:
+                context = RetrievalContext(index)
+            from misslens.practice import PracticeSamples, load_bank
+
+            bank = load_bank(pack.exam_id)
+            samples = PracticeSamples(bank) if bank else None
             explainer = None if args.no_explain else get_llm("explainer")
-            cli.quiz(args.n, Generator(pack, ledger), explainer=explainer)
+            cli.quiz(args.n, Generator(pack, ledger, context=context, samples=samples,
+                                       copy_guard=samples.copy_reason if samples else None), explainer=explainer)
     except (KeyboardInterrupt, EOFError):
         cli.console.print("\n중단했습니다. 제출하지 않은 세트는 통계에 들어가지 않습니다.")
         return 130
     finally:
         ledger.close()
+    return 0
+
+
+def collect_command(args, pack: ExamPack, ledger: Ledger, cli: CLI) -> int:
+    from dataclasses import replace
+
+    from misslens.agents.collector import (
+        Crawl4AIFetcher, load_sources, login, new_thread_id, run_collect, sqlite_checkpointer,
+    )
+
+    srcs = load_sources(pack.exam_id)
+    names = [args.site] if args.site else list(srcs.sites)
+    unknown = [n for n in names if n not in srcs.sites]
+    if unknown:
+        cli.console.print(f"sources.yaml에 없는 사이트: {', '.join(unknown)}")
+        return 1
+    if args.action == "login":
+        for n in names:
+            path = login(n, srcs.sites[n].login_url)
+            cli.console.print(f"로그인 프로필을 저장했습니다: {path} (git 제외, 권한 0700)")
+        return 0
+
+    saved: list[str] = []
+    checkpointer = sqlite_checkpointer()
+    for n in names:
+        site, sources = srcs.sites[n], srcs.for_site(n)[: args.limit or None]
+        thread_id = args.thread or new_thread_id(n)
+        cli.console.print(f"[bold]{n}[/] 수집 시작: 소스 {len(sources)}개, thread_id={thread_id}")
+        on_login = login_prompt(cli.console, cli._ask, lambda n=n: login(n, srcs.sites[n].login_url))
+        state = run_collect(site, sources, Crawl4AIFetcher(n), on_login, checkpointer=checkpointer,
+                            thread_id=thread_id)
+        saved += print_collect_summary(cli.console, state)
+    if saved and not args.no_ingest:
+        from misslens.agents.ingest import Ingestor, load_file
+
+        docs = [replace(load_file(p), source_type="collect") for p in saved]
+        run_ingest(Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)), docs, cli.console)
     return 0
 
 

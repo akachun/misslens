@@ -77,7 +77,8 @@ class LLMCallError(RuntimeError):
         self.attempts = attempts
         self.cause = cause
         summary = "; ".join(f"{a.endpoint}:{a.model}={a.status}" for a in attempts) or "no candidate"
-        super().__init__(f"LLM call failed for role {role!r}: {summary}")
+        last = next((a.error for a in reversed(attempts) if a.error), "")
+        super().__init__(f"LLM call failed for role {role!r}: {summary}" + (f" ({last})" if last else ""))
 
 
 @dataclass

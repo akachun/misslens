@@ -5,8 +5,8 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 3 — 자료와 검색** (Phase 2 완료. 근거 자료가 없으면 문제 검증이 제 역할을 못 하므로 Phase 3가 실사용의 전제) |
-| 마지막 갱신 | 2026-11-04 |
+| 현재 단계 | **Phase 3 완료 → Phase 4/5** (자료·검색이 붙어 실제 모델로 CLI 학습 가능. 다음은 Planner·Supervisor 우선 권장, 아래 '세션 인계 메모') |
+| 마지막 갱신 | 2026-11-05 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
 
@@ -19,8 +19,8 @@
 | 0 | 사전 확인(모델 접근, 임베딩, 오답 10개 분류) | 11/4 저녁 첫 30분 | [x] |
 | 1 | 기반(프로젝트 구조, 시험 팩, 설정, ledger) | 11/4 저녁 | [x] |
 | 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [x] |
-| 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [ ] |
-| 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [ ] |
+| 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [x] |
+| 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [~] 구현 완료, 실제 로그인 수집 대기 |
 | 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [ ] |
 | 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [ ] |
 
@@ -96,29 +96,40 @@
 
 ## Phase 3 — 자료와 검색
 
-- [ ] **T6** Ingest(`agents/ingest/`)
-  - [ ] 업로드(PDF/MD/TXT/HTML)·붙여넣기 → 청크 분할
-  - [ ] 세부 항목 태깅(Haiku 4.5, 묶음 호출, 'unassigned' 허용, `materials`에 캐시)
-- [ ] **T6-a** 검색(`retrieval/`)
-  - [ ] bge-m3 + FAISS(시험별 디렉터리), 프로세스당 1회 로드
-  - [ ] BM25(한국어 전처리) + EnsembleRetriever(RRF 0.5/0.5) + task_id 필터
-  - [ ] 수집 본문은 '참고 자료' 블록으로 감싸기(프롬프트 주입 방어)
-  - [ ] 테스트: 정확한 시험 용어가 들어간 문서가 상위 k에 포함되는지
-- [~] **T2-c** 첫 실제 세트 전에 `exam.yaml` 확정: 공식 가이드로 세부 항목 30개를 확정하고 `version`을 올린다
+- [x] **T6** Ingest(`agents/ingest/`) — ARCHITECTURE §8 'Ingest'
+  - [x] 업로드(PDF/MD/TXT/HTML, 폴더 재귀)·붙여넣기(`--paste`) → 청크 분할(1200자, 겹침 150)
+  - [x] 세부 항목 태깅(Haiku 4.5, 8개씩 묶음, 최대 3개, 'unassigned' 허용, 실패한 묶음은 미분류로 계속). 중복은 `content_hash`로 건너뛰고 `materials`에 문서 행 기록
+  - [x] CLI `ingest`, `search`
+- [x] **T6-a** 검색(`retrieval/`)
+  - [x] bge-m3 + FAISS(`data/index/<exam_id>/`), 프로세스당 1회 로드, 로컬 캐시 우선
+  - [x] BM25(한글 bigram) + 가중 RRF(0.5/0.5) 직접 구현(D36) + task_id 태그 우선·전체 순위로 채움
+  - [x] 참고 자료 블록(`reference_block`, 출처 속성 이스케이프 추가)
+  - [x] 테스트: 시험 용어 문서가 상위 k에 포함, 한국어 질의, 필터·채움, 저장·재로드, 다른 임베더 거부 → `tests/test_retrieval.py`, `tests/test_ingest.py`(25개)
+  - [x] Generator 연결: `RetrievalContext`, `quiz`는 색인이 있으면 자동 사용(없으면 경고)
+- [x] **T6-b** 연습 문제 은행(학습자가 브라우저에서 직접 저장, `data/sources/practice_problems/`, CertSafari 5세트 250문항, 규칙 7 확인 2026-11-05) — D39
+  - [x] 파서(`misslens/practice.py`) + `practice import` → `data/practice/ccar-f/bank.jsonl`. 형식 검사(보기 4개, 정답 1개, 세부 항목이 시험 팩에 있음)
+  - [x] 품질 표시: 중복 지문 20, 정답·해설 불일치 24, 출처 주의 2(2세트 32번, 5세트 10번) → 예시 사용 가능 207개, 30개 세부 항목 모두 2개 이상
+  - [x] Generator에 세부 항목별 문체 예시 2개 + 베끼기 검사(포함률 60% 초과면 재생성). `quiz`는 은행이 있으면 자동 사용
+  - [x] 실측 A/B에서 문제 발견·수정: 근거 자료를 붙인 뒤 첫 시도 validator 통과 1/8 → 스키마 순서 변경으로 6/8(D40), 리스트 필드 JSON 문자열 처리, LLM 오류 메시지에 원인 포함
+  - 은행은 검색 색인에 넣지 않고, 학습자에게 그대로 출제하지 않는다(규칙 2). 문제를 직접 풀어 보는 용도로는 원본 파일을 쓴다
+- [x] **T2-c** 첫 실제 세트 전에 `exam.yaml` 확정: 공식 가이드로 세부 항목 30개를 확정하고 `version`을 올린다
   - [x] 시험 가이드 v1.0으로 확정 → version 2(final). 세부 항목 30개(ID 변화 없음, 2.5 제목만 수정), 공식 시나리오 6개, 출제 제외 주제 16개 추가. Domain 1은 공식 PDF, Domain 2~5 제목은 가이드를 그대로 옮긴 제3자 사이트(ccar-f.17labs.ai)로 확인. 받은 자료는 `data/sources/exam_guide/`(git 제외)에 있다
-  - [ ] 전체 공식 PDF(Domain 2~5 포함)를 구하면 2~5 제목을 한 번 더 대조한다(받은 PDF는 8쪽, Domain 1까지만 있음)
+  - [x] 전체 공식 PDF(39쪽)와 대조: 세부 항목 30개 제목·출제 제외 주제 16개 모두 일치. 대조 중 **제목 4개(1.3·1.7·3.1·4.4)가 YAML 쉼표 때문에 잘려 프롬프트에 들어가던 버그** 발견 → 따옴표 처리, `extra="forbid"`, version 3(D37)
   - [x] 실제 시험에 복수 정답 문항이 있음을 확인 → v1은 단일 정답만(D30)
-  - 완료 기준: 자료를 넣으면 해당 세부 항목의 문제가 근거 검증을 통과한다
+  - 완료 기준: 자료를 넣으면 해당 세부 항목의 문제가 근거 검증을 통과한다 → **충족**(2026-11-05, 시험 가이드 6개 문서 115청크 색인 후 3.2·2.3을 실제 모델로 생성, 둘 다 1회 만에 `grounding=retrieved`로 통과)
 
 ## Phase 4 — Collector
 
-- [ ] **T7** Collector(`agents/collector/`) — 3시간 안에 끝나지 않으면 멈추고 PDF/HTML 업로드로 대체한다
-  - [ ] `collect login <site>`(Crawl4AI 프로필, 사용자가 직접 로그인, `secrets/profiles/<site>/`, 권한 0700)
-  - [ ] `exams/ccar-f/sources.yaml`의 URL만 headless로 수집, Markdown 추출, `content_hash`로 중복 제거
-  - [ ] 만료 감지(로그인 URL로 리다이렉트, 401/403) → **interrupt②** 로그인 대기 → 같은 URL부터 재개
-  - [ ] 안전 규칙(읽기 전용, 2초 간격, 도메인 제한), 본문이 비었으면 실패 안내
-  - [ ] ⚠ 사내 자료는 반입 승인 전에는 수집하지 않는다
-  - [ ] 테스트(가짜 수집 결과)
+- [x] **T7** Collector(`agents/collector/`) — ARCHITECTURE §4.4, §9
+  - [x] `exams/ccar-f/sources.yaml`: Skilljar 대비 코스 7개(`expand: lessons`, D38), 설정 검증(https, 허용 도메인, 간격 2초 이상)
+  - [x] `collect login <site>`(Crawl4AI 프로필, 사용자가 직접 로그인, `secrets/profiles/<site>/`, 권한 0700)
+  - [x] 적힌 URL만 headless로 수집, 코스 페이지는 레슨 링크 한 단계만, 메뉴 줄 제거 후 `data/sources/collected/`에 저장, 끝나면 Ingest
+  - [x] 만료 감지(로그인 URL 리다이렉트, 401/403, 로그아웃 상태 코스 페이지) → **interrupt②** 로그인 대기 → 같은 URL부터 재개. SqliteSaver로 프로세스를 다시 켜도 `--thread`로 재개
+  - [x] 안전 규칙(읽기 전용, 간격, 도메인 제한), 본문이 비었거나 수강 등록이 필요하면 안내
+  - [x] 사내 자료 반입 승인 확인(2026-11-05). 수집 대상 URL은 `sources.yaml`에 적힌 것만
+  - [x] 테스트(가짜 수집기, 메모리·SQLite 체크포인터) `tests/test_collector.py` 19개. 실제 사이트로 로그아웃 상태 → interrupt② → 중단까지 확인
+  - [x] 학습자 로그인(Mac 화면 공유로 `collect login skilljar`, 2026-11-05). 코스 1(Claude Code in Action) 레슨 10개 수집, 본문 품질 확인(강의 텍스트 4~6천 자, 상단 버튼 문구 몇 줄만 섞임)
+  - [~] 7개 코스 전체 수집 + 색인 진행 중(`collect run skilljar`, thread `collect-skilljar-20261105-102235`). 끝나면 코스별 결과를 기록한다
 
 ## Phase 5 — 라우팅, 계획, 현황, UI
 
@@ -160,16 +171,16 @@
 
 | 항목 | 누구/어디 | 상태 | 영향 |
 |---|---|---|---|
-| 사내 자료의 외부 모델 반입 승인 | 담당 부서 | [ ] | 승인 전에는 공개 자료만 사용, Collector 대상 제한 |
-| 교안 사이트 이용약관 | 사이트 약관 | [ ] | 허용하지 않으면 수동 저장 |
-| 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 | [ ] | 데모 시나리오 조정 |
+| 사내 자료의 외부 모델 반입 승인 | 담당 부서 | [x] 2026-11-05 승인(학습자 확인) | 승인 전에는 공개 자료만 사용, Collector 대상 제한 |
+| 교안 사이트 이용약관 | 사이트 약관 | [x] 2026-11-05 수집 진행 가능(학습자 확인) | 허용하지 않으면 수동 저장 |
+| 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 | [x] 여러 패턴을 쓰면 좋음. 학습자 우선순위: 멀티 에이전트 > RAG > HITL | 데모 시나리오 조정 |
 | CCA-F 공식 세부 항목 | 시험 가이드 v1.0 | [x] | T2-c(`exam.yaml` v2) |
 
 ## v1 이후 (TODOS.md로 옮길 항목)
 
 - [ ] **동료 배포 준비**: 개인 AWS 자격 증명 없이 쓸 수 있는 방식(공용 계정, 사내 호스팅) 검토 → 설치 가이드
 - [ ] **시험 팩 템플릿·작성 가이드**: `exams/_template/`, 새 시험 추가 절차, 두 번째 시험으로 검증
-- [ ] Collector 고도화: 링크 따라가기, 사이트별 추출, AgentCore Browser 검토
+- [ ] Collector 고도화: 레슨 한 단계(D38)를 넘는 링크 따라가기, 사이트별 본문 영역 지정(Skilljar 버튼 문구 제거), AgentCore Browser 검토
 - [ ] 놓친 문구 드릴 모드
 - [ ] 비슷한 함정 문제 출제: 맞힌 문제의 해법을 다른 상황에 잘못 옮기는 실수(예: T1-a m03, 값이 없을 때의 nullable 해법을 값이 있는 상황에 적용)를 노리는 짝 문제
 - [ ] 복수 정답 문항(multiple-response) 출제·채점·진단(D30)
@@ -178,6 +189,9 @@
 ---
 
 ## 세션 인계 메모
+
+**다음 작업(2026-11-05 갱신):** 반입 승인·약관 확인이 끝나 Collector를 진행한다. 우선순위(멀티 에이전트 > RAG > HITL)에 맞춰 T7 Collector(LangGraph 서브그래프, interrupt②) → T8 Supervisor 그래프로 서브그래프 묶기 + Planner(interrupt①) → T9 Streamlit → T10 순서. 마감이 위태로우면 Streamlit을 먼저 뺀다(CLI로 시연).
+- 근거 자료 주의: `guide.pdf`에는 공식 샘플 문제와 정답이 들어 있다. 생성 문제가 샘플과 비슷해질 수 있으니 실제로 풀어 보며 확인한다.
 
 새 세션을 시작할 때 다음 순서로 진행한다.
 1. 이 문서의 '진행 요약'과 현재 Phase에서 체크되지 않은 항목을 확인한다.
@@ -205,3 +219,6 @@
 | 2026-11-04 | TASK.md 전체 대조: T1-a 미달(4/10) 명시, T4·T5에 Phase 1에서 이미 만든 함수 표시(판정 로직 중복 방지), T2-c·T10 잔여 작업 추가, 누락된 v1 이후 항목 추가 |
 | 2026-11-04 | Phase 2 완료: Generator(선택·생성·validator·근거 검증·재생성·스트리밍), Grader(재질문 폼·리뷰·해설), CLI(`quiz`, `status`). 실호출로 문제 생성 확인 중 근거 없는 검증의 한계를 발견해 4번째 검사 추가(D33~D35). 테스트 160개 + 실호출 3개 |
 | 2026-11-04 | Phase 2 독립 리뷰 반영: 구조화 출력이 비어 오면(`None`) 재생성으로 처리, 실패 칸은 세트 크기에 세지 않음, CLI 문제 번호를 `seq`로 통일('문제 이상' 번호 어긋남 수정), 세트 점수를 ledger `set_score`로 이동(규칙 1), Ctrl-C 시 생성 취소 후 ledger 닫기, key_constraints 2~4개 검사. 테스트 165개 |
+| 2026-11-05 | Phase 3 완료: Ingest(로더·청크·Haiku 태깅·중복 제거), 하이브리드 검색(bge-m3 + FAISS + BM25 + RRF 직접 구현, D36), `RetrievalContext`, CLI `ingest`/`search`. 시험 가이드 115청크 색인(30/30 세부 항목에 자료), 실호출 문제 2개 근거 검증 통과(T2-c 완료). 전체 가이드 PDF 대조로 제목 잘림 버그 수정(exam.yaml v3, D37). 테스트 192개 |
+| 2026-11-05 | T7 Collector: Skilljar 대비 코스 7개 `sources.yaml`, 로그인 프로필, LangGraph 서브그래프(fetch ⟲, wait_login의 interrupt②, SqliteSaver 재개), 코스→레슨 한 단계 펼치기(D38), CLI `collect login|run`. 실측으로 `networkidle` 대기 → `domcontentloaded`로 변경, 로그아웃 상태 코스 페이지 감지 추가. 테스트 211개 |
+| 2026-11-05 | T6-b 연습 문제 은행: CertSafari 250문항 구조화(예시 사용 207), 세부 항목별 문체 예시 + 베끼기 검사(D39). A/B 실측으로 key_constraints 실패 원인을 찾아 스키마 순서 변경(첫 시도 통과 1/8 → 6/8, D40). 테스트 219개 |

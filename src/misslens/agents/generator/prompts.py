@@ -15,8 +15,9 @@ Rules for every question:
 - Scenario-based, multiple choice, exactly 4 options, exactly ONE correct option.
 - stem_en: a realistic production situation (60-180 words) ending with a clear question.
   It must contain the details (constraints) that decide the answer.
-- key_constraints: 2-4 short phrases (3-12 words) copied VERBATIM from stem_en. They are the conditions a
-  careless reader would miss and that rule out the wrong options.
+- key_constraints: 2-4 short phrases (3-12 words) copied VERBATIM from YOUR stem_en (never from the reference
+  material or the task statement). They are scenario conditions a careless reader would miss (a limit, a
+  "must not", a scope, a timing) and that rule out the wrong options. Write stem_en so that it contains them.
 - Each wrong option must be plausible and must break exactly one key constraint; set its `violates` to that
   constraint, copied exactly. The correct option has violates=null.
 - Keep options similar in length and style so length does not give the answer away.
@@ -57,7 +58,9 @@ def generation_messages(pack: ExamPack, task_id: str, chunks: list[Chunk], *, sc
     parts.append(reference_block(chunks))
     if samples:
         joined = "\n\n---\n\n".join(samples)
-        parts.append("Style examples (match their tone and length; do not copy their content):\n"
+        parts.append("Style examples from a third-party practice set. Match their scenario style, length and option "
+                     "style only. They are NOT a source of facts (their answers are unverified): take facts only from "
+                     "the reference material. Do not reuse their situations, wording or options:\n"
                      f"<style_examples>\n{joined}\n</style_examples>")
     if feedback:
         parts.append("Your previous attempt was rejected for this reason. Fix it:\n" + feedback)

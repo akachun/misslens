@@ -20,7 +20,9 @@ WEIGHT_TOLERANCE = 0.005
 
 
 class Task(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    # extra="forbid": an unquoted title with commas in a YAML flow mapping ({id: x, title: A, B}) parses as
+    # extra keys; ignoring them silently cut 4 titles at the first comma (fixed in exam.yaml v3).
+    model_config = ConfigDict(frozen=True, extra="forbid")
     id: str
     title: str
 

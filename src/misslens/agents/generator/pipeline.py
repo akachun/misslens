@@ -15,6 +15,7 @@ import logging
 import queue
 import random
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -73,14 +74,19 @@ class Generator:
     """One instance per learning session: `failed_tasks` is the session's exclusion list (§7 step 3)."""
 
     def __init__(self, pack: ExamPack, ledger: Ledger, *, gen_llm: Any = None, verify_llm: Any = None,
-                 context: ContextProvider | None = None, samples: list[str] | None = None,
+                 context: ContextProvider | None = None,
+                 samples: list[str] | Callable[[str], list[str]] | None = None,
+                 copy_guard: Callable[[str, str], str | None] | None = None,
                  rng: random.Random | None = None):
+        """samples: fixed style examples, or task_id -> examples (practice bank, D39).
+        copy_guard: (task_id, stem_en) -> rejection reason when the draft reuses a known practice question."""
         self.pack = pack
         self.ledger = ledger
         self.gen_llm = gen_llm if gen_llm is not None else get_llm("generator")
         self.verify_llm = verify_llm if verify_llm is not None else get_llm("verifier")
         self.context = context or TaskStatementContext()
         self.samples = samples or []
+        self.copy_guard = copy_guard
         self.rng = rng or random.Random()
         self.failed_tasks: set[str] = set()
         self._cancel = threading.Event()
@@ -96,13 +102,14 @@ class Generator:
         scenarios = self.pack.scenarios_for_domain(domain.id)
         scenario = self.rng.choice(scenarios) if scenarios else None
         chunks = self.context(self.pack, task_id)
+        samples = self.samples(task_id) if callable(self.samples) else self.samples
         result = TaskResult(task_id, None, 0)
         feedback: str | None = None
         for _ in range(MAX_TRIES):
             result.tries += 1
             try:
                 draft = self.gen_llm.with_structured_output(QuestionDraft).invoke(generation_messages(
-                    self.pack, task_id, chunks, scenario=scenario, samples=self.samples, feedback=feedback))
+                    self.pack, task_id, chunks, scenario=scenario, samples=samples, feedback=feedback))
                 if draft is None:  # tool calling: the model answered without calling the tool
                     raise QuestionInvalid("model returned no structured output")
                 if isinstance(draft, dict):
@@ -110,6 +117,9 @@ class Generator:
                 question = validate_question(draft, task_id=task_id, domain=domain.id,
                                              scenario_id=scenario.id if scenario else None,
                                              grounding=self.context.grounding)
+                copied = self.copy_guard(task_id, question.stem_en) if self.copy_guard else None
+                if copied:
+                    raise QuestionInvalid(copied)
             except QuestionInvalid as exc:
                 feedback = f"validator: {exc}"
             except (ValidationError, LLMCallError) as exc:

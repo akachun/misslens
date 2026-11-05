@@ -249,3 +249,22 @@ def test_invalid_question_never_stored(ledger):
 
 def test_question_invalid_is_value_error():
     assert issubclass(QuestionInvalid, ValueError)
+
+
+def test_list_fields_sent_as_json_strings_are_unwrapped():
+    """Seen live: tool calling returned key_constraints as '["a", "b"]' and the draft failed to parse."""
+    import json
+
+    d = draft(1)
+    d["key_constraints"] = json.dumps(d["key_constraints"])
+    d["options"] = json.dumps(d["options"], ensure_ascii=False)
+    parsed = QuestionDraft.model_validate(d)
+    assert parsed.key_constraints == ["must not store passwords", "within 12 hours"]
+    assert len(parsed.options) == 4 and not validation_errors(parsed)
+
+
+def test_key_constraints_are_generated_before_options():
+    """D40: the schema order is the generation order; constraints must come right after the stem."""
+    fields = list(QuestionDraft.model_fields)
+    assert fields.index("key_constraints") == fields.index("stem_en") + 1
+    assert fields.index("key_constraints") < fields.index("options")

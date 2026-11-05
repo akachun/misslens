@@ -4,11 +4,14 @@
 #   - Exam details, domains/weights, scenarios, Domain 1 task statements: official guide PDF (Skilljar course file).
 #   - Domain 2-5 task statement titles and the out-of-scope list: ccar-f.17labs.ai, which quotes guide v1.0
 #     verbatim (third party, not affiliated with Anthropic). Checked 2026-11-04.
+#   - 2026-11-05: all 30 task statement titles and the 16 out-of-scope topics checked against the full guide
+#     PDF (39 pages): identical.
+#     Keep titles quoted: an unquoted comma inside {...} splits the title into extra keys (D37).
 # Bump `version` whenever task statements change; add old -> new IDs to `task_id_map`.
 
 exam_id: ccar-f
 name: Claude Certified Architect – Foundations
-version: 2                # v1 = unverified draft; v2 = guide v1.0 (2.5 title corrected, IDs unchanged)
+version: 3                # v1 = unverified draft; v2 = guide v1.0 (2.5 title corrected, IDs unchanged); v3 = titles with commas were cut at the first comma (YAML flow mapping), now quoted and checked against the full guide PDF
 status: final
 exam_language: en
 learner_language: ko
@@ -93,23 +96,23 @@ domains:
     name_native: 에이전트 아키텍처와 오케스트레이션
     weight: 0.27
     tasks:
-      - {id: "1.1", title: Design and implement agentic loops for autonomous task execution}
-      - {id: "1.2", title: Orchestrate multi-agent systems with coordinator-subagent patterns}
-      - {id: "1.3", title: Configure subagent invocation, context passing, and spawning}
-      - {id: "1.4", title: Implement multi-step workflows with enforcement and handoff patterns}
-      - {id: "1.5", title: Apply Agent SDK hooks for tool call interception and data normalization}
-      - {id: "1.6", title: Design task decomposition strategies for complex workflows}
-      - {id: "1.7", title: Manage session state, resumption, and forking}
+      - {id: "1.1", title: "Design and implement agentic loops for autonomous task execution"}
+      - {id: "1.2", title: "Orchestrate multi-agent systems with coordinator-subagent patterns"}
+      - {id: "1.3", title: "Configure subagent invocation, context passing, and spawning"}
+      - {id: "1.4", title: "Implement multi-step workflows with enforcement and handoff patterns"}
+      - {id: "1.5", title: "Apply Agent SDK hooks for tool call interception and data normalization"}
+      - {id: "1.6", title: "Design task decomposition strategies for complex workflows"}
+      - {id: "1.7", title: "Manage session state, resumption, and forking"}
 
   - id: d2
     name: Tool Design & MCP Integration
     name_native: 도구 설계와 MCP 연동
     weight: 0.18
     tasks:
-      - {id: "2.1", title: Design effective tool interfaces with clear descriptions and boundaries}
-      - {id: "2.2", title: Implement structured error responses for MCP tools}
-      - {id: "2.3", title: Distribute tools appropriately across agents and configure tool choice}
-      - {id: "2.4", title: Integrate MCP servers into Claude Code and agent workflows}
+      - {id: "2.1", title: "Design effective tool interfaces with clear descriptions and boundaries"}
+      - {id: "2.2", title: "Implement structured error responses for MCP tools"}
+      - {id: "2.3", title: "Distribute tools appropriately across agents and configure tool choice"}
+      - {id: "2.4", title: "Integrate MCP servers into Claude Code and agent workflows"}
       - {id: "2.5", title: "Select and apply built-in tools (Read, Write, Edit, Bash, Grep, Glob) effectively"}
 
   - id: d3
@@ -117,33 +120,33 @@ domains:
     name_native: Claude Code 설정과 워크플로
     weight: 0.20
     tasks:
-      - {id: "3.1", title: Configure CLAUDE.md files with appropriate hierarchy, scoping, and modular organization}
-      - {id: "3.2", title: Create and configure custom slash commands and skills}
-      - {id: "3.3", title: Apply path-specific rules for conditional convention loading}
-      - {id: "3.4", title: Determine when to use plan mode vs direct execution}
-      - {id: "3.5", title: Apply iterative refinement techniques for progressive improvement}
-      - {id: "3.6", title: Integrate Claude Code into CI/CD pipelines}
+      - {id: "3.1", title: "Configure CLAUDE.md files with appropriate hierarchy, scoping, and modular organization"}
+      - {id: "3.2", title: "Create and configure custom slash commands and skills"}
+      - {id: "3.3", title: "Apply path-specific rules for conditional convention loading"}
+      - {id: "3.4", title: "Determine when to use plan mode vs direct execution"}
+      - {id: "3.5", title: "Apply iterative refinement techniques for progressive improvement"}
+      - {id: "3.6", title: "Integrate Claude Code into CI/CD pipelines"}
 
   - id: d4
     name: Prompt Engineering & Structured Output
     name_native: 프롬프트 엔지니어링과 구조화 출력
     weight: 0.20
     tasks:
-      - {id: "4.1", title: Design prompts with explicit criteria to improve precision and reduce false positives}
-      - {id: "4.2", title: Apply few-shot prompting to improve output consistency and quality}
-      - {id: "4.3", title: Enforce structured output using tool use and JSON schemas}
-      - {id: "4.4", title: Implement validation, retry, and feedback loops for extraction quality}
-      - {id: "4.5", title: Design efficient batch processing strategies}
-      - {id: "4.6", title: Design multi-instance and multi-pass review architectures}
+      - {id: "4.1", title: "Design prompts with explicit criteria to improve precision and reduce false positives"}
+      - {id: "4.2", title: "Apply few-shot prompting to improve output consistency and quality"}
+      - {id: "4.3", title: "Enforce structured output using tool use and JSON schemas"}
+      - {id: "4.4", title: "Implement validation, retry, and feedback loops for extraction quality"}
+      - {id: "4.5", title: "Design efficient batch processing strategies"}
+      - {id: "4.6", title: "Design multi-instance and multi-pass review architectures"}
 
   - id: d5
     name: Context Management & Reliability
     name_native: 컨텍스트 관리와 신뢰성
     weight: 0.15
     tasks:
-      - {id: "5.1", title: Manage conversation context to preserve critical information across long interactions}
-      - {id: "5.2", title: Design effective escalation and ambiguity resolution patterns}
-      - {id: "5.3", title: Implement error propagation strategies across multi-agent systems}
-      - {id: "5.4", title: Manage context effectively in large codebase exploration}
-      - {id: "5.5", title: Design human review workflows and confidence calibration}
-      - {id: "5.6", title: Preserve information provenance and handle uncertainty in multi-source synthesis}
+      - {id: "5.1", title: "Manage conversation context to preserve critical information across long interactions"}
+      - {id: "5.2", title: "Design effective escalation and ambiguity resolution patterns"}
+      - {id: "5.3", title: "Implement error propagation strategies across multi-agent systems"}
+      - {id: "5.4", title: "Manage context effectively in large codebase exploration"}
+      - {id: "5.5", title: "Design human review workflows and confidence calibration"}
+      - {id: "5.6", title: "Preserve information provenance and handle uncertainty in multi-source synthesis"}

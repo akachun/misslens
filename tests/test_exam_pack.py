@@ -95,3 +95,19 @@ def test_scenarios_and_out_of_scope_helpers():
     text = pack.prompt_out_of_scope()
     assert text.count("\n") == len(pack.out_of_scope) - 1
     assert all(t in text for t in pack.out_of_scope)
+
+
+def test_unquoted_title_with_commas_is_rejected():
+    """YAML reads {id: "1.3", title: A, B, and C} as a title "A" plus extra keys; that must fail, not cut the title."""
+    flow = yaml.safe_load('{id: "1.3", title: Configure subagent invocation, context passing, and spawning}')
+    assert flow["title"] == "Configure subagent invocation"
+    bad = copy.deepcopy(RAW)
+    bad["domains"][0]["tasks"][2] = flow
+    with pytest.raises(ValidationError):
+        ExamPack.model_validate(bad)
+
+
+def test_task_titles_are_not_cut_at_commas():
+    pack = load_exam_pack("ccar-f")
+    assert pack.task("1.3").title == "Configure subagent invocation, context passing, and spawning"
+    assert pack.task("4.4").title == "Implement validation, retry, and feedback loops for extraction quality"
