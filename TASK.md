@@ -259,3 +259,4 @@
 | 2026-11-05 | 서버 재시작(제출 전 세트 0 확인). 모델 제공자 전환(개인 구독 GPT·Claude) 영향도 검토 → TODOS '제출 후 1순위'·ARCHITECTURE §13. 문서 최종 대조: 결정 범위 D55, §11 `.streamlit`, TASK T21, testing.md 최종 수치(기본 305·realdata 1·live 9) |
 | 2026-11-05 | T22: 강사 테스트에 필요한 데이터 검토(저장소 공개 확인, 새 clone 재현) → 비공개 zip 방식과 생성 스크립트(D56). zip 6.9MB, 금지 파일 0건, 압축 해제 후 status·검색 평가 정상 |
 | 2026-11-05 | 학습자 Windows 실행 피드백(PowerShell에서 `&&`·`source` 오류): HANDOFF.md·README에 Windows(PowerShell·cmd) 안내 추가. Windows 점검: 인코딩 없는 텍스트 입출력 8곳(테스트) 수정 + `test_portability.py`로 고정. 압축 해제 패키지에서 git 의존 테스트 1개 실패 발견 → git 체크아웃이 아니면 건너뜀·스크립트는 이유를 알리고 중단. 압축 해제 패키지 308 통과·1 건너뜀, 저장소 310 통과 |
+| 2026-11-05 | Windows 실기 확인(학습자 PC): Python 3.14.8, uv 없이 venv + pip, 평가용 패키지에서 `pytest` 309 통과·1 건너뜀(의도). README·HANDOFF.md에 uv 없는 설치 경로 추가 |

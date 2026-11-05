@@ -40,6 +40,8 @@
 
 2026-11-05 최종 확인: 기본 305 통과(T21 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, T21은 모델 호출을 바꾸지 않음).
 
+**Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
+
 ## 2. 언제 무엇을 돌리나
 
 | 바꾼 것 | 돌릴 것 |
