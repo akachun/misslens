@@ -13,6 +13,7 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 | `ARCHITECTURE.md` | 구현이나 설계를 다룰 때. 해당 절(§)만 읽는다 |
 | `SERVICE.md` | 기능 범위나 우선순위를 판단할 때 |
 | `docs/testing.md` | 테스트를 추가·실행하거나 검색 품질 점수(`retrieval-eval`)를 다룰 때 |
+| `docs/demo.md` | 시연을 준비하거나 리허설할 때 |
 
 ## 깨면 안 되는 규칙
 

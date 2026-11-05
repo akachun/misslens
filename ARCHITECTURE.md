@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D40) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D51) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -53,7 +53,7 @@
    bge-m3 (프로세스당 1회 로드)
 ```
 
-- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다. 구현된 그래프 그림(Supervisor·Planner·Collector·Coach)은 README에 있고, `python scripts/draw_graph.py`로 컴파일된 그래프에서 `docs/graphs/*.mmd`로 다시 만든다(그림이 코드와 어긋나면 테스트 실패, D41).
+- 원안은 서브그래프 6개와 Supervisor(D1)다. 구현에서는 interrupt가 있는 Planner·Collector와 tool을 쓰는 Coach만 LangGraph 서브그래프로 두고, Generator·Grader·Reporter·Ingest는 Supervisor 그래프의 함수 노드로 둔다(D41, D44). 각 서브그래프는 자기 상태를 갖는다. 구현된 그래프 그림(Supervisor·Planner·Collector·Coach)은 README에 있고, `python scripts/draw_graph.py`로 컴파일된 그래프에서 `docs/graphs/*.mmd`로 다시 만든다(그림이 코드와 어긋나면 테스트 실패, D41).
 - **통계는 ledger 모듈 한 곳에서만 계산한다**(D9). Generator, Planner, Reporter는 ledger의 통계 함수만 호출한다.
 - **interrupt는 두 곳에만 둔다**(D20, D21). ① Planner의 계획 승인, ② Collector의 로그인 대기. 문제 풀이와 리뷰 흐름에는 interrupt가 없다.
 
@@ -408,7 +408,7 @@ misslens/
 ├── config/models.yaml
 ├── exams/ccar-f/{exam.yaml, sources.yaml}   # sources.yaml: Collector 대상(§9)
 ├── src/misslens/
-│   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/(tokenize·embed·index)
+│   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/(tokenize·embed·index·evaluate)
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── paths.py       # 학습 기록·체크포인트 위치, 샌드박스(D45)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
@@ -419,7 +419,8 @@ misslens/
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── scripts/draw_graph.py     # 그래프 그림 → docs/graphs/*.mmd (README에 포함)
-├── docs/           # demo.md(데모 시나리오), graphs/(생성된 그래프 그림)
+├── docs/           # demo.md(데모 시나리오), testing.md(테스트·검색 평가), graphs/(생성된 그래프 그림)
+├── evals/<exam>/   # retrieval.yaml(정답 질의), retrieval_baseline.json(검색 점수 기준선, D50)
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
 └── secrets/        # 로그인 프로필 (git 제외)
 ```
@@ -429,6 +430,7 @@ misslens/
 | ID | 결정 | 검토한 대안 | 이유 |
 |---|---|---|---|
 | D1 | 서브그래프 6개 + Supervisor | 단일 그래프 + 모듈 소유 | 멀티 에이전트 구조를 그대로 보여 줌 (사용자 선택) |
+| D2 | (대체됨) 임베딩 방식 첫 질문: 로컬 임베딩 / BM25 / Titan | — | 사용자가 '둘을 앙상블로 보정'하는 새 대안을 제시해 D3으로 다시 결정 |
 | D3/D17 | bge-m3 + BM25 하이브리드 | Titan 임베딩, BM25만, 태그 필터 + BM25 | 임베딩 모델 접근 없음. 조건 문구는 키워드 검색이 강하고, 태그가 틀렸을 때 의미 검색이 안전망이 됨 |
 | D4 | 역할별 모델 | 모두 Sonnet, 출제만 Sonnet | 품질이 중요한 곳에만 Sonnet을 쓰고, 검증은 다른 모델로 해서 오류 상관을 줄임 |
 | D5 | `us.` 프로필 기본 | `global.` 기본 | 데이터 처리 지역을 좁게 유지. 호출 제한에 걸리면 전환 (D26으로 확장) |
@@ -459,6 +461,7 @@ misslens/
 | D50 | 실제 색인을 점수로 보는 검색 평가(정답 질의 30개·세 모드·출제 근거 품질·색인 건강)와 기준선 회귀 검사 | 가짜 임베더 단위 테스트만, 눈으로 검색 확인 | 오늘 잡음 29%·코치의 'Skilljar 없음' 오답이 단위 테스트를 모두 통과한 채로 나옴. 청킹·정리·랭킹을 바꿀 때 숫자로 비교해야 함. 내용 기준 판정이라 다시 청킹해도 정답 세트가 유지됨 |
 | D51 | RRF에서 BM25 가중치를 질의 커버리지(idf 기준)에 비례하게 | 질의 번역(Haiku), 한영 용어집, 단어 개수 비율 | 한국어 질의 'Claude Code 권한 모드…'에서 BM25가 흔한 단어 claude·code만 보고 정답을 41위로 밀어냄(의미 검색은 2위). 번역은 검색마다 모델 호출, 용어집은 관리 부담. 단어 개수 비율(0.2)로는 부족해 idf로(0.04). 결과: hit@5 일반·코치 0.97→1.00, 출제 0.93→0.97, 회귀 없음 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
+| D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
 | D10 | 세트 + 문제별 행(6개 테이블) | 세트를 JSON 1행으로 저장 | 질의하는 값은 컬럼으로, 문제 본문만 JSON으로 |
@@ -470,6 +473,8 @@ misslens/
 | D16 | Collector v1 포함 | 시험 후로 연기 | 교안 대부분이 로그인 웹에 있음 (사용자 선택) |
 | D21 | interrupt: 계획 승인 + 로그인 대기 | 되묻기, 태그 확인 | 사람이 직접 해야 하는 지점에만 둠 |
 | D22 | exam.yaml version + 첫 세트 전 확정 | 나중에 확정 | 학습 기록의 기준 키를 보호 |
+| D24 | 동료 배포 준비(개인 AWS 자격 증명 없이 쓰는 방식)는 v1 이후 TODO | v1에 포함 | 마감 우선. TODOS.md '배포와 확장' |
+| D25 | 시험 팩 템플릿·작성 가이드는 v1 이후 TODO | v1에 포함 | 두 번째 시험으로 검증해야 의미가 있음. TODOS.md '배포와 확장' |
 | Crawl4AI | Crawl4AI | Playwright 직접, AgentCore Browser, ego lite, browser-use, Stagehand | URL을 이미 알고 있고 본문만 필요함. Python 네이티브. 실패 시 Playwright로 내려갈 수 있음 |
 
 ## 13. 확인이 필요한 사항
