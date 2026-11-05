@@ -1,4 +1,4 @@
-"""D50: retrieval scores, generator-context quality, index health and baseline comparison (fake embedder)."""
+"""D50: 검색 점수, 생성기 맥락 품질, 색인 건강, 기준선 비교(가짜 임베더)."""
 
 from __future__ import annotations
 
@@ -83,4 +83,4 @@ def test_committed_golden_set_is_well_formed():
     assert len(g.items) >= 30 and len({i.id for i in g.items}) == len(g.items)
     assert {i.domain for i in g.items} >= {d.id for d in PACK.domains}
     assert all(i.task_id is None or i.task_id in PACK.task_ids for i in g.items)
-    assert sum(any("가" <= ch <= "힣" for ch in i.query) for i in g.items) >= 8   # Korean questions
+    assert sum(any("가" <= ch <= "힣" for ch in i.query) for i in g.items) >= 8   # 한국어 질문

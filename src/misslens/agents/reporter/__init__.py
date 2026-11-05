@@ -1,7 +1,7 @@
-"""Reporter agent: the status numbers of SERVICE F9, read from ledger statistics only (CLAUDE.md rule 1).
+"""Reporter 에이전트: SERVICE F9의 현황 숫자를 ledger 통계에서만 읽어 온다(CLAUDE.md 규칙 1).
 
-No model. The CLI `status`, the Supervisor's status route and the Streamlit 현황 tab all render this one report,
-so every screen shows the same numbers.
+모델은 쓰지 않는다. CLI `status`, Supervisor의 status 경로, Streamlit 현황 탭이 모두 이 보고서 하나를 그리므로
+모든 화면에 같은 숫자가 나온다.
 """
 
 from __future__ import annotations
@@ -22,16 +22,16 @@ class Report:
     asked: list[str]
     never_asked: list[str]
     coverage_ratio: float
-    domains: list[dict]                    # per domain: weight, tasks, asked, attempts, accuracy
+    domains: list[dict]                    # 영역별: weight, tasks, asked, attempts, accuracy
     concept: int
     reading: int
     uncertain: int
     reading_ratio: float | None
-    baseline: float | None                 # decoy re-ask accuracy, shown next to reading_ratio (D31)
+    baseline: float | None                 # decoy 재질문 정답률, reading_ratio 옆에 보여 준다(D31)
     avg_time_ms: float | None
     top_phrases: list[tuple[str, int]] = field(default_factory=list)
     failures: list[dict] = field(default_factory=list)
-    agreement: dict = field(default_factory=dict)   # learner label vs diagnosis (labeled, compared, agree, rate)
+    agreement: dict = field(default_factory=dict)   # 학습자 라벨 대 진단(labeled, compared, agree, rate)
 
     def as_dict(self) -> dict:
         return asdict(self)

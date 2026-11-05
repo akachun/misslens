@@ -1,7 +1,7 @@
-"""Ingest: document -> chunks -> task tags -> index + materials row (ARCHITECTURE §3, SERVICE F1).
+"""Ingest: 문서 -> chunk -> 세부 항목 태그 -> 색인 + materials 행(ARCHITECTURE §3, SERVICE F1).
 
-Order matters for consistency: the index is written first, then the materials row. A duplicate is detected
-from the index (content_hash), so a crash between the two steps never leaves a materials row without chunks.
+일관성을 위해 순서가 중요하다. 색인을 먼저 쓰고 그다음 materials 행을 쓴다. 중복은 색인(content_hash)으로
+판별하므로 두 단계 사이에 죽어도 chunk 없는 materials 행이 남지 않는다.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from misslens.retrieval.index import ChunkIndex, IndexedChunk
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 1200   # characters; ~250-300 English tokens, several fit in one generator prompt
+CHUNK_SIZE = 1200   # 글자 수. 영어 약 250-300 토큰, generator 프롬프트 하나에 여러 개 들어간다
 CHUNK_OVERLAP = 150
 MIN_CHUNK_CHARS = 40
 

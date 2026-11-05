@@ -1,4 +1,4 @@
-"""Ingest: loaders, chunking, tagging, dedupe, materials row, CLI output (SERVICE F1, TASK T6)."""
+"""Ingest: 로더, 청킹, 태깅, 중복 제거, materials 행, CLI 출력(SERVICE F1, TASK T6)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def tags_for(n, ids=("2.1",)):
     return {"items": [{"index": i, "task_ids": list(ids)} for i in range(n)]}
 
 
-# --- loaders ----------------------------------------------------------------------------------
+# --- 로더 ----------------------------------------------------------------------------------
 
 
 def test_load_markdown_strips_untrusted_marker_and_uses_url(tmp_path):
@@ -78,7 +78,7 @@ def test_expand_paths_walks_folders(tmp_path):
     assert [p.name for p in expand_paths([str(tmp_path)])] == ["a.md", "b.pdf"]
 
 
-# --- chunking and tagging ---------------------------------------------------------------------
+# --- 청킹과 태깅 ---------------------------------------------------------------------
 
 
 def test_split_text_makes_overlapping_chunks_and_drops_tiny_ones():
@@ -90,12 +90,12 @@ def test_split_text_makes_overlapping_chunks_and_drops_tiny_ones():
 def test_tagger_drops_unknown_ids_and_limits_tags():
     llm = FakeRoleLLM([{"items": [{"index": 0, "task_ids": ["2.1", "9.9", "2.2", "2.3", "2.4"]},
                                   {"index": 1, "task_ids": []},
-                                  {"index": 7, "task_ids": ["1.1"]}]}])  # out of range: ignored
+                                  {"index": 7, "task_ids": ["1.1"]}]}])  # 범위 밖: 무시
     assert tag_chunks(PACK, ["a", "b"], llm) == [["2.1", "2.2", "2.3"], []]
 
 
 def test_tagger_failure_leaves_batch_unassigned_and_continues():
-    texts = [f"chunk {i}" for i in range(10)]          # 2 batches of 8 + 2
+    texts = [f"chunk {i}" for i in range(10)]          # 8개짜리 배치 2개 + 2개
     llm = FakeRoleLLM([LLMCallError("tagger", []), tags_for(2, ("1.1",))])
     tags = tag_chunks(PACK, texts, llm)
     assert tags[:8] == [[]] * 8
@@ -110,7 +110,7 @@ def test_tagger_prompt_lists_tasks_from_exam_pack_and_wraps_chunks_as_data():
     assert '<chunk index="0">' in human.content
 
 
-# --- pipeline ---------------------------------------------------------------------------------
+# --- 파이프라인 ---------------------------------------------------------------------------------
 
 
 def test_ingest_adds_chunks_material_row_and_skips_duplicates(ledger, index):
@@ -123,7 +123,7 @@ def test_ingest_adds_chunks_material_row_and_skips_duplicates(ledger, index):
     rows = ledger._query("SELECT source_type, source_uri, task_id FROM materials")
     assert [tuple(r) for r in rows] == [("paste", "notes", None)]
 
-    again = ing.ingest(from_paste(LONG.replace(". ", ".  "), "notes-copy"))  # same text, other spacing
+    again = ing.ingest(from_paste(LONG.replace(". ", ".  "), "notes-copy"))  # 같은 텍스트, 다른 공백
     assert again.status == "duplicate"
     assert len(ledger._query("SELECT id FROM materials")) == 1
 

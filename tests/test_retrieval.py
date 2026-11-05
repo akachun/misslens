@@ -1,4 +1,4 @@
-"""Hybrid retrieval: tokenizer, RRF, index search/filter/persistence, RetrievalContext (ARCHITECTURE §8)."""
+"""하이브리드 검색: 토크나이저, RRF, 색인 검색/필터/저장, RetrievalContext(ARCHITECTURE §8)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ PACK = load_exam_pack("ccar-f")
 
 
 class FakeEmbedder:
-    """Hashed bag of words: texts that share tokens are close. Deterministic, no model download."""
+    """해시한 단어 주머니: 토큰을 공유하는 텍스트끼리 가깝다. 결정적이고, 모델 다운로드가 없다."""
 
     name = "fake-hash"
     dim = 128
@@ -45,7 +45,7 @@ FILLER = [
 ]
 
 
-# --- tokenizer --------------------------------------------------------------------------------
+# --- 토크나이저 --------------------------------------------------------------------------------
 
 
 def test_tokenize_keeps_exam_terms_whole_and_adds_parts():
@@ -66,12 +66,12 @@ def test_tokenize_korean_bigrams_match_across_particles():
 def test_rrf_rewards_documents_ranked_by_both():
     fused = rrf([[1, 2, 3], [3, 1, 4]], [0.5, 0.5])
     order = [d for d, _ in fused]
-    assert order[0] == 1          # rank 1 and 2
-    assert order[1] == 3          # rank 3 and 1
+    assert order[0] == 1          # 1위와 2위
+    assert order[1] == 3          # 3위와 1위
     assert set(order) == {1, 2, 3, 4}
 
 
-# --- index ------------------------------------------------------------------------------------
+# --- 색인 ------------------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def index(tmp_path):
 
 
 def test_exact_exam_term_document_is_in_top_k(index):
-    """TASK T6-a: a document with the exact exam term must come back in the top k."""
+    """TASK T6-a: 시험 용어가 그대로 들어 있는 문서는 상위 k 안에 돌아와야 한다."""
     index.add([chunk("Set tool_choice to {\"type\": \"tool\", \"name\": \"extract\"} to force one tool call.",
                      h="target")])
     hits = index.search("How do I force a specific tool with tool_choice?", k=3)
@@ -97,8 +97,8 @@ def test_korean_query_finds_korean_chunk(index):
 def test_task_filter_ranks_tagged_first_then_backfills(index):
     index.add([chunk("Write tool descriptions that state inputs, outputs and boundaries.", tags=["2.1"], h="t")])
     hits = index.search("prompt caching cost", k=3, task_id="2.1")
-    assert hits[0].tagged and "2.1" in hits[0].task_ids   # tagged chunk first even if the query matches less
-    assert len(hits) == 3 and not any(h.tagged for h in hits[1:])  # rest backfilled from the full ranking
+    assert hits[0].tagged and "2.1" in hits[0].task_ids   # 쿼리가 덜 맞아도 태깅된 chunk가 먼저
+    assert len(hits) == 3 and not any(h.tagged for h in hits[1:])  # 나머지는 전체 순위에서 채운다
     assert "caching" in hits[1].text
 
 
@@ -126,7 +126,7 @@ def test_index_built_with_other_embedder_is_refused(index, tmp_path):
         ChunkIndex("ccar-f", Other(), root=tmp_path)
 
 
-# --- context provider for the generator -------------------------------------------------------
+# --- 생성기용 맥락 제공자 -------------------------------------------------------
 
 
 def test_retrieval_context_returns_statement_plus_chunks(index):
@@ -135,8 +135,8 @@ def test_retrieval_context_returns_statement_plus_chunks(index):
     ctx = RetrievalContext(index, k=2)
     chunks = ctx(PACK, "2.1")
     assert ctx.grounding == "retrieved"
-    assert "2.1" in chunks[0].text                      # the task statement comes first
-    assert chunks[1].source == "https://example.com/d2"  # then the tagged chunk
+    assert "2.1" in chunks[0].text                      # 세부 항목 문장이 먼저 온다
+    assert chunks[1].source == "https://example.com/d2"  # 그다음 태깅된 chunk
     assert len(chunks) == 3
 
 
@@ -153,7 +153,7 @@ def test_reference_block_escapes_source_attribute():
 
 
 def test_near_duplicate_chunks_from_other_courses_are_skipped(index):
-    """D46: the same lesson paragraph copied in three courses fills one slot, not three."""
+    """D46: 세 강좌에 복사된 같은 강의 문단은 슬롯 세 개가 아니라 하나를 채운다."""
     base = "Use tool_choice any to force the model to call one of the provided tools in this request."
     index.add([chunk(base, h="api", source="api/lesson"),
                chunk(base + " See the Bedrock console.", h="bedrock", source="bedrock/lesson"),
@@ -161,7 +161,7 @@ def test_near_duplicate_chunks_from_other_courses_are_skipped(index):
     hits = index.search("tool_choice any force tool", k=3)
     sources = [h.source for h in hits]
     assert sum(s.endswith("/lesson") for s in sources) == 1
-    assert len(hits) == 3                                   # the other slots go to different material
+    assert len(hits) == 3                                   # 나머지 슬롯은 다른 자료로 간다
 
 
 def test_remove_keeps_other_vectors(index):
@@ -169,7 +169,7 @@ def test_remove_keeps_other_vectors(index):
     n = len(index)
     assert index.remove(lambda c: c.source == "drop/me") == 1
     assert len(index) == n - 1 and all(c.source != "drop/me" for c in index.chunks)
-    assert "caching" in index.search("prompt caching cost", k=1)[0].text     # remaining vectors still line up
+    assert "caching" in index.search("prompt caching cost", k=1)[0].text     # 남은 벡터가 여전히 맞게 정렬된다
 
 
 def test_max_tagged_leaves_room_for_untagged_and_where_filters(index):
@@ -178,7 +178,7 @@ def test_max_tagged_leaves_room_for_untagged_and_where_filters(index):
     index.add([chunk("Subagent coordinator lesson with task tools and allowed tools.", h="L",
                      source="https://anthropic-partners.skilljar.com/claude-code-in-action/1")])
     hits = index.search("subagent coordinator task tools", k=4, task_id="1.3")
-    assert all(h.source == "guide.pdf" for h in hits)                     # default: tagged fill every slot
+    assert all(h.source == "guide.pdf" for h in hits)                     # 기본: 태깅된 것이 모든 슬롯을 채운다
     hits = index.search("subagent coordinator task tools", k=4, task_id="1.3", max_tagged=2)
     assert sum(h.tagged for h in hits) == 2 and any("skilljar" in h.source for h in hits)
     hits = index.search("subagent coordinator task tools", k=4, where=lambda c: "skilljar" in c.source)
@@ -186,8 +186,8 @@ def test_max_tagged_leaves_room_for_untagged_and_where_filters(index):
 
 
 def test_query_coverage_weights_bm25_by_what_it_can_see(index):
-    """D51: an English query is fully visible to BM25 (fusion unchanged); Korean words absent from the corpus
-    lower its weight; a common word ('the') counts for nothing, a rare one ('caching') for a lot."""
+    """D51: 영어 쿼리는 BM25에 온전히 보인다(융합은 그대로). 코퍼스에 없는 한국어 단어는 가중치를 낮춘다.
+    흔한 단어('the')는 아무 의미가 없고, 드문 단어('caching')는 큰 의미가 있다."""
     assert index.query_coverage("prompt caching reduces cost") == 1.0
     assert index.query_coverage("권한 모드 질문") == 0.0
     assert index.query_coverage("the 권한 모드") == 0.0

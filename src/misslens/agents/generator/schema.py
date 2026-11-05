@@ -1,7 +1,7 @@
-"""Question schema and validator (ARCHITECTURE §7, CLAUDE.md rule 2).
+"""문제 스키마와 validator(ARCHITECTURE §7, CLAUDE.md 규칙 2).
 
-The model fills `QuestionDraft`; code adds task_id / domain / scenario_id and runs `validate_question`.
-A draft that fails validation counts as one generation failure and is never shown or stored.
+모델이 `QuestionDraft`를 채우면 코드가 task_id / domain / scenario_id를 더하고 `validate_question`을 실행한다.
+검증에 실패한 초안은 생성 실패 1회로 세고, 보여 주지도 저장하지도 않는다.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ class Option(BaseModel):
 class QuestionDraft(BaseModel):
     """What the generator model returns."""
 
-    # Field order is generation order: key_constraints right after stem_en, BEFORE the options, so the model picks
-    # phrases from the stem it just wrote and then builds each wrong option around one of them (D40). With options
-    # first, it invented `violates` reasons (often from the reference material) that were not in the stem.
+    # 필드 순서가 곧 생성 순서다. key_constraints를 stem_en 바로 뒤, options보다 앞에 두어 모델이 방금 쓴
+    # 지문에서 문구를 고른 뒤 각 오답 보기를 그중 하나에 맞춰 만들게 한다(D40). options를 먼저 두었을 때는
+    # 지문에 없는 `violates` 이유를 (주로 참고 자료에서) 지어냈다.
     stem_en: str = Field(min_length=1, description="Scenario and question in English")
     key_constraints: list[str] = Field(
         description="2-4 short phrases (3-12 words) copied character for character from stem_en above. Not from "
@@ -42,7 +42,7 @@ class QuestionDraft(BaseModel):
     @field_validator("key_constraints", "options", mode="before")
     @classmethod
     def _json_string_list(cls, v):
-        """Tool calling sometimes sends a list field as a JSON string ('["a", "b"]'); unwrap it (seen live)."""
+        """tool calling이 가끔 list 필드를 JSON 문자열('["a", "b"]')로 보낸다. 풀어서 쓴다(실호출에서 확인)."""
         if isinstance(v, str) and v.lstrip().startswith("["):
             try:
                 return json.loads(v)
@@ -55,20 +55,20 @@ class QuestionDraft(BaseModel):
 
 
 class Question(QuestionDraft):
-    """Validated question stored as questions.payload_json."""
+    """검증을 통과해 questions.payload_json으로 저장되는 문제."""
 
     task_id: str
     domain: str
     scenario_id: str | None = None
-    grounding: str = "retrieved"  # or "task_statement_only" until Phase 3 retrieval exists
+    grounding: str = "retrieved"  # Phase 3 검색이 생기기 전에는 "task_statement_only"
 
 
 class QuestionInvalid(ValueError):
     pass
 
 
-# Curly quotes become straight and code backticks disappear before comparing: the model often writes
-# `stop_reason` is "tool_use" in the stem and stop_reason is "tool_use" in key_constraints (seen live, 2026-11-05).
+# 비교하기 전에 둥근 따옴표는 곧은 따옴표로 바꾸고 코드 백틱은 지운다. 모델은 지문에는 `stop_reason` is "tool_use",
+# key_constraints에는 stop_reason is "tool_use"처럼 자주 쓴다(실호출에서 확인, 2026-11-05).
 _QUOTES = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "`": None})
 
 
@@ -111,7 +111,7 @@ def validate_question(draft: QuestionDraft, *, task_id: str, domain: str, scenar
     errs = validation_errors(draft)
     if errs:
         raise QuestionInvalid("; ".join(errs))
-    # Store violates exactly as the matching key_constraint (case/whitespace may differ in the draft).
+    # violates는 일치하는 key_constraint와 똑같이 저장한다(초안에서는 대소문자·공백이 다를 수 있다).
     by_norm = {_norm(k): k.strip() for k in draft.key_constraints}
     options = [o.model_copy(update={"violates": None if o.violates is None else by_norm[_norm(o.violates)]})
                for o in draft.options]
@@ -121,7 +121,7 @@ def validate_question(draft: QuestionDraft, *, task_id: str, domain: str, scenar
 
 
 def shuffle_options(q: Question, rng: random.Random) -> Question:
-    """Models tend to put the answer first; reorder options so its position is uniform."""
+    """모델은 정답을 맨 앞에 두는 경향이 있다. 정답 위치가 고르게 되도록 보기 순서를 섞는다."""
     order = list(range(len(q.options)))
     rng.shuffle(order)
     return q.model_copy(update={"options": [q.options[i] for i in order],

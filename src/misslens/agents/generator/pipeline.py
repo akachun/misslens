@@ -1,12 +1,12 @@
-"""Question generation pipeline (ARCHITECTURE §4.1, §7; CLAUDE.md rule 2).
+"""문제 생성 파이프라인(ARCHITECTURE §4.1, §7; CLAUDE.md 규칙 2).
 
-Per task: draft (generator model) -> validator -> grounding check (verifier model).
-  - 1 initial try + 2 regenerations; the failure reason is fed back into the next try.
-  - 3 failures -> generation_failures row, task excluded for this session, move to the next task.
-  - 2 tasks in a row failing -> stop the set.
-Only questions that pass both checks are stored (ledger.add_question) or shown.
-QuestionStream runs this in one background thread (sequential calls, D13) and hands questions over
-through a queue so the learner can start on the first one while the rest are generated.
+세부 항목마다: 초안(generator 모델) -> validator -> 근거 검증(verifier 모델).
+  - 최초 1회 + 재생성 2회. 실패 이유는 다음 시도에 피드백으로 넣는다.
+  - 3회 실패 -> generation_failures 행을 남기고, 이번 세션에서 그 세부 항목을 빼고, 다음 세부 항목으로 간다.
+  - 세부 항목 2개가 연속으로 실패 -> 세트를 멈춘다.
+두 검사를 모두 통과한 문제만 저장(ledger.add_question)하거나 보여 준다.
+QuestionStream은 이 과정을 백그라운드 스레드 하나에서 실행하고(순차 호출, D13) 문제를 queue로 넘긴다.
+그래서 학습자는 나머지가 생성되는 동안 첫 문제부터 풀 수 있다.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from misslens.llm import LLMCallError, get_llm
 
 logger = logging.getLogger(__name__)
 
-MAX_TRIES = 3                  # initial + 2 regenerations
+MAX_TRIES = 3                  # 최초 1회 + 재생성 2회
 MAX_CONSECUTIVE_TASK_FAILURES = 2
 
 
@@ -71,15 +71,15 @@ class Event:
 
 
 class Generator:
-    """One instance per learning session: `failed_tasks` is the session's exclusion list (§7 step 3)."""
+    """학습 세션마다 인스턴스 하나. `failed_tasks`는 그 세션의 제외 목록이다(§7 3단계)."""
 
     def __init__(self, pack: ExamPack, ledger: Ledger, *, gen_llm: Any = None, verify_llm: Any = None,
                  context: ContextProvider | None = None,
                  samples: list[str] | Callable[[str], list[str]] | None = None,
                  copy_guard: Callable[[str, str], str | None] | None = None,
                  rng: random.Random | None = None):
-        """samples: fixed style examples, or task_id -> examples (practice bank, D39).
-        copy_guard: (task_id, stem_en) -> rejection reason when the draft reuses a known practice question."""
+        """samples: 고정 문체 예시, 또는 task_id -> 예시(연습 문제 은행, D39).
+        copy_guard: (task_id, stem_en) -> 초안이 알려진 연습 문제를 재사용하면 거절 이유."""
         self.pack = pack
         self.ledger = ledger
         self.gen_llm = gen_llm if gen_llm is not None else get_llm("generator")
@@ -92,10 +92,10 @@ class Generator:
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
-        """Stop after the current call (Ctrl-C in the CLI); no further ledger writes."""
+        """현재 호출이 끝나면 멈춘다(CLI의 Ctrl-C). 이후 ledger에는 더 쓰지 않는다."""
         self._cancel.set()
 
-    # --- one task -------------------------------------------------------------------------
+    # --- 세부 항목 하나 -------------------------------------------------------------------
 
     def generate_for_task(self, task_id: str) -> TaskResult:
         domain = self.pack.domain_of(task_id)
@@ -110,7 +110,7 @@ class Generator:
             try:
                 draft = self.gen_llm.with_structured_output(QuestionDraft).invoke(generation_messages(
                     self.pack, task_id, chunks, scenario=scenario, samples=samples, feedback=feedback))
-                if draft is None:  # tool calling: the model answered without calling the tool
+                if draft is None:  # tool calling: 모델이 도구를 호출하지 않고 답했다
                     raise QuestionInvalid("model returned no structured output")
                 if isinstance(draft, dict):
                     draft = QuestionDraft.model_validate(draft)
@@ -148,17 +148,17 @@ class Generator:
             logger.warning("verifier failed: %s", exc)
             return None
 
-    # --- one set --------------------------------------------------------------------------
+    # --- 세트 하나 -------------------------------------------------------------------------
 
     def run_set(self, set_id: int, n: int, emit, plan: dict[str, int] | None = None) -> None:
-        """Fill set `set_id` with up to n verified questions, calling emit(Event) as they become ready.
+        """세트 `set_id`를 검증된 문제 최대 n개로 채우고, 문제가 준비될 때마다 emit(Event)를 호출한다.
 
-        `seq` numbers every slot (ready or failed) so it stays unique; only ready questions count toward n.
-        `plan` (domain id -> count, from the approved Planner plan, §4.3) caps how many ready questions each
-        domain gets; the task order inside a domain still follows select_tasks (coverage first, then weakness).
+        `seq`는 모든 칸(ready든 failed든)에 번호를 매겨 고유하게 유지한다. n에는 ready 문제만 센다.
+        `plan`(영역 id -> 문제 수, 승인된 Planner 계획에서 옴, §4.3)은 영역별 ready 문제 수의 상한이다.
+        영역 안의 세부 항목 순서는 그대로 select_tasks를 따른다(범위 먼저, 그다음 약점).
         """
-        # Resume-safe (D52): a set that already has questions (generation stopped by a restart) continues after
-        # them: seq goes on, ready ones count toward n and the plan quotas, their tasks are not asked again.
+        # 재개 안전(D52): 이미 문제가 있는 세트(재시작으로 생성이 멈춘 경우)는 그 뒤에서 이어 간다. seq는 이어지고,
+        # ready 문제는 n과 계획 할당량에 포함되며, 그 세부 항목은 다시 출제하지 않는다.
         existing = self.ledger.set_questions(set_id)
         seq = max((q["seq"] for q in existing), default=-1) + 1
         ready = sum(1 for q in existing if q["status"] == "ready")
@@ -181,7 +181,7 @@ class Generator:
                 return
             try:
                 res = self.generate_for_task(task_id)
-            except Exception as exc:  # noqa: BLE001 - never leave the learner waiting forever (§4.1)
+            except Exception as exc:  # noqa: BLE001 - 학습자를 끝없이 기다리게 두지 않는다(§4.1)
                 if self._cancel.is_set():
                     emit(Event("stopped", message="생성을 취소했습니다."))
                     return
@@ -217,7 +217,7 @@ class Generator:
 
 
 class QuestionStream:
-    """Background generation; the consumer pulls Events in order with next()."""
+    """백그라운드 생성. 소비자는 next()로 Event를 순서대로 꺼낸다."""
 
     def __init__(self, generator: Generator, set_id: int, n: int, plan: dict[str, int] | None = None):
         self._q: queue.Queue[Event] = queue.Queue()
@@ -240,7 +240,7 @@ class QuestionStream:
         return self._q.get(timeout=timeout)
 
     def poll(self) -> list[Event]:
-        """Events available now, without waiting (UI reruns call this; it never blocks the page)."""
+        """기다리지 않고 지금 받을 수 있는 Event(UI rerun이 호출한다. 페이지를 막지 않는다)."""
         out: list[Event] = []
         while True:
             try:

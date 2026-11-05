@@ -1,8 +1,8 @@
-"""Re-ask form for review (ARCHITECTURE §4.2, D14).
+"""리뷰용 재질문 양식(ARCHITECTURE §4.2, D14).
 
-Form = every miss + decoys (about 30% of correct answers, at least 2, fewer if not enough), in random
-order, shown in the learner's language with options shuffled. Nothing tells the learner which items
-were misses. Answers are mapped back to the original option order before the ledger judges them (D28).
+양식 = 모든 오답 + decoy(정답의 약 30%, 최소 2개, 정답이 모자라면 그보다 적게)를 무작위 순서로 두고,
+학습자의 언어로 보기를 섞어 보여 준다. 어느 문항이 오답이었는지는 학습자에게 알려 주지 않는다.
+답은 ledger가 판정하기 전에 원래 보기 순서로 되돌린다(D28).
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ class ReaskItem:
     attempt_id: int
     is_decoy: bool
     stem: str
-    options: list[str]   # displayed order
-    order: list[int]     # order[display_index] = original option index
+    options: list[str]   # 화면에 보이는 순서
+    order: list[int]     # order[display_index] = 원래 보기 index
 
 
 def decoy_count(n_correct: int, ratio: float = DECOY_RATIO, minimum: int = MIN_DECOYS) -> int:
@@ -31,7 +31,7 @@ def decoy_count(n_correct: int, ratio: float = DECOY_RATIO, minimum: int = MIN_D
 
 def build_reask_form(questions: list[dict], attempts: list[dict], *, rng: random.Random | None = None,
                      ratio: float = DECOY_RATIO, minimum: int = MIN_DECOYS) -> list[ReaskItem]:
-    """questions / attempts as returned by Ledger.set_questions / Ledger.set_attempts."""
+    """questions / attempts는 Ledger.set_questions / Ledger.set_attempts가 돌려준 그대로다."""
     rng = rng or random.Random()
     payload = {q["id"]: q["payload"] for q in questions if q["payload"] is not None}
     valid = [a for a in attempts if not a["invalid"]]
@@ -51,7 +51,7 @@ def build_reask_form(questions: list[dict], attempts: list[dict], *, rng: random
 
 
 def to_reask_answers(items: list[ReaskItem], responses: list[tuple[int | None, bool | None]]) -> list[ReaskAnswer]:
-    """responses[i] = (displayed choice index or None, confident) for items[i]."""
+    """responses[i] = items[i]에 대한 (화면상 선택 index 또는 None, confident)."""
     if len(items) != len(responses):
         raise ValueError("one response per re-ask item is required")
     out = []

@@ -1,8 +1,8 @@
-"""Real Bedrock: one question through the full pipeline (Sonnet draft + validator + Haiku check). Uses quota.
+"""실제 Bedrock: 문제 하나를 전체 파이프라인(Sonnet 초안 + validator + Haiku 검사)으로 만든다. 할당량을 쓴다.
 
-The grounding check needs real reference material: with the task statement alone, the verifier cannot tell
-real flags from invented ones (it rejected both `-p` and a made-up flag on 2026-11-04). So this test gives a
-small docs excerpt, the way Phase 3 retrieval will.
+근거 검증에는 실제 참고 자료가 필요하다. 세부 항목 문장만으로는 검증기가 진짜 플래그와 지어낸 플래그를
+구별하지 못한다(2026-11-04에 `-p`와 지어낸 플래그를 모두 거부했다). 그래서 이 테스트는 Phase 3 검색이 할 것처럼
+짧은 문서 발췌를 준다.
 """
 
 import random
@@ -42,5 +42,5 @@ def test_generate_one_real_question():
     q = res.question
     print(q.model_dump_json(indent=2))
     assert validation_errors(q) == []
-    assert any("가" <= ch <= "힣" for ch in q.stem_native)   # Korean translation present
+    assert any("가" <= ch <= "힣" for ch in q.stem_native)   # 한국어 번역이 있다
     ledger.close()

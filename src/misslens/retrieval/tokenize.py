@@ -1,9 +1,9 @@
-"""BM25 tokenizer that handles exam English terms and Korean (ARCHITECTURE §8).
+"""시험 영어 용어와 한국어를 함께 다루는 BM25 tokenizer(ARCHITECTURE §8).
 
-Whitespace splitting fails on Korean (particles stick to nouns: "도구를", "도구가"), so Hangul runs become
-character bigrams. Latin tokens keep inner "_", "-", "." and "/" so exam terms such as tool_choice,
---allowedTools, CLAUDE.md and .claude/settings.json stay one token; their parts are added too, so a query for
-"settings" still matches ".claude/settings.json".
+한국어는 조사가 명사에 붙어서("도구를", "도구가") 공백 분리가 통하지 않으므로, 연속된 한글은 글자 bigram으로
+나눈다. 라틴 문자 토큰은 안쪽의 "_", "-", ".", "/"를 유지해 tool_choice, --allowedTools, CLAUDE.md,
+.claude/settings.json 같은 시험 용어가 한 토큰으로 남는다. 그 부분들도 함께 추가하므로 "settings"로 검색해도
+".claude/settings.json"에 걸린다.
 """
 
 from __future__ import annotations

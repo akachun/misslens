@@ -1,7 +1,7 @@
-"""Tag chunks with exam task statements (Haiku 4.5, batched, 'unassigned' allowed; ARCHITECTURE §3).
+"""chunk에 시험 세부 항목(task statement) 태그를 붙인다(Haiku 4.5, 배치 단위, 'unassigned' 허용; ARCHITECTURE §3).
 
-Task IDs come from the exam pack (CLAUDE.md rule 6). IDs the model invents are dropped. A failed call does
-not fail the ingest: that batch stays unassigned and is still searchable (retrieval backfills untagged chunks).
+세부 항목 ID는 시험 팩에서 가져온다(CLAUDE.md 규칙 6). 모델이 지어낸 ID는 버린다. 호출이 실패해도 ingest는
+실패하지 않는다. 그 배치는 unassigned로 남고 여전히 검색된다(검색이 태그 없는 chunk로 빈자리를 채운다).
 """
 
 from __future__ import annotations

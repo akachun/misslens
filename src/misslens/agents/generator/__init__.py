@@ -1,4 +1,4 @@
-"""Generator: task selection -> bilingual question -> validator -> grounding check (§4.1, §7)."""
+"""Generator: 세부 항목 선택 -> 이중 언어 문제 -> validator -> 근거 검증(§4.1, §7)."""
 
 from misslens.agents.generator.context import Chunk, ContextProvider, TaskStatementContext
 from misslens.agents.generator.pipeline import Event, Generator, QuestionStream, TaskResult, Verdict

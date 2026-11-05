@@ -1,15 +1,15 @@
-"""Per-exam hybrid index: FAISS (dense, bge-m3) + BM25 (keywords), fused with RRF (ARCHITECTURE §8, D17, D36).
+"""시험별 하이브리드 색인: FAISS(dense, bge-m3) + BM25(키워드)를 RRF로 합친다(ARCHITECTURE §8, D17, D36).
 
-Files under data/index/<exam_id>/:
-  chunks.jsonl  one record per chunk: text, source, task_ids (empty = unassigned), content_hash of its document
-  faiss.index   inner-product index over L2-normalized vectors (= cosine), same row order as chunks.jsonl
-  meta.json     embedder name and dimension (an index built with another embedder is refused)
-BM25 is rebuilt in memory on load and after each add.
+data/index/<exam_id>/ 아래 파일:
+  chunks.jsonl  chunk당 레코드 하나: text, source, task_ids(비어 있으면 미배정), 원본 문서의 content_hash
+  faiss.index   L2 정규화 벡터에 대한 내적 색인(= cosine), 행 순서는 chunks.jsonl과 같다
+  meta.json     embedder 이름과 차원(다른 embedder로 만든 색인은 거부한다)
+BM25는 불러올 때와 add할 때마다 메모리에서 다시 만든다.
 
-Search with a task_id: chunks tagged with that task are ranked first; if they are fewer than k, the rest is
-filled from the unfiltered ranking, so a wrong or missing tag does not leave the generator without material.
-Near-duplicates are dropped while filling the k slots (D46): the Bedrock and Google Cloud courses repeat the Claude
-API course almost word for word, and three copies of one paragraph would crowd out other evidence.
+task_id로 검색하면: 그 세부 항목 태그가 붙은 chunk를 먼저 올린다. k개보다 적으면 나머지는 필터 없는 순위에서
+채운다. 그래서 태그가 틀리거나 빠져도 생성기가 자료 없이 남지 않는다.
+k개를 채우는 동안 거의 같은 chunk는 버린다(D46): Bedrock과 Google Cloud 강좌가 Claude API 강좌를 거의
+그대로 반복해서, 한 문단의 사본 세 개가 다른 근거를 밀어낼 수 있기 때문이다.
 """
 
 from __future__ import annotations
@@ -28,11 +28,11 @@ from misslens.retrieval.embed import Embedder
 from misslens.retrieval.tokenize import tokenize
 
 INDEX_ROOT = PROJECT_ROOT / "data" / "index"
-RRF_C = 60                 # same constant as LangChain EnsembleRetriever
+RRF_C = 60                 # LangChain EnsembleRetriever와 같은 상수
 DENSE_WEIGHT = 0.5
 SPARSE_WEIGHT = 0.5
-CANDIDATES = 50            # per retriever, before fusion
-DEDUPE_JACCARD = 0.8       # a hit this close (token Jaccard) to an earlier hit is skipped (D46)
+CANDIDATES = 50            # 합치기 전, retriever마다의 후보 수
+DEDUPE_JACCARD = 0.8       # 앞선 결과와 이만큼 가까운(토큰 Jaccard) 결과는 건너뛴다(D46)
 
 
 @dataclass
@@ -50,11 +50,11 @@ class Hit:
     source: str
     task_ids: tuple[str, ...]
     score: float
-    tagged: bool  # True if it came from the task_id-filtered ranking
+    tagged: bool  # task_id로 필터한 순위에서 왔으면 True
 
 
 def rrf(rankings: list[list[int]], weights: list[float], c: int = RRF_C) -> list[tuple[int, float]]:
-    """Weighted reciprocal rank fusion. Returns (id, score) sorted by score, ties by first appearance."""
+    """가중 reciprocal rank fusion. (id, score)를 점수순으로 돌려주며, 동점이면 먼저 나온 순서를 따른다."""
     scores: dict[int, float] = {}
     for ranking, w in zip(rankings, weights):
         for rank, doc in enumerate(ranking, start=1):
@@ -73,7 +73,7 @@ class ChunkIndex:
         self._lock = threading.Lock()
         self._load()
 
-    # --- persistence -----------------------------------------------------------------------
+    # --- 저장 ---------------------------------------------------------------------------------
 
     def _load(self) -> None:
         meta_path = self.dir / "meta.json"
@@ -104,7 +104,7 @@ class ChunkIndex:
                 {"exam_id": self.exam_id, "embedder": self.embedder.name, "dim": self.embedder.dim,
                  "chunks": len(self.chunks)}, indent=2), encoding="utf-8")
 
-    # --- writes ----------------------------------------------------------------------------
+    # --- 쓰기 -------------------------------------------------------------------------------
 
     def has_content(self, content_hash: str) -> bool:
         return any(c.content_hash == content_hash for c in self.chunks)
@@ -121,8 +121,8 @@ class ChunkIndex:
             self._rebuild_bm25()
 
     def remove(self, predicate) -> int:
-        """Drop chunks for which predicate(chunk) is true; vectors are kept for the rest (no re-embedding).
-        Call save() afterwards. Returns how many were removed."""
+        """predicate(chunk)가 참인 chunk를 버린다. 나머지의 벡터는 그대로 둔다(다시 임베딩하지 않음).
+        이후 save()를 호출한다. 지운 개수를 돌려준다."""
         with self._lock:
             keep = [i for i, c in enumerate(self.chunks) if not predicate(c)]
             removed = len(self.chunks) - len(keep)
@@ -139,7 +139,7 @@ class ChunkIndex:
     def _rebuild_bm25(self) -> None:
         self._bm25 = BM25Okapi([tokenize(c.text) or ["_"] for c in self.chunks]) if self.chunks else None
 
-    # --- reads -----------------------------------------------------------------------------
+    # --- 읽기 -------------------------------------------------------------------------------
 
     def __len__(self) -> int:
         return len(self.chunks)
@@ -152,13 +152,13 @@ class ChunkIndex:
         return counts
 
     def query_coverage(self, query: str) -> float:
-        """How much of the query's information BM25 can see (D51): idf of the tokens found in the corpus over the
-        idf of all tokens, an unseen token counting as the rarest one.
+        """질의의 정보 중 BM25가 볼 수 있는 몫(D51): 코퍼스에 있는 토큰의 idf를 전체 토큰의 idf로 나눈 값이다.
+        코퍼스에 없는 토큰은 가장 드문 토큰으로 친다.
 
-        BM25 scores only the tokens it knows, so its ranking is trusted in proportion. An English query over the
-        English corpus is 1.0 (unchanged 0.5/0.5 fusion). "Claude Code 권한 모드는 어떤 것들이 있나요" is 0.04: BM25
-        sees only the common words "claude code", which no longer outvote the dense ranking that understood the
-        Korean. A rare English term inside a Korean question keeps some weight ("extended thinking은 …" 0.18)."""
+        BM25는 아는 토큰만 점수를 매기므로, 그 순위도 이 비율만큼만 믿는다. 영어 코퍼스에 영어 질의를 하면
+        1.0이다(0.5/0.5 융합 그대로). "Claude Code 권한 모드는 어떤 것들이 있나요"는 0.04다: BM25는 흔한 단어
+        "claude code"만 보므로, 한국어를 이해한 dense 순위를 더 이상 이기지 못한다. 한국어 질문 안의 드문 영어
+        용어는 어느 정도 가중치를 유지한다("extended thinking은 …" 0.18)."""
         toks = set(tokenize(query))
         if not toks or self._bm25 is None:
             return 0.0
@@ -183,13 +183,13 @@ class ChunkIndex:
 
     def search(self, query: str, k: int = 6, task_id: str | None = None, *, max_tagged: int | None = None,
                where=None) -> list[Hit]:
-        """max_tagged caps how many task-tagged chunks go first (the rest by overall relevance, D49);
-        where(chunk) -> bool restricts the corpus (e.g. one course's lessons)."""
+        """max_tagged는 세부 항목 태그가 붙은 chunk를 앞에 몇 개까지 둘지 정한다(나머지는 전체 관련도순, D49).
+        where(chunk) -> bool은 코퍼스를 제한한다(예: 한 강좌의 레슨만)."""
         with self._lock:
             if not self.chunks:
                 return []
             n = min(len(self.chunks), max(CANDIDATES, k))
-            # Rank the whole corpus when filtering, so matching chunks are never cut off early.
+            # 필터할 때는 코퍼스 전체에 순위를 매겨, 조건에 맞는 chunk가 일찍 잘리지 않게 한다.
             if task_id is not None or where is not None:
                 n = len(self.chunks)
             fused = rrf([self._dense(query, n), self._sparse(query, n)],

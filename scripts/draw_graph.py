@@ -1,10 +1,10 @@
-"""Draw the LangGraph graphs as Mermaid, from the compiled graphs themselves.
+"""컴파일된 LangGraph 그래프 자체에서 Mermaid 그림을 그린다.
 
-    python scripts/draw_graph.py            # writes docs/graphs/{supervisor,planner,collector,coach}.mmd
-    python scripts/draw_graph.py --print    # prints the supervisor graph (old behaviour)
+    python scripts/draw_graph.py            # docs/graphs/{supervisor,planner,collector,coach}.mmd를 쓴다
+    python scripts/draw_graph.py --print    # supervisor 그래프를 출력한다(이전 동작)
 
-Uses an in-memory ledger, a dummy fetcher and a dummy model: no model calls, no data/ files touched.
-tests/test_supervisor.py fails when a committed diagram no longer matches the code.
+메모리 ledger, 더미 fetcher, 더미 모델을 쓴다: 모델 호출도 없고 data/ 파일도 건드리지 않는다.
+커밋된 그림이 코드와 더 이상 맞지 않으면 tests/test_supervisor.py가 실패한다.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ GRAPHS = ("supervisor", "planner", "collector", "coach")
 
 
 class _NoFetch:
-    def fetch(self, url):  # pragma: no cover - never called while drawing
+    def fetch(self, url):  # pragma: no cover - 그림을 그릴 때는 호출되지 않는다
         raise RuntimeError("drawing only")
 
     def close(self):
@@ -41,9 +41,9 @@ class _NoModel:
 
 
 def _clean(text: str) -> str:
-    # Subgraph node ids come out as "planner\3adraft" (CSS-escaped ':'); GitHub's renderer chokes on them.
+    # 서브그래프 노드 id는 "planner\3adraft"(':'를 CSS 이스케이프한 형태)로 나오는데, GitHub 렌더러가 이를 처리하지 못한다.
     text = text.replace("\\3a", "__")
-    # Mark the two interrupt nodes (CLAUDE.md rule 4) so they stand out.
+    # 두 interrupt 노드(CLAUDE.md 규칙 4)를 눈에 띄게 표시한다.
     text = re.sub(r"(\b(?:\w+__)?approve)\(approve\)", r"\1(approve ⏸ interrupt①)", text)
     return re.sub(r"(\b(?:\w+__)?wait_login)\(wait_login\)", r"\1(wait_login ⏸ interrupt②)", text)
 
@@ -65,7 +65,7 @@ def diagrams(exam_id: str = "ccar-f") -> dict[str, str]:
 
 
 def mermaid(exam_id: str = "ccar-f") -> str:
-    """The supervisor graph (kept for older callers)."""
+    """supervisor 그래프(예전 호출 코드를 위해 남겨 둔다)."""
     return diagrams(exam_id)["supervisor"]
 
 

@@ -1,4 +1,4 @@
-"""Real Bedrock (Sonnet explainer): the coach really calls tools through Converse toolUse/toolResult. Uses quota."""
+"""실제 Bedrock(Sonnet explainer): 코치가 Converse toolUse/toolResult로 실제로 도구를 호출한다. 할당량을 쓴다."""
 
 import pytest
 

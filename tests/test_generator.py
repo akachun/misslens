@@ -79,7 +79,7 @@ def test_shuffle_keeps_answer_and_violates_aligned():
     assert len(positions) > 1
 
 
-# --- task selection (D11) ---------------------------------------------------------------------
+# --- 세부 항목 선택(D11) ---------------------------------------------------------------------
 
 def test_never_asked_first_by_domain_weight(ledger):
     order = select_tasks(PACK, ledger, rng=random.Random(1))
@@ -89,7 +89,7 @@ def test_never_asked_first_by_domain_weight(ledger):
 
 
 def test_weak_tasks_are_picked_more_after_full_coverage(ledger):
-    # Everything asked once; task 2.1 always wrong, everything else always right.
+    # 모두 한 번씩 출제했다. 2.1은 항상 오답, 나머지는 항상 정답.
     for t in PACK.task_ids:
         sid = ledger.create_set(PACK.exam_id, 1)
         payload = {"options": [{}] * 4, "answer_index": 0}
@@ -98,7 +98,7 @@ def test_weak_tasks_are_picked_more_after_full_coverage(ledger):
         ledger.submit_set(sid, [Answer(qid, 1 if t == "2.1" else 0, 1)])
     firsts = [select_tasks(PACK, ledger, rng=random.Random(s))[0] for s in range(300)]
     share = firsts.count("2.1") / len(firsts)
-    assert share > 1.5 / len(PACK.task_ids)        # clearly above uniform
+    assert share > 1.5 / len(PACK.task_ids)        # 균등 분포보다 확실히 높다
 
 
 def test_session_failures_excluded(ledger):
@@ -106,7 +106,7 @@ def test_session_failures_excluded(ledger):
     assert "1.1" not in order and "1.2" not in order
 
 
-# --- generation pipeline (§4.1) ---------------------------------------------------------------
+# --- 생성 파이프라인(§4.1) ---------------------------------------------------------------
 
 def test_first_try_passes_and_is_grounded_check_called(ledger):
     g = make_gen(ledger, [draft(1)], [PASS])
@@ -150,7 +150,7 @@ def test_prompt_uses_pack_not_hardcoded_text(ledger):
 
 
 def test_run_set_stores_only_verified_questions(ledger):
-    # task A: passes; task B: fails 3x -> recorded + skipped; task C: passes.
+    # A: 통과, B: 3번 실패 -> 기록하고 건너뜀, C: 통과.
     g = make_gen(ledger, [draft(0), draft(0), draft(0), draft(0), draft(0)], [PASS, FAIL, FAIL, FAIL, PASS])
     sid = ledger.create_set(PACK.exam_id, 2)
     events = []
@@ -188,14 +188,14 @@ def test_crash_is_recorded_as_failed_slot(ledger, monkeypatch):
     sid = ledger.create_set(PACK.exam_id, 2)
     events = []
     g.run_set(sid, 2, events.append)
-    # A crashed slot does not use up the set: 2 ready questions still follow (seq stays unique).
+    # 슬롯 하나가 죽어도 세트를 다 쓰지 않는다: ready 문제 2개가 여전히 뒤따른다(seq는 고유하게 유지).
     assert [e.kind for e in events] == ["failed", "ready", "ready", "done"]
     assert [(q["seq"], q["status"]) for q in ledger.set_questions(sid)] == [(0, "failed"), (1, "ready"), (2, "ready")]
     assert len(g.failed_tasks) == 1
 
 
 def test_no_structured_output_counts_as_a_retry(ledger):
-    calls = {"n": 0}                        # across tries: with_structured_output is called per try
+    calls = {"n": 0}                        # 시도에 걸쳐: with_structured_output은 시도마다 호출된다
 
     class NoneThenDraft(FakeRoleLLM):
         def with_structured_output(self, schema, **kw):
@@ -206,7 +206,7 @@ def test_no_structured_output_counts_as_a_retry(ledger):
                     calls["n"] += 1
                     if calls["n"] == 1:
                         self.prompts.append(prompt)
-                        return None          # tool calling without a tool call
+                        return None          # tool call 없는 tool calling
                     return inner.invoke(prompt)
             return R()
 
@@ -224,7 +224,7 @@ def test_cancel_stops_before_next_task(ledger):
 
     def emit(e):
         events.append(e)
-        g.cancel()                      # learner pressed Ctrl-C after the first question
+        g.cancel()                      # 학습자가 첫 문제 뒤에 Ctrl-C를 눌렀다
 
     g.run_set(sid, 2, emit)
     assert [e.kind for e in events] == ["ready", "stopped"]
@@ -252,7 +252,7 @@ def test_question_invalid_is_value_error():
 
 
 def test_list_fields_sent_as_json_strings_are_unwrapped():
-    """Seen live: tool calling returned key_constraints as '["a", "b"]' and the draft failed to parse."""
+    """실호출에서 본 일: tool calling이 key_constraints를 '["a", "b"]'로 돌려주어 초안 파싱에 실패했다."""
     import json
 
     d = draft(1)
@@ -264,14 +264,14 @@ def test_list_fields_sent_as_json_strings_are_unwrapped():
 
 
 def test_key_constraints_are_generated_before_options():
-    """D40: the schema order is the generation order; constraints must come right after the stem."""
+    """D40: 스키마 순서가 생성 순서다. constraints는 stem 바로 뒤에 와야 한다."""
     fields = list(QuestionDraft.model_fields)
     assert fields.index("key_constraints") == fields.index("stem_en") + 1
     assert fields.index("key_constraints") < fields.index("options")
 
 
 def test_backticks_and_curly_quotes_do_not_fail_verbatim_check():
-    """Seen live: stem `stop_reason` is "tool_use", key_constraint stop_reason is “tool_use”."""
+    """실호출에서 본 일: stem의 `stop_reason`은 "tool_use", key_constraint의 stop_reason은 “tool_use”다."""
     d = draft(0)
     d["stem_en"] = d["stem_en"].replace("must not store passwords", "must not store `passwords` when \"tool_use\"")
     d["key_constraints"] = ["must not store passwords when “tool_use”", "within 12 hours"]

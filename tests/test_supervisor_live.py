@@ -1,4 +1,4 @@
-"""Real Bedrock (Haiku): Supervisor router and Planner model draft. Uses quota; run with `pytest -m live`."""
+"""실제 Bedrock(Haiku): Supervisor 라우터와 Planner 모델 초안. 할당량을 쓴다: `pytest -m live`로 실행한다."""
 
 import pytest
 

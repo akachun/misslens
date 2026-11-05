@@ -1,4 +1,4 @@
-"""D44: tool-using coach (ReAct subgraph) for miss explanations."""
+"""D44: 오답 설명을 위한 도구 사용 코치(ReAct 서브그래프)."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def test_coach_searches_checks_history_then_explains(ledger, index):
                               "learner_history(task_id='2.3')"]
     assert res.sources[0] == "lesson/tool-choice"
     assert llm.bound_tools == ["search_material", "learner_history"]
-    # the tool results went back to the model as reference data
+    # 도구 결과가 참고 자료로 모델에 되돌아갔다
     last_prompt = llm.prompts[-1]
     tool_texts = [m.content for m in last_prompt if m.type == "tool"]
     assert "<reference_material>" in tool_texts[0] and "Task 2.3" in tool_texts[1]
@@ -95,7 +95,7 @@ def test_model_failure_falls_back_to_stored_explanation(ledger, index):
     assert res.text == draft(0)["explanation_native"]
 
 
-# --- follow-up conversation (D47) -------------------------------------------------------------
+# --- 후속 대화(D47) -------------------------------------------------------------
 
 
 def test_follow_up_questions_continue_the_thread(ledger, index):
@@ -107,7 +107,7 @@ def test_follow_up_questions_continue_the_thread(ledger, index):
     llm = FakeRoleLLM([call("search_material", {"query": "tool_choice"}, 1),
                        call("learner_history", {"task_id": "2.3"}, 2),
                        "첫 해설입니다.",
-                       call("search_material", {"query": "tool_choice auto vs any"}, 3),   # tools again next turn
+                       call("search_material", {"query": "tool_choice auto vs any"}, 3),   # 다음 턴에도 도구를 쓴다
                        "auto는 모델이 고르고 any는 반드시 하나를 부릅니다. (출처: lesson/tool-choice)"])
     first = coach_explain(llm, PACK, row(), ledger=ledger, index=index, checkpointer=cp, thread_id=tid)
     assert first.text == "첫 해설입니다." and len(first.tool_calls) == 2
@@ -115,7 +115,7 @@ def test_follow_up_questions_continue_the_thread(ledger, index):
                        checkpointer=cp, thread_id=tid)
     assert second.text.startswith("auto는") and second.tool_calls == ["search_material(query='tool_choice auto vs any')"]
     assert second.sources[0] == "lesson/tool-choice"
-    # the follow-up saw the whole conversation
+    # 후속 질문이 대화 전체를 봤다
     assert any(getattr(m, "content", "") == "첫 해설입니다." for m in llm.prompts[-1])
     turns = coach_history(cp, tid)
     assert [t.question for t in turns] == [None, "auto와 any는 어떻게 달라요?"]
@@ -132,7 +132,7 @@ def test_follow_up_failure_is_a_notice(ledger, index):
     coach_explain(llm, PACK, row(), ledger=ledger, index=index, checkpointer=cp, thread_id="t")
     res = coach_ask(llm, PACK, "질문", ledger=ledger, index=index, checkpointer=cp, thread_id="t")
     assert "답하지 못했습니다" in res.text
-    assert len(coach_history(cp, "t")) == 1                    # the failed turn is not shown as answered
+    assert len(coach_history(cp, "t")) == 1                    # 실패한 턴은 답한 것으로 보이지 않는다
 
 
 def test_source_label_keeps_urls_and_adds_pdf_pages():
@@ -144,7 +144,7 @@ def test_source_label_keeps_urls_and_adds_pdf_pages():
 
 
 def test_search_tool_knows_and_filters_skilljar_lessons(ledger, index):
-    """D49: the model must know collected lessons are indexed, and be able to search only them."""
+    """D49: 모델은 수집한 강의가 색인되어 있음을 알고, 그것만 검색할 수 있어야 한다."""
     index.add([IndexedChunk("Permission modes: plan mode reads only; auto accepts edits.",
                             "https://anthropic-partners.skilljar.com/claude-code-in-action/486932", "L1", [])])
     tools = {t.name: t for t in make_tools(PACK, ledger, index)}
@@ -156,7 +156,7 @@ def test_search_tool_knows_and_filters_skilljar_lessons(ledger, index):
 
 
 def test_conversation_can_start_with_a_question_on_a_miss_or_a_right_answer(ledger, index):
-    """①② : no explanation needed first; a right answer is not treated as a miss."""
+    """①② : 먼저 설명이 없어도 되고, 정답은 실수로 다루지 않는다."""
     from dataclasses import replace
 
     from langgraph.checkpoint.memory import InMemorySaver
@@ -169,7 +169,7 @@ def test_conversation_can_start_with_a_question_on_a_miss_or_a_right_answer(ledg
     system, first = llm.prompts[0][0], llm.prompts[0][1]
     assert "READING miss" in system.content and "왜 이게 정답이죠?" in first.content and "Question:" in first.content
     coach_ask(llm, PACK, "다른 보기는요?", ledger=ledger, index=index, checkpointer=cp, thread_id="m", row=row())
-    assert len([m for m in llm.prompts[1] if m.type == "system"]) == 1          # context sent once
+    assert len([m for m in llm.prompts[1] if m.type == "system"]) == 1          # 맥락은 한 번만 보낸다
     assert [t.question for t in coach_history(cp, "m")] == ["왜 이게 정답이죠?", "다른 보기는요?"]
 
     right = replace(row(), is_correct=True, miss_type=None, missed_phrase=None, chosen_index=0)

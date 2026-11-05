@@ -1,6 +1,6 @@
-"""Review: store the re-ask results and build the diagnosis view (ARCHITECTURE §4.2).
+"""리뷰: 재질문 결과를 저장하고 진단 화면을 만든다(ARCHITECTURE §4.2).
 
-Judging is done by the ledger (D28); this module only prepares input and reads results back.
+판정은 ledger가 한다(D28). 이 모듈은 입력을 준비하고 결과를 읽어 올 뿐이다.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ LANGUAGE_NAMES = {"ko": "Korean", "en": "English", "ja": "Japanese"}
 
 def submit_review(ledger: Ledger, pack: ExamPack, set_id: int, items: list[ReaskItem],
                   responses: list[tuple[int | None, bool | None]]) -> None:
-    """Store a review. For same-language exams pass items=[] and responses=[] (re-ask skipped)."""
+    """리뷰를 저장한다. 시험 언어와 학습자 언어가 같으면 items=[]와 responses=[]를 넘긴다(재질문 생략)."""
     if pack.needs_reask:
         ledger.record_review(set_id, to_reask_answers(items, responses))
         return
@@ -50,12 +50,12 @@ class DiagnosisRow:
     miss_type: str | None
     missed_phrase: str | None
     elapsed_ms: int | None
-    reask_choice: int | None = None       # original option order; None = not re-asked
+    reask_choice: int | None = None       # 원래 보기 순서 기준. None = 재질문하지 않음
     reask_confident: bool | None = None
 
     @property
     def reask_text(self) -> str | None:
-        """'한국어 재질문: B 선택(정답) · 확신' — what decided the verdict (§4.2). None when not re-asked."""
+        """'한국어 재질문: B 선택(정답) · 확신' — 판정을 가른 근거(§4.2). 재질문하지 않았으면 None."""
         if self.reask_choice is None:
             return None
         right = self.reask_choice == self.question["answer_index"]
@@ -76,16 +76,16 @@ def diagnosis_rows(ledger: Ledger, set_id: int) -> list[DiagnosisRow]:
 
 
 def highlight(stem: str, phrase: str | None, start: str = "[bold yellow]", end: str = "[/]") -> str:
-    """Mark the missed phrase inside the stem (case-insensitive, whitespace-tolerant)."""
+    """지문 안에서 놓친 문구를 표시한다(대소문자 무시, 공백 차이 허용)."""
     if not phrase:
         return stem
-    # Backticks around words may differ between the stem and the stored phrase (see generator schema _norm).
+    # 단어를 감싼 백틱은 지문과 저장된 문구 사이에서 다를 수 있다(generator schema의 _norm 참고).
     pattern = r"\s+".join(r"`?" + re.escape(w.strip("`")) + r"`?" for w in phrase.split())
     return re.sub(pattern, lambda m: f"{start}{m.group(0)}{end}", stem, count=1, flags=re.IGNORECASE)
 
 
 def explain_miss(llm: Any, pack: ExamPack, row: DiagnosisRow) -> str:
-    """Coach-style explanation for one miss (explainer role). Falls back to the stored explanation."""
+    """오답 하나에 대한 코치식 설명(explainer 역할). 실패하면 저장된 해설을 쓴다."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
     q = row.question
@@ -101,8 +101,8 @@ def explain_miss(llm: Any, pack: ExamPack, row: DiagnosisRow) -> str:
         out = llm.invoke([SystemMessage(EXPLAIN_SYSTEM.format(learner=learner, focus=FOCUS.get(row.miss_type or "", ""))),
                           HumanMessage(msg)])
         text = getattr(out, "content", out)
-        if isinstance(text, list):  # content blocks
+        if isinstance(text, list):  # content block 목록
             text = "".join(b.get("text", "") for b in text if isinstance(b, dict))
         return str(text).strip() or q["explanation_native"]
-    except Exception:  # noqa: BLE001 - the stored explanation is always available
+    except Exception:  # noqa: BLE001 - 저장된 해설은 항상 있다
         return q["explanation_native"]

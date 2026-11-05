@@ -1,4 +1,4 @@
-"""T8: domain_summary, plan quotas, Planner (interrupt①), Reporter, Supervisor routing over all agents."""
+"""T8: domain_summary, 계획 할당량, Planner(interrupt①), Reporter, 모든 에이전트에 걸친 Supervisor 라우팅."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def answered_set(ledger, task_ids, correct):
     return sid
 
 
-# --- ledger and planner ----------------------------------------------------------------------
+# --- ledger와 planner ----------------------------------------------------------------------
 
 
 def test_domain_summary_counts_coverage_and_accuracy(ledger):
@@ -66,7 +66,7 @@ def test_rule_plan_sums_and_prefers_weak_uncovered_domains(ledger):
     answered_set(ledger, PACK.domains[0].tasks and [t.id for t in PACK.domains[0].tasks], [True] * 7)
     plan = rule_plan(PACK, summaries(PACK, ledger), 10)
     assert sum(plan.counts.values()) == 10 and set(plan.counts) == {d.id for d in PACK.domains}
-    assert plan.counts["d1"] < plan.counts["d3"]  # d1 fully covered and all correct
+    assert plan.counts["d1"] < plan.counts["d3"]  # d1은 전부 다뤘고 모두 정답
 
 
 def test_validate_counts_rejects_bad_edits():
@@ -96,7 +96,7 @@ def test_planner_graph_interrupt_edit_reask_and_approve(ledger):
     payload = out["__interrupt__"][0].value
     assert payload["kind"] == "plan" and sum(payload["plan"]["counts"].values()) == 5 and payload["error"] is None
     out = g.invoke(Command(resume={"action": "approve", "counts": {"d9": 2}}), cfg("p1"))
-    assert "알 수 없는" in out["__interrupt__"][0].value["error"]          # asked again with the reason
+    assert "알 수 없는" in out["__interrupt__"][0].value["error"]          # 이유와 함께 다시 묻는다
     out = g.invoke(Command(resume={"action": "approve", "counts": {"d2": 3, "d4": 1}}), cfg("p1"))
     assert out["plan_status"] == "approved"
     plan = Plan.model_validate(out["plan"])
@@ -109,7 +109,7 @@ def test_planner_cancel(ledger):
     assert g.invoke(Command(resume={"action": "cancel"}), cfg("p2"))["plan_status"] == "cancelled"
 
 
-# --- generator quotas and reporter ---------------------------------------------------------------
+# --- 생성기 할당량과 reporter ---------------------------------------------------------------
 
 
 def test_generator_respects_domain_plan(ledger):
@@ -208,7 +208,7 @@ def test_collect_route_waits_for_login_then_ingests(ledger, tmp_path, monkeypatc
     g = build_supervisor_graph(services(ledger, fetchers={"academy": fetcher}, ingested=ingested),
                                checkpointer=InMemorySaver())
     out = g.invoke({"intent": "collect"}, cfg("s6"))
-    assert out["__interrupt__"][0].value["kind"] == "login"          # interrupt② surfaces through the parent
+    assert out["__interrupt__"][0].value["kind"] == "login"          # interrupt②가 부모를 거쳐 드러난다
     out = g.invoke(Command(resume="done"), cfg("s6"))
     assert [d.source for d in ingested] == [f"{HOST}/course-a/101", f"{HOST}/page/notes"]
     assert all(d.source_type == "collect" for d in ingested) and fetcher.closed >= 2
@@ -227,7 +227,7 @@ def test_submit_route_grades_set(ledger):
 
 
 def test_cli_plan_flow_approve_edit_solve_and_review(ledger):
-    """CLI `plan`: interrupt① answered at the prompt (edit counts), then the set is solved and reviewed."""
+    """CLI `plan`: 프롬프트에서 interrupt①에 답하고(수정 횟수 포함), 세트를 풀고 리뷰한다."""
     import io
 
     from rich.console import Console
@@ -260,7 +260,7 @@ def test_cli_plan_flow_approve_edit_solve_and_review(ledger):
 
 
 def test_committed_graph_diagrams_match_compiled_graphs():
-    """docs/graphs/*.mmd and the README copies come from the compiled graphs; regenerate with scripts/draw_graph.py."""
+    """docs/graphs/*.mmd와 README 사본은 컴파일한 그래프에서 나온다. scripts/draw_graph.py로 다시 만든다."""
     import importlib.util
     from pathlib import Path
 

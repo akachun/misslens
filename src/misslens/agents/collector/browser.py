@@ -1,12 +1,12 @@
-"""Crawl4AI side of the Collector: login profile and headless read-only fetching (ARCHITECTURE §9, D12, D16).
+"""Collector의 Crawl4AI 쪽: 로그인 프로필과 headless 읽기 전용 수집(ARCHITECTURE §9, D12, D16).
 
-- Login: `collect login <site>` opens a visible Chromium on secrets/profiles/<site>/ (mode 0700). The learner
-  signs in (and enrolls in courses) by hand, then presses q in the terminal. The agent never types or stores
-  a password (CLAUDE.md rule 7); the profile keeps only the browser's own session cookies.
-- Fetch: headless Chromium on the same profile. No clicks, no form submits, no downloads, no scripts injected.
+- 로그인: `collect login <site>`가 secrets/profiles/<site>/(mode 0700)로 보이는 Chromium을 연다. 학습자가
+  직접 로그인(과 코스 수강 등록)을 하고 터미널에서 q를 누른다. 에이전트는 비밀번호를 입력하거나 저장하지
+  않는다(CLAUDE.md 규칙 7). 프로필에는 브라우저 자체의 세션 쿠키만 남는다.
+- 수집: 같은 프로필로 headless Chromium을 쓴다. 클릭, 폼 제출, 다운로드, 스크립트 주입은 하지 않는다.
 
-Crawl4AI is async; the graph is sync (SqliteSaver), so Crawl4AIFetcher runs one event loop in its own thread
-and keeps one browser open until close().
+Crawl4AI는 async이고 그래프는 sync(SqliteSaver)이므로, Crawl4AIFetcher는 자기 스레드에서 이벤트 루프 하나를
+돌리고 close()까지 브라우저 하나를 열어 둔다.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from typing import Protocol
 from misslens.bedrock import PROJECT_ROOT
 
 PROFILES_DIR = PROJECT_ROOT / "secrets" / "profiles"
-# Same flags as Crawl4AI's profile creation: cookies are stored without the OS keychain, so the headless
-# browser can read what the visible login browser wrote.
+# Crawl4AI가 프로필을 만들 때와 같은 플래그. 쿠키를 OS 키체인 없이 저장하므로 headless 브라우저가
+# 보이는 로그인 브라우저가 쓴 쿠키를 읽을 수 있다.
 PORTABLE_PROFILE_ARGS = ["--password-store=basic", "--use-mock-keychain"]
 PAGE_TIMEOUT_MS = 60_000
 RENDER_WAIT_SECONDS = 2.0
@@ -56,7 +56,7 @@ def _secure_dir(path: Path) -> None:
 
 
 def login(site: str, login_url: str) -> Path:
-    """Open a visible browser on the site's profile and wait until the learner presses q (blocking)."""
+    """사이트 프로필로 보이는 브라우저를 열고 학습자가 q를 누를 때까지 기다린다(blocking)."""
     from crawl4ai import BrowserConfig, BrowserProfiler
 
     path = profile_dir(site)
@@ -101,14 +101,14 @@ class Crawl4AIFetcher:
         from crawl4ai import CacheMode, CrawlerRunConfig
 
         self._ensure()
-        # "networkidle" never settles on pages with analytics beacons (seen on Skilljar): wait for the DOM, then
-        # give client-side rendering a moment.
+        # 분석용 beacon이 있는 페이지에서는 "networkidle"이 끝나지 않는다(Skilljar에서 확인). DOM을 기다린 뒤
+        # 클라이언트 렌더링에 잠깐 시간을 준다.
         run = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, wait_until="domcontentloaded",
                                page_timeout=PAGE_TIMEOUT_MS, delay_before_return_html=RENDER_WAIT_SECONDS,
                                excluded_tags=["nav", "header", "footer", "script", "style", "form", "noscript"])
         try:
             r = self._run(self._crawler.arun(url, config=run))
-        except Exception as exc:  # network, timeout, browser crash: reported per URL, the run goes on
+        except Exception as exc:  # 네트워크, 시간 초과, 브라우저 충돌: URL별로 보고하고 실행은 계속한다
             return FetchResult(url, url, None, error=f"{type(exc).__name__}: {exc}"[:300])
         final = r.redirected_url or r.url or url
         md = r.markdown

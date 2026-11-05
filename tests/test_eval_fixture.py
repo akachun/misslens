@@ -1,7 +1,7 @@
-"""Consistency checks for tests/fixtures/eval_misses.yaml (TASK T1-a).
+"""tests/fixtures/eval_misses.yaml의 일관성 검사(TASK T1-a).
 
-Keeps the hand-written fixture aligned with the Question validator rules (ARCHITECTURE §7)
-so it can later feed diagnose() tests and the manual eval (T10).
+손으로 쓴 fixture를 Question validator 규칙(ARCHITECTURE §7)과 맞춰 두어,
+나중에 diagnose() 테스트와 수동 eval(T10)에 쓸 수 있게 한다.
 """
 
 from pathlib import Path
@@ -28,7 +28,7 @@ def test_item_shape(item):
 
 @pytest.mark.parametrize("item", ITEMS, ids=lambda i: i["id"])
 def test_violates_matches_validator_rule(item):
-    # Only the answer option has violates=None; every other violates is one of key_constraints.
+    # 정답 보기만 violates=None이다. 나머지 violates는 모두 key_constraints 중 하나다.
     none_at = [k for k, v in enumerate(item["violates"]) if v is None]
     assert none_at == [item["answer_index"]]
     for v in item["violates"]:

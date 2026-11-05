@@ -1,4 +1,4 @@
-"""D56: the private hand-off zip never carries credentials or local-only state."""
+"""D56: 비공개 전달용 zip에는 자격 증명이나 로컬 전용 상태가 절대 들어가지 않는다."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def test_sqlite_copy_is_a_consistent_single_file(tmp_path):
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("CREATE TABLE t (x)")
     con.execute("INSERT INTO t VALUES (1)")
-    con.commit()                                             # still in the WAL, connection open
+    con.commit()                                             # 아직 WAL에 있고, 연결이 열려 있다
     dst = tmp_path / "out" / "copy.sqlite"
     mh.copy_sqlite(src, dst)
     con.close()

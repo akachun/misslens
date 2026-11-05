@@ -1,7 +1,7 @@
-"""Windows readiness: text files are always read and written as UTF-8.
+"""Windows 대비: 텍스트 파일은 항상 UTF-8로 읽고 쓴다.
 
-On Korean Windows the default encoding is cp949, so open()/read_text()/write_text() without encoding= breaks on
-Korean text (exam pack, docs, collected pages). This test finds such calls in src/, scripts/, app/ and tests/.
+한국어 Windows의 기본 인코딩은 cp949라서 encoding= 없는 open()/read_text()/write_text()는 한국어 텍스트
+(시험 팩, 문서, 수집한 페이지)에서 깨진다. 이 테스트는 src/, scripts/, app/, tests/에서 그런 호출을 찾는다.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def text_io_without_encoding(path: Path) -> list[int]:
         if name not in TEXT_CALLS:
             continue
         if name == "open" and isinstance(f, ast.Attribute):
-            continue                                        # zipfile/sqlite/... .open(), not builtins
+            continue                                        # 내장 함수가 아니라 zipfile/sqlite/... 의 .open()
         if any(k.arg == "encoding" for k in node.keywords) or _binary(node):
             continue
         lines.append(node.lineno)

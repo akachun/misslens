@@ -1,4 +1,4 @@
-"""Ledger: sole owner of ledger.sqlite and of every statistic (CLAUDE.md rule 1)."""
+"""Ledger: ledger.sqlite와 모든 통계를 홀로 맡는다(CLAUDE.md rule 1)."""
 
 from misslens.ledger.judge import judge, missed_phrase
 from misslens.ledger.stats import (

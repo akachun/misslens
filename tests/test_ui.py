@@ -1,7 +1,7 @@
-"""T9 Streamlit: plan approval survives a refresh, then solve -> submit -> review -> diagnosis -> status.
+"""T9 Streamlit: 새로고침해도 계획 승인이 남고, 이어서 풀이 -> 제출 -> 리뷰 -> 진단 -> 현황.
 
-Runs the real app script with Streamlit's AppTest, an in-memory ledger, fake LLMs and an in-memory checkpointer
-(no data/ files are touched).
+Streamlit의 AppTest로 실제 앱 스크립트를 돌린다. 메모리 ledger, 가짜 LLM, 메모리 checkpointer를 쓴다
+(data/ 파일은 건드리지 않는다).
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def res(tmp_path, monkeypatch):
     r.ingested = ingested
     monkeypatch.setattr(ui, "RESOURCE_FACTORY", lambda: r)
     monkeypatch.setattr(ui, "POLL_SECONDS", 0.05)
-    monkeypatch.setattr(ui, "POLL_MODE", "rerun")       # AppTest cannot drive run_every fragments
+    monkeypatch.setattr(ui, "POLL_MODE", "rerun")       # AppTest는 run_every fragment를 구동할 수 없다
     st.cache_resource.clear()
     yield r
     st.cache_resource.clear()
@@ -54,7 +54,7 @@ def res(tmp_path, monkeypatch):
 
 
 def run(x) -> AppTest:
-    """x is an AppTest or a widget after an interaction (.click(), .set_value()); both have .run()."""
+    """x는 AppTest이거나 상호작용(.click(), .set_value()) 뒤의 위젯이다. 둘 다 .run()이 있다."""
     at = x.run()
     assert not at.exception, [e.value for e in at.exception]
     return at
@@ -65,9 +65,9 @@ def test_plan_refresh_then_full_loop(res):
     at.number_input(key="plan_n").set_value(3)
     run(at.button(key="plan_make").click())
     tid = at.session_state["plan_thread"]
-    assert at.button(key=f"approve_{tid}")                       # interrupt① shown
+    assert at.button(key=f"approve_{tid}")                       # interrupt① 표시
 
-    # Refresh: a new session with only the URL's plan id still shows the approval screen.
+    # 새로고침: URL의 계획 id만 가진 새 세션도 승인 화면을 여전히 보여 준다.
     at2 = AppTest.from_file(APP, default_timeout=30)
     at2.query_params["plan"] = tid
     run(at2)
@@ -78,21 +78,21 @@ def test_plan_refresh_then_full_loop(res):
     sid = quiz["set_id"]
     assert quiz["n"] == 2
 
-    # Solve both questions (generation runs in the background; the page polls until each is ready).
+    # 두 문제를 푼다(생성은 백그라운드에서 돌고, 페이지는 각 문제가 ready가 될 때까지 폴링한다).
     for _ in range(2):
         for _ in range(20):
             radios = [w for w in at2.radio if w.key and w.key.startswith("ans_")]
             if radios:
                 break
             run(at2)
-        assert res.ledger.get_set(sid)["status"] == "in_progress"     # shown -> started, like the CLI
+        assert res.ledger.get_set(sid)["status"] == "in_progress"     # 표시 -> 시작, CLI와 같다
         radios[0].set_value(0)
         run(at2.button(key=f"next_{radios[0].key[4:]}").click())
     run(at2.button(key="submit_set").click())
     assert res.ledger.get_set(sid)["status"] == "submitted"
     assert "제출 완료" in " ".join(s.value for s in at2.success)
 
-    # Review form: answer every re-ask item, confident.
+    # 리뷰 폼: 재질문 항목에 모두 확신을 갖고 답한다.
     items = at2.session_state["quiz"]["items"]
     for i in range(len(items)):
         at2.radio(key=f"re_{sid}_{i}").set_value(0)
@@ -100,7 +100,7 @@ def test_plan_refresh_then_full_loop(res):
     submit = [b for b in at2.button if "리뷰 제출" in b.label or "진단 보기" in b.label][0]
     run(submit.click())
     assert res.ledger.get_set(sid)["status"] == "reviewed"
-    if at2.session_state["quiz"]["phase"] == "self_check":         # misses: label them before the verdict
+    if at2.session_state["quiz"]["phase"] == "self_check":         # 실수: 판정 전에 라벨을 붙인다
         for w in [w for w in at2.radio if w.key and w.key.startswith("self_")]:
             w.set_value("concept")
         run(at2.button(key=f"self_done_{sid}").click())
@@ -108,7 +108,7 @@ def test_plan_refresh_then_full_loop(res):
     assert at2.session_state["quiz"]["phase"] == "diagnosis"
     assert "미끼 기준선" in [m.label for m in at2.metric]
 
-    # Status tab shows the same coverage the ledger has.
+    # 현황 탭은 ledger와 같은 커버리지를 보여 준다.
     labels = {m.label: m.value for m in at2.metric}
     assert labels["범위"] == "2/30"
 
@@ -141,7 +141,7 @@ def test_quick_quiz_and_mark_invalid(res):
         at.radio(key=f"re_{sid}_{i}").set_value(1)
     run([b for b in at.button if b.label in ("리뷰 제출", "진단 보기")][0].click())
     if at.session_state["quiz"]["phase"] == "self_check":
-        run(at.button(key=f"self_done_{sid}").click())             # skip labelling: nothing stored
+        run(at.button(key=f"self_done_{sid}").click())             # 라벨 건너뜀: 아무것도 저장하지 않는다
         assert res.ledger.labeled_misses(PACK.exam_id) == []
     if not att["is_correct"]:
         run(at.button(key=f"inv_{att['id']}").click())
@@ -165,7 +165,7 @@ def test_sidebar_free_text_without_router_is_refused(res):
 
 
 def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
-    """D47: the stored explanation stays; the coach answer and follow-ups appear below with source links."""
+    """D47: 저장된 설명은 그대로 있고, 코치 답과 후속 대화가 출처 링크와 함께 아래에 나타난다."""
     res.explainer = FakeRoleLLM(["코치 첫 해설", "후속 답변입니다."])
     res.svc.index = None
     at = run(AppTest.from_file(APP, default_timeout=30))
@@ -177,7 +177,7 @@ def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
             break
         run(at)
     q = res.ledger.set_questions(at.session_state["quiz"]["set_id"])[0]
-    radios[0].set_value((q["payload"]["answer_index"] + 1) % 4)          # wrong
+    radios[0].set_value((q["payload"]["answer_index"] + 1) % 4)          # 오답
     run(at.button(key=f"next_{radios[0].key[4:]}").click())
     run(at.button(key="submit_set").click())
     sid = at.session_state["quiz"]["set_id"]
@@ -189,8 +189,8 @@ def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
     att = res.ledger.set_attempts(sid)[0]
     run(at.button(key=f"btn_exp_{att['id']}").click())
     texts = [m.value for m in at.markdown]
-    assert "**해설**" in texts and "**코치 해설**" in texts             # both kept
-    assert draft(0)["explanation_native"] in texts                     # stored explanation still on screen
+    assert "**해설**" in texts and "**코치 해설**" in texts             # 둘 다 유지
+    assert draft(0)["explanation_native"] in texts                     # 저장된 설명이 화면에 여전히 있다
     assert "코치 첫 해설" in texts
     at.text_area(key=f"q_{att['id']}").input("tool_choice는 뭐예요?")
     run([b for b in at.button if b.label == "질문하기"][0].click())
@@ -226,7 +226,7 @@ def _diagnosis(at, res, wrong: bool):
 
 @pytest.mark.parametrize("wrong", [True, False])
 def test_question_box_is_there_before_any_explanation(res, wrong):
-    """①: ask a miss directly; ②: ask about a question answered correctly."""
+    """①: 실수를 직접 묻는다. ②: 정답으로 답한 문제에 대해 묻는다."""
     res.explainer = FakeRoleLLM(["바로 답합니다."])
     res.svc.index = None
     at = run(AppTest.from_file(APP, default_timeout=30))
@@ -236,11 +236,11 @@ def test_question_box_is_there_before_any_explanation(res, wrong):
     run([b for b in at.button if b.label == "질문하기"][0].click())
     msgs = [c for c in at.chat_message]
     assert [c.name for c in msgs] == ["user", "assistant"]
-    assert "**코치 해설**" not in [m.value for m in at.markdown]         # no explanation was requested
+    assert "**코치 해설**" not in [m.value for m in at.markdown]         # 설명을 요청하지 않았다
 
 
 def test_sidebar_request_is_multiline_form_and_shows_what_was_sent(res):
-    """Long requests fit (text_area) and are sent by the form (Ctrl/⌘+Enter or the button); the sent text is echoed."""
+    """긴 요청도 들어가고(text_area), 폼(Ctrl/⌘+Enter 또는 버튼)으로 보낸다. 보낸 텍스트가 다시 표시된다."""
     long = "다음 주 시험이라 도구 설계와 MCP 영역 위주로 문제를 많이 풀고 싶은데, 오늘은 어떤 순서로 공부하면 좋을지 계획을 세워줘"
     at = run(AppTest.from_file(APP, default_timeout=30))
     assert at.text_area(key="nl_text").value == ""
@@ -248,19 +248,19 @@ def test_sidebar_request_is_multiline_form_and_shows_what_was_sent(res):
     run([b for b in at.button if b.label == "보내기"][0].click())
     assert at.session_state["nl_last"] == long
     assert any(long in m.value for m in at.sidebar.markdown)
-    # clear_on_submit and Ctrl/⌘+Enter are browser behaviour that AppTest does not replay; checked in a real browser.
+    # clear_on_submit과 Ctrl/⌘+Enter는 AppTest가 재현하지 않는 브라우저 동작이다. 실제 브라우저에서 확인했다.
     assert any("Ctrl+Enter" in c.value for c in at.sidebar.caption)
 
 
 def test_sidebar_width_applies_only_while_expanded():
-    """A fixed width on the collapsed sidebar left an empty strip and kept the main area narrow (demo feedback).
-    Layout itself was checked in a browser: collapsed -> main area starts at 0 and spans the window."""
+    """접힌 사이드바에 고정 너비를 주면 빈 띠가 남고 메인 영역이 좁게 유지됐다(시연 피드백).
+    레이아웃 자체는 브라우저에서 확인했다: 접힘 -> 메인 영역이 0에서 시작해 창 전체에 걸친다."""
     assert "[data-collapsed='false']" in ui.SIDEBAR_CSS
     assert "width:380px" not in ui.SIDEBAR_CSS.replace("min-width:380px", "")
 
 
 def test_draft_answers_survive_a_new_session_and_open_sets_offer_resume(res):
-    """D52: answer one question, 'restart' (a new AppTest session), the set is offered and continues at question 2."""
+    """D52: 한 문제에 답하고 '재시작'(새 AppTest 세션)하면 세트가 제안되고 2번 문제부터 이어진다."""
     at = run(AppTest.from_file(APP, default_timeout=30))
     at.number_input(key="quick_n").set_value(2)
     run(at.button(key="quick_start").click())
@@ -276,11 +276,11 @@ def test_draft_answers_survive_a_new_session_and_open_sets_offer_resume(res):
     assert res.ledger.draft_answers(sid)[first_qid]["chosen_index"] == 1
     res.svc.streams[sid].join(timeout=10)
 
-    at2 = run(AppTest.from_file(APP, default_timeout=30))            # no URL: the study tab lists open sets
+    at2 = run(AppTest.from_file(APP, default_timeout=30))            # URL 없음: 학습 탭이 열린 세트를 나열한다
     assert at2.button(key=f"resume_{sid}")
     run(at2.button(key=f"resume_{sid}").click())
     radios = [w for w in at2.radio if w.key and w.key.startswith("ans_")]
-    assert radios and int(radios[0].key[4:]) != first_qid          # continues at the unanswered question
+    assert radios and int(radios[0].key[4:]) != first_qid          # 답하지 않은 문제부터 이어진다
     assert at2.session_state["quiz"]["answers"][first_qid]["chosen_index"] == 1
 
 
@@ -300,11 +300,11 @@ def test_plan_history_lists_approved_plan_with_its_set(res):
 
 
 def test_past_sets_panel_reopens_a_quick_set(res):
-    """D53: a set made with '바로 풀기' is listed after submission and reopens at review/diagnosis."""
+    """D53: '바로 풀기'로 만든 세트는 제출 후 목록에 나오고 리뷰/진단으로 다시 열린다."""
     at = run(AppTest.from_file(APP, default_timeout=30))
     att = _diagnosis(at, res, wrong=True)
     sid = att["set_id"]
-    run(at.button(key="new_set").click())                            # back to the list
+    run(at.button(key="new_set").click())                            # 목록으로 돌아감
     assert at.session_state.get("quiz") is None
     assert at.button(key=f"past_{sid}").label == "진단 보기"
     assert any(f"세트 #{sid}" in m.value and "바로 풀기" in m.value for m in at.markdown)
@@ -313,13 +313,13 @@ def test_past_sets_panel_reopens_a_quick_set(res):
 
 
 def test_vocab_panel_and_word_book(res):
-    """D54: the diagnosis builds the set's word list in the background; the 단어장 tab lists and hides known words."""
+    """D54: 진단이 백그라운드에서 세트의 단어 목록을 만든다. 단어장 탭은 단어를 나열하고 아는 단어를 숨긴다."""
     res.vocab_llm = FakeRoleLLM([{"items": [{"q": 1, "term": "must not store passwords", "kind": "condition",
                                              "meaning": "비밀번호를 저장하면 안 된다", "role": "정답을 가른 조건"}]}])
     at = run(AppTest.from_file(APP, default_timeout=30))
     _diagnosis(at, res, wrong=True)
     sid = at.session_state["quiz"]["set_id"]
-    for _ in range(20):                                              # background job, then rerun
+    for _ in range(20):                                              # 백그라운드 작업, 그다음 rerun
         if res.ledger.set_vocab(sid):
             break
         run(at)
@@ -328,13 +328,13 @@ def test_vocab_panel_and_word_book(res):
     key = f"vk_{sid}_must not store passwords"
     run(at.checkbox(key=key).check())
     assert res.ledger.vocab_book(PACK.exam_id)[0]["known"]
-    assert not any("must not store passwords" in m.value and "회(세트" in m.value for m in at.markdown)  # hidden in book
+    assert not any("must not store passwords" in m.value and "회(세트" in m.value for m in at.markdown)  # 단어장에서 숨김
     run(at.checkbox(key="vb_hide").uncheck())
     assert any("must not store passwords" in m.value and "1회(세트 1개)" in m.value for m in at.markdown)
 
 
 def test_background_signature_and_activity_lines(res):
-    """D55: the status fragment reruns the page only when this signature changes, and lists work in one line."""
+    """D55: 상태 fragment는 이 시그니처가 바뀔 때만 페이지를 rerun하고, 작업을 한 줄에 나열한다."""
     import threading
 
     idle = ui.background_signature(res)

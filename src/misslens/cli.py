@@ -1,20 +1,20 @@
-"""MissLens CLI (core loop without Streamlit).
+"""MissLens CLI(Streamlit 없이 도는 핵심 루프).
 
-    python -m misslens.cli quiz [-n 5] [--exam ccar-f]   # set -> solve -> submit -> re-ask -> diagnosis
-    python -m misslens.cli status [--exam ccar-f]        # quick numbers from the ledger
-    python -m misslens.cli ingest PATH... [--paste]      # add study material (files or folders) to the index
-    python -m misslens.cli search "query" [--task 2.1]   # inspect what retrieval returns
-    python -m misslens.cli plan [-n 10]                  # Planner draft -> approve (interrupt①) -> solve
-    python -m misslens.cli ask "도구 설계 5문제"          # free text -> Supervisor router -> agent
-    python -m misslens.cli retrieval-eval [--save-baseline]  # retrieval scores + index health vs baseline (D50)
-    python -m misslens.cli eval [--export]               # diagnosis vs the learner's own labels (T10 eval)
-    python -m misslens.cli practice import [DIR]         # parse learner-supplied practice sets into the style bank
-    python -m misslens.cli collect login skilljar        # sign in by hand in a visible browser (profile only)
-    python -m misslens.cli collect run [--site skilljar] # collect sources.yaml pages, then ingest them
+    python -m misslens.cli quiz [-n 5] [--exam ccar-f]   # 세트 -> 풀이 -> 제출 -> 다시 풀기 -> 진단
+    python -m misslens.cli status [--exam ccar-f]        # ledger의 간단한 수치
+    python -m misslens.cli ingest PATH... [--paste]      # 학습 자료(파일이나 폴더)를 색인에 넣는다
+    python -m misslens.cli search "query" [--task 2.1]   # 검색이 무엇을 돌려주는지 확인한다
+    python -m misslens.cli plan [-n 10]                  # Planner 초안 -> 승인(interrupt①) -> 풀이
+    python -m misslens.cli ask "도구 설계 5문제"          # 자연어 -> Supervisor 라우터 -> 에이전트
+    python -m misslens.cli retrieval-eval [--save-baseline]  # 검색 점수 + 색인 건강 vs 기준선(D50)
+    python -m misslens.cli eval [--export]               # 진단 vs 학습자가 직접 붙인 라벨(T10 eval)
+    python -m misslens.cli practice import [DIR]         # 학습자가 준 연습 문제 세트를 문체 은행으로 변환한다
+    python -m misslens.cli collect login skilljar        # 보이는 브라우저에서 직접 로그인한다(프로필만 저장)
+    python -m misslens.cli collect run [--site skilljar] # sources.yaml 페이지를 수집한 뒤 색인에 넣는다
 
-Interrupts exist only in `collect run` (login wait, interrupt②) and later in the Planner (CLAUDE.md rule 4).
+interrupt는 `collect run`(로그인 대기, interrupt②)과 이후의 Planner에만 있다(CLAUDE.md 규칙 4).
 
-Solving and review are plain prompts, never interrupts.
+풀이와 리뷰는 일반 입력 프롬프트이며, 절대 interrupt가 아니다.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ class CLI:
         self.console = console or Console()
         self._ask = ask or (lambda prompt: self.console.input(prompt))
         self.clock = clock
-        self.index = None   # ChunkIndex for the coach's search tool (D44); None = coach searches nothing
+        self.index = None   # 코치 검색 도구용 ChunkIndex(D44). None이면 코치는 아무것도 검색하지 않는다
 
     def ask_choice(self, prompt: str, *, allow_blank: bool = True) -> int | None:
         while True:
@@ -72,17 +72,17 @@ class CLI:
                 return False
             self.console.print("y(확신) 또는 n(추측)으로 답하세요.")
 
-    # --- quiz ------------------------------------------------------------------------------
+    # --- 풀이 ------------------------------------------------------------------------------
 
     def quiz(self, n: int, generator: Generator, *, explainer: Any = None) -> int | None:
         set_id = self.ledger.create_set(self.pack.exam_id, n)
         self.ledger.record_plan(self.pack.exam_id, set_id=set_id, kind="quick", total=n, counts=None,
-                                thread_id="cli-quiz")       # so the set shows up in the history with its origin
+                                thread_id="cli-quiz")       # 세트가 출처와 함께 기록 목록에 나오게 한다
         stream = QuestionStream(generator, set_id, n).start()
         return self.run_stream(set_id, n, stream, explainer=explainer)
 
     def run_stream(self, set_id: int, n: int, stream: QuestionStream, *, explainer: Any = None) -> int | None:
-        """Solve a set while it is being generated, submit it, then review (no interrupts, rule 4)."""
+        """세트가 생성되는 동안 풀고, 제출한 뒤 리뷰한다(interrupt 없음, 규칙 4)."""
         c = self.console
         generator = stream.generator
         c.print(Panel(f"{self.pack.name} · {n}문제 세트 #{set_id}\n"
@@ -97,7 +97,7 @@ class CLI:
                     if not started:
                         self.ledger.start_set(set_id)
                         started = True
-                    # Number by seq so solving, diagnosis and '문제 이상' use the same numbers.
+                    # seq로 번호를 매겨 풀이, 진단, '문제 이상'이 같은 번호를 쓰게 한다.
                     answers.append(self._solve(ev.seq + 1, ev.question_id, ev.question))
                 elif ev.kind == "failed":
                     c.print(f"[red]문제 {ev.seq + 1} 생성 실패[/]: {escape(ev.message)}")
@@ -105,7 +105,7 @@ class CLI:
                     c.print(("[yellow]" if ev.kind == "stopped" else "[green]") + escape(ev.message) + "[/]")
                     break
         except (KeyboardInterrupt, EOFError):
-            generator.cancel()          # stop writing to the ledger before main() closes it
+            generator.cancel()          # main()이 ledger를 닫기 전에 ledger 쓰기를 멈춘다
             stream.join(timeout=30)
             raise
         stream.join(timeout=5)
@@ -126,7 +126,7 @@ class CLI:
         choice = self.ask_choice("답 (A-D, 건너뛰기 Enter): ")
         return Answer(question_id, choice, int((self.clock() - t0) * 1000))
 
-    # --- review ----------------------------------------------------------------------------
+    # --- 리뷰 ----------------------------------------------------------------------------
 
     def review(self, set_id: int, *, explainer: Any = None) -> None:
         c = self.console
@@ -148,8 +148,8 @@ class CLI:
     SELF_CHECK_PROMPT = "정답을 보니: c=몰랐던 내용(개념) · r=알았는데 조건을 놓침(해석) · u=모르겠음 · Enter=건너뛰기 > "
 
     def self_check(self, set_id: int) -> int:
-        """Learner's own label per miss, after the answer but before the verdict and explanation (D43).
-        Builds the diagnosis eval data while studying. Returns how many labels were saved."""
+        """오답마다 학습자가 직접 붙이는 라벨. 정답을 본 뒤, 판정과 해설을 보기 전에 받는다(D43).
+        공부하면서 진단 eval 데이터를 쌓는다. 저장한 라벨 수를 돌려준다."""
         c, saved = self.console, 0
         misses = [r for r in diagnosis_rows(self.ledger, set_id) if not r.is_correct and r.miss_type]
         if misses:
@@ -207,7 +207,7 @@ class CLI:
             else:
                 c.print(f"[red]알 수 없는 번호: {escape(part)}[/]")
 
-    # --- status ----------------------------------------------------------------------------
+    # --- 현황 ----------------------------------------------------------------------------
 
     def status(self) -> None:
         from misslens.agents.reporter import build_report
@@ -215,7 +215,7 @@ class CLI:
         self.render_report(build_report(self.pack, self.ledger).as_dict())
 
     def render_report(self, r: dict) -> None:
-        """One renderer for the Reporter's numbers (CLI status and the Supervisor's status route)."""
+        """Reporter 수치를 그리는 하나뿐인 렌더러(CLI status와 Supervisor의 status 경로가 함께 쓴다)."""
         c = self.console
         ratio = "-" if r["reading_ratio"] is None else f"{r['reading_ratio']:.0%}"
         base = "-" if r["baseline"] is None else f"{r['baseline']:.0%}"
@@ -242,10 +242,10 @@ class CLI:
         for f in r["failures"]:
             c.print(f"[red]생성 실패[/] {f['task_id']} ({f['tries']}회): {escape(f['reason'][:160])}")
 
-    # --- plan approval (interrupt①) ---------------------------------------------------------
+    # --- 계획 승인(interrupt①) ---------------------------------------------------------
 
     def ask_plan(self, payload: dict) -> dict:
-        """Show the drafted plan; return the resume value for the planner's interrupt."""
+        """초안 계획을 보여 주고, planner의 interrupt에 넘길 resume 값을 돌려준다."""
         c, plan = self.console, payload["plan"]
         names = {d["domain"]: d for d in payload.get("table", [])}
         tbl = Table("영역", "비중", "출제 항목", "정답률(보정)", "오늘 문제 수", title=f"오늘의 계획 · {plan['total']}문제")
@@ -271,10 +271,10 @@ class CLI:
                 c.print(f"{len(doms)}개의 정수를 입력하세요.")
 
 
-# --- material ------------------------------------------------------------------------------
+# --- 자료 ------------------------------------------------------------------------------
 
 def expand_paths(paths: list[str]) -> list[Path]:
-    """Files as given, and supported files inside folders (sorted, recursive)."""
+    """파일은 주어진 그대로, 폴더는 안의 지원 파일을 돌려준다(정렬, 하위 폴더 포함)."""
     from misslens.agents.ingest.loaders import SUPPORTED
 
     out: list[Path] = []
@@ -287,7 +287,7 @@ def expand_paths(paths: list[str]) -> list[Path]:
 
 
 def run_ingest(ingestor: Any, docs: list[Any], console: Console) -> int:
-    """Ingest documents and print one line each plus the per-task material counts. Returns chunks added."""
+    """문서를 색인에 넣고 문서마다 한 줄과 세부 항목별 자료 수를 출력한다. 추가한 chunk 수를 돌려준다."""
     added = 0
     for doc in docs:
         r = ingestor.ingest(doc)
@@ -306,7 +306,7 @@ def run_ingest(ingestor: Any, docs: list[Any], console: Console) -> int:
 
 
 def open_index(exam_id: str, *, must_exist: bool = False):
-    """The exam's index, or None if nothing was ingested yet (avoids loading bge-m3 for nothing)."""
+    """시험의 색인. 아직 넣은 자료가 없으면 None이다(bge-m3를 괜히 불러오지 않는다)."""
     from misslens.retrieval.index import INDEX_ROOT, ChunkIndex
 
     if not (INDEX_ROOT / exam_id / "meta.json").exists() and not must_exist:
@@ -319,7 +319,7 @@ def open_index(exam_id: str, *, must_exist: bool = False):
 # --- supervisor ------------------------------------------------------------------------------
 
 def make_services(pack: ExamPack, ledger: Ledger):
-    """Real agents for the Supervisor graph: retrieval if indexed, practice style bank, Bedrock models."""
+    """Supervisor 그래프용 실제 에이전트: 색인이 있으면 검색, 연습 문제 문체 은행, Bedrock 모델."""
     from misslens.agents.collector import Crawl4AIFetcher, load_sources
     from misslens.agents.generator.context import RetrievalContext
     from misslens.agents.ingest import Ingestor
@@ -348,7 +348,7 @@ def make_services(pack: ExamPack, ledger: Ledger):
 
 def run_supervisor(cli: "CLI", request: dict, *, explainer: Any = None, svc: Any = None,
                    checkpointer: Any = None) -> dict:
-    """Send one request through the Supervisor graph; answer its interrupts (plan approval, login wait) here."""
+    """요청 하나를 Supervisor 그래프로 보내고, 그 interrupt(계획 승인, 로그인 대기)에는 여기서 답한다."""
     from langgraph.types import Command
 
     from misslens.agents.collector import login, new_thread_id, sqlite_checkpointer
@@ -386,14 +386,14 @@ def run_supervisor(cli: "CLI", request: dict, *, explainer: Any = None, svc: Any
     return out
 
 
-# --- collector -----------------------------------------------------------------------------
+# --- 수집기(collector) -----------------------------------------------------------------------------
 
 STATUS_LABEL = {"saved": "[green]저장[/]", "expanded": "[cyan]레슨 목록[/]", "empty": "[yellow]본문 없음[/]",
                 "not_enrolled": "[yellow]수강 등록 필요[/]", "error": "[red]오류[/]", "blocked": "[red]차단[/]"}
 
 
 def login_prompt(console: Console, ask: Ask, open_login: Callable[[], Any]) -> Callable[[dict], str]:
-    """interrupt② handler for the CLI: explain, let the learner log in, return the resume value."""
+    """CLI용 interrupt② 처리기: 상황을 설명하고, 학습자가 로그인하게 한 뒤, resume 값을 돌려준다."""
 
     def on_login(payload: dict) -> str:
         console.print(Panel(f"세션이 만료됐거나 로그인이 필요합니다.\n사이트: {escape(payload['site'])}\n"
@@ -413,7 +413,7 @@ def login_prompt(console: Console, ask: Ask, open_login: Callable[[], Any]) -> C
 
 
 def print_collect_summary(console: Console, state: dict) -> list[str]:
-    """One line per URL; returns the saved file paths."""
+    """URL마다 한 줄을 출력하고, 저장한 파일 경로를 돌려준다."""
     saved: list[str] = []
     counts: dict[str, int] = {}
     for r in state.get("results", []):
@@ -627,7 +627,7 @@ def retrieval_eval_command(cli: CLI, args) -> int:
 
 
 def export_eval(ledger: Ledger, pack: ExamPack, path: Path) -> int:
-    """Misses with the learner's own label, in the shape of tests/fixtures/eval_misses.yaml (T10 eval, D43)."""
+    """학습자가 직접 라벨을 붙인 오답을 tests/fixtures/eval_misses.yaml 형식으로 내보낸다(T10 eval, D43)."""
     import yaml
 
     items = []
@@ -668,8 +668,8 @@ def eval_command(cli: CLI, export: str | None) -> None:
 
 
 def reindex_collected(cli: CLI, pack: ExamPack, ledger: Ledger, srcs: Any, names: list[str]) -> int:
-    """Re-clean saved pages with the site's current rules and replace their chunks in the index (D48).
-    No crawling: works on data/sources/collected/<site>/. Video-only pages (no text left) leave the index."""
+    """저장된 페이지를 사이트의 현재 규칙으로 다시 정리하고, 색인에서 그 chunk를 교체한다(D48).
+    크롤링하지 않는다: data/sources/collected/<site>/를 대상으로 한다. 영상만 있는 페이지(본문이 남지 않음)는 색인에서 빠진다."""
     from misslens.agents.collector.graph import COLLECTED_DIR, MIN_TEXT_CHARS, clean_markdown, save_page
     from misslens.agents.ingest import Document, Ingestor
     from misslens.agents.ingest.loaders import load_file
@@ -681,7 +681,7 @@ def reindex_collected(cli: CLI, pack: ExamPack, ledger: Ledger, srcs: Any, names
         files = sorted((COLLECTED_DIR / n).glob("*.md"))
         uris, empty = [], 0
         for f in files:
-            raw = load_file(f)                          # marker stripped, source = page URL
+            raw = load_file(f)                          # 표시 주석은 제거됨, source = 페이지 URL
             body = "\n".join(l for l in raw.text.splitlines() if not l.startswith("<!-- collected"))
             text = clean_markdown(site.strip_chrome(body))
             uris.append(raw.source)

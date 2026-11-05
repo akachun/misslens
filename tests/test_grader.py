@@ -32,7 +32,7 @@ def question(answer_index=0):
 
 
 def solved_set(ledger, choices):
-    """One question per choice, answer always 0. Returns (set_id, attempt ids)."""
+    """보기마다 한 문제, 정답은 항상 0. (set_id, attempt id 목록)을 돌려준다."""
     sid = ledger.create_set(PACK.exam_id, len(choices))
     qids = [ledger.add_question(sid, seq=i, task_id="1.1", domain="d1", blueprint_version=2, payload=question(0))
             for i in range(len(choices))]
@@ -46,21 +46,21 @@ def test_decoy_count(n_correct, expected):
 
 
 def test_form_has_all_misses_plus_decoys_shuffled(ledger):
-    sid, a = solved_set(ledger, [1, 2, 0, 0, 0, 0, 0, 0, 0, 0])   # 2 misses, 8 correct
+    sid, a = solved_set(ledger, [1, 2, 0, 0, 0, 0, 0, 0, 0, 0])   # 실수 2개, 정답 8개
     items = build_reask_form(ledger.set_questions(sid), ledger.set_attempts(sid), rng=random.Random(3))
     misses = {i.attempt_id for i in items if not i.is_decoy}
     assert misses == {a[0], a[1]}
     assert sum(i.is_decoy for i in items) == decoy_count(8)
     for it in items:
         assert sorted(it.order) == [0, 1, 2, 3]
-        assert it.stem.startswith("에이전트")                      # learner language
-        assert it.options == [f"보기 {k}" for k in it.order]       # displayed via the mapping
+        assert it.stem.startswith("에이전트")                      # 학습자 언어
+        assert it.options == [f"보기 {k}" for k in it.order]       # 매핑을 거쳐 화면에 표시
 
 
 def test_mapping_back_to_original_order(ledger):
     sid, a = solved_set(ledger, [1, 0, 0])
     items = build_reask_form(ledger.set_questions(sid), ledger.set_attempts(sid), rng=random.Random(0))
-    # Learner picks the displayed position of the ORIGINAL answer (index 0) everywhere, confident.
+    # 학습자는 모든 곳에서 원래 정답(인덱스 0)이 표시된 위치를 확신을 갖고 고른다.
     responses = [(it.order.index(0), True) for it in items]
     answers = to_reask_answers(items, responses)
     assert all(x.reask_choice == 0 for x in answers)
@@ -72,11 +72,11 @@ def test_review_end_to_end_records_reading_phrase_and_baseline(ledger):
     responses = []
     for it in items:
         if it.attempt_id == a[0]:
-            responses.append((it.order.index(0), True))      # miss -> right + sure = reading
+            responses.append((it.order.index(0), True))      # 실수 -> 정답 + 확신 = reading
         elif it.attempt_id == a[1]:
-            responses.append((it.order.index(3), True))      # miss -> wrong again = concept
+            responses.append((it.order.index(3), True))      # 실수 -> 다시 오답 = concept
         else:
-            responses.append((it.order.index(0), True))      # decoy right
+            responses.append((it.order.index(0), True))      # 미끼 정답
     submit_review(ledger, PACK, sid, items, responses)
     rows = {r.attempt_id: r for r in diagnosis_rows(ledger, sid)}
     assert rows[a[0]].miss_type == "reading"
@@ -129,7 +129,7 @@ def test_highlight_tolerates_backticks():
 
 
 def test_diagnosis_rows_carry_the_korean_reask_result():
-    """The verdict comes from the Korean re-ask; the diagnosis now shows it (learner rehearsal question)."""
+    """판정은 한국어 재질문에서 나온다. 이제 진단이 이를 보여 준다(학습자 리허설 질문)."""
     from misslens.agents.grader.review import DiagnosisRow
 
     q = {**draft(0)}

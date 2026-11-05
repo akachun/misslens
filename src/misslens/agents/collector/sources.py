@@ -1,4 +1,4 @@
-"""exams/<exam_id>/sources.yaml: the only URLs the Collector may read (ARCHITECTURE §9, CLAUDE.md rule 7)."""
+"""exams/<exam_id>/sources.yaml: Collector가 읽을 수 있는 유일한 URL 목록(ARCHITECTURE §9, CLAUDE.md 규칙 7)."""
 
 from __future__ import annotations
 
@@ -29,11 +29,11 @@ class Site(BaseModel):
     expired_markers: list[str] = Field(default_factory=list)
     not_enrolled_markers: list[str] = Field(default_factory=list)
     delay_seconds: float = Field(default=MIN_DELAY_SECONDS, ge=MIN_DELAY_SECONDS)
-    drop_lines: list[str] = Field(default_factory=list)       # regex, full-line match (D48)
+    drop_lines: list[str] = Field(default_factory=list)       # 정규식, 줄 전체 일치(D48)
     drop_blocks: list[DropBlock] = Field(default_factory=list)
 
     def strip_chrome(self, text: str) -> str:
-        """Remove the site's page chrome (menus, video player UI) from extracted text."""
+        """추출한 텍스트에서 사이트의 페이지 장식(메뉴, 영상 플레이어 UI)을 지운다."""
         lines = [re.compile(p) for p in self.drop_lines]
         blocks = [(re.compile(b.start), re.compile(b.end)) for b in self.drop_blocks]
         src = text.splitlines()
@@ -46,7 +46,7 @@ class Site(BaseModel):
                 j = i + 1
                 while j < len(src) and not block.fullmatch(src[j].strip()):
                     j += 1
-                if j == len(src):          # no end marker: keep the text rather than drop the rest of the page
+                if j == len(src):          # 끝 표시가 없으면 페이지 나머지를 버리지 않고 텍스트를 남긴다
                     out.append(src[i])
                     i += 1
                     continue

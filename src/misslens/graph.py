@@ -1,19 +1,19 @@
-"""Supervisor graph: one LangGraph that routes every request to the agents (ARCHITECTURE §2, D1).
+"""Supervisor 그래프: 모든 요청을 에이전트로 보내는 하나의 LangGraph(ARCHITECTURE §2, D1).
 
     START -> route -+-> planner (subgraph, interrupt①) -> generate -> END
-                    +-> generate ---------------------------------> END      quiz (command or free text)
-                    +-> report -----------------------------------> END      status (Reporter)
+                    +-> generate ---------------------------------> END      quiz(명령 또는 자유 입력)
+                    +-> report -----------------------------------> END      status(Reporter)
                     +-> collect_prepare -> collect_<site> (subgraph, interrupt②) -> ingest_collected -> END
-                    +-> ingest ------------------------------------> END     files (Ingest)
-                    +-> submit ------------------------------------> END     answers (Grader)
-                    +-> resume ------------------------------------> END     continue a stopped set (D52)
-                    +-> END                                                   unclear free text: guide message
+                    +-> ingest ------------------------------------> END     파일(Ingest)
+                    +-> submit ------------------------------------> END     답안(Grader)
+                    +-> resume ------------------------------------> END     멈춘 세트 이어 가기(D52)
+                    +-> END                                                   불분명한 자유 입력: 안내 메시지
 
-Interrupts exist only inside the planner (plan approval) and collector (login wait) subgraphs (CLAUDE.md rule 4).
-Solving and the review form are plain UI steps; their results come back as `submit` requests.
+interrupt는 planner(계획 승인)와 collector(로그인 대기) subgraph 안에만 있다(CLAUDE.md rule 4).
+문제 풀이와 리뷰 양식은 평범한 UI 단계이고, 그 결과는 `submit` 요청으로 돌아온다.
 
-Objects that cannot live in checkpointed state (the running question stream, browser fetchers) stay in
-`Services`; the state holds only ids and plain data.
+checkpoint되는 state에 둘 수 없는 객체(실행 중인 문제 스트림, 브라우저 fetcher)는 `Services`에 두고,
+state에는 id와 일반 데이터만 담는다.
 """
 
 from __future__ import annotations
@@ -50,21 +50,21 @@ class Services:
     sources: SourceList | None = None
     fetchers: dict[str, Any] = field(default_factory=dict)       # site -> Fetcher
     streams: dict[int, QuestionStream] = field(default_factory=dict)
-    index: Any = None                                             # ChunkIndex for the coach's search tool
+    index: Any = None                                             # 코치의 검색 도구가 쓰는 ChunkIndex
 
 
 class SupervisorState(TypedDict, total=False):
-    # request
+    # 요청
     text: str | None
     intent: str | None
     args: dict
-    # planner subgraph keys
+    # planner subgraph 키
     total: int
     plan: dict | None
     plan_table: list[dict]
     plan_status: str | None
     plan_error: str | None
-    # collector subgraph keys
+    # collector subgraph 키
     site: str
     queue: list[dict]
     seen: list[str]
@@ -72,7 +72,7 @@ class SupervisorState(TypedDict, total=False):
     need_login: bool
     login_waits: int
     stopped: str | None
-    # outputs
+    # 출력
     set_id: int | None
     report: dict | None
     ingested: list[dict] | None
@@ -128,7 +128,7 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
         return {"set_id": set_id, "message": f"{n}문제 세트 #{set_id}를 만드는 중입니다."}
 
     def resume(state: SupervisorState) -> SupervisorState:
-        """Continue a set whose generation stopped (e.g. server restart): only the missing questions (D52)."""
+        """생성이 멈춘 세트(예: 서버 재시작)를 이어 간다. 빠진 문제만 만든다(D52)."""
         set_id = int((state.get("args") or {})["set_id"])
         prog = ledger.set_progress(set_id)
         if prog["status"] not in ("generating", "in_progress"):

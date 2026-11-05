@@ -46,7 +46,7 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 - 학습자가 쓰고 있는 Streamlit 서버를 재시작하기 전에 제출 전 세트(`quiz_sets`가 generating/in_progress)가 있는지 보고 학습자에게 묻는다. 재시작하면 백그라운드 문제 생성이 멈춘다('이어 풀기'로 재개 가능).
 - 청킹·데이터 정리·태깅·검색 순위를 바꾸면 `python -m misslens.cli retrieval-eval`(또는 `pytest -m realdata`)로 기준선과 비교한다. 나아졌으면 `--save-baseline`으로 기준선을 갱신한다.
 - 마감이 위태로우면 `TASK.md`의 '빼는 순서'를 따른다. 핵심 루프(세트 풀이 → 리뷰 → 진단 → 기록)는 빼지 않는다.
-- 문서와 사용자 대상 문구는 한국어로 쓴다. 코드, 식별자, 커밋 메시지는 영어로 쓴다.
+- 문서, 사용자 대상 문구, 코드 주석과 docstring은 한국어로 쓴다. 코드, 식별자, 커밋 메시지는 영어로 쓴다. 모델에 보내는 문자열(프롬프트, `Field(description=)`, 구조화 출력 모델의 클래스 docstring, 도구 설명이 되는 함수 docstring)은 영어로 둔다(D57, `tests/test_model_facing_text.py`).
 
 ## 명령어
 

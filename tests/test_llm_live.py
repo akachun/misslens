@@ -1,4 +1,4 @@
-"""Real Bedrock smoke tests. Uses quota: run only with `pytest -m live`."""
+"""실제 Bedrock 스모크 테스트. 할당량을 쓴다: `pytest -m live`로만 실행한다."""
 
 import pytest
 from pydantic import BaseModel

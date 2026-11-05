@@ -1,22 +1,22 @@
-"""get_llm(role): Bedrock calls with endpoint failover (ARCHITECTURE §6, D26, D27).
+"""get_llm(role): endpoint failover를 갖춘 Bedrock 호출(ARCHITECTURE §6, D26, D27).
 
-Every LLM call in the app goes through get_llm(role). Model IDs, regions and timeouts come only
-from config/models.yaml.
+앱의 모든 LLM 호출은 get_llm(role)을 거친다. 모델 ID, 리전, 타임아웃은 config/models.yaml에서만
+가져온다.
 
     llm = get_llm("generator")
     question = llm.with_structured_output(Question).invoke(prompt)
     text = llm.invoke(prompt).content
 
-Switching rules (§6.3), per (endpoint, model) combination. botocore retries are OFF
-(total_max_attempts=1) so the router alone decides how often each error class is retried (D32):
-  - throttled                         -> up to THROTTLE_MAX_ATTEMPTS tries with exponential backoff,
-                                         then cooldown, next endpoint
-  - quota exceeded                    -> no retry, cooldown, next endpoint
-  - model unavailable / access denied -> unavailable for the process, next endpoint
-  - timeout / connection / 5xx        -> retry once, then next endpoint
-  - invalid request / other error     -> fail now (switching would not help)
-  - credentials                       -> fail now
-All endpoints failed for the role's model -> repeat with fallback_model -> LLMCallError.
+전환 규칙(§6.3)은 (endpoint, model) 조합마다 적용한다. botocore 재시도는 끈다
+(total_max_attempts=1). 그래서 오류 종류별 재시도 횟수는 router 혼자 정한다(D32):
+  - 호출 제한(throttled)              -> exponential backoff로 최대 THROTTLE_MAX_ATTEMPTS번 시도,
+                                         그다음 cooldown, 다음 endpoint
+  - 할당량 초과                       -> 재시도 없이 cooldown, 다음 endpoint
+  - 모델 없음 / 접근 거부             -> 프로세스 동안 unavailable, 다음 endpoint
+  - 타임아웃 / 연결 / 5xx             -> 한 번 재시도, 그다음 다음 endpoint
+  - 잘못된 요청 / 기타 오류           -> 바로 실패(전환해도 소용없음)
+  - 자격 증명                         -> 바로 실패
+역할의 모델로 모든 endpoint가 실패하면 -> fallback_model로 반복 -> LLMCallError.
 """
 
 from __future__ import annotations
@@ -48,17 +48,17 @@ from misslens.bedrock import (
 
 logger = logging.getLogger(__name__)
 
-# Combinations seen as quota-exceeded by a probe younger than this start in cooldown.
+# 이보다 최근의 probe에서 할당량 초과로 확인된 조합은 cooldown 상태로 시작한다.
 MODEL_STATUS_MAX_AGE_SECONDS = 24 * 3600
-THROTTLE_MAX_ATTEMPTS = 5      # total tries on one endpoint while throttled (D13, D32)
-THROTTLE_BASE_DELAY = 1.0      # seconds; doubles each retry, with jitter
+THROTTLE_MAX_ATTEMPTS = 5      # 호출 제한 중 한 endpoint에서 시도하는 총 횟수(D13, D32)
+THROTTLE_BASE_DELAY = 1.0      # 초 단위. 재시도마다 두 배가 되고 jitter를 섞는다
 THROTTLE_MAX_DELAY = 20.0
-TRANSIENT_MAX_ATTEMPTS = 2     # first try + one retry
+TRANSIENT_MAX_ATTEMPTS = 2     # 첫 시도 + 재시도 1번
 
 _SWITCH = {CallStatus.THROTTLED, CallStatus.QUOTA_EXCEEDED, CallStatus.UNAVAILABLE, CallStatus.TRANSIENT}
 
-Combo = tuple[str, str]  # (endpoint name, base model)
-LLMFactory = Callable[[Endpoint, str, int], Any]  # (endpoint, base model, timeout) -> chat model
+Combo = tuple[str, str]  # (endpoint 이름, 기본 모델)
+LLMFactory = Callable[[Endpoint, str, int], Any]  # (endpoint, 기본 모델, 타임아웃) -> chat model
 
 
 @dataclass
@@ -70,7 +70,7 @@ class Attempt:
 
 
 class LLMCallError(RuntimeError):
-    """Every allowed endpoint x model combination failed, or the error was not switchable."""
+    """허용된 endpoint x model 조합이 모두 실패했거나, 전환할 수 없는 오류였다."""
 
     def __init__(self, role: str, attempts: list[Attempt], cause: BaseException | None = None):
         self.role = role
@@ -83,11 +83,11 @@ class LLMCallError(RuntimeError):
 
 @dataclass
 class RouterState:
-    """Process-wide memory of cooldowns, unavailable combinations and last success per role."""
+    """cooldown, unavailable 조합, 역할별 마지막 성공 endpoint를 프로세스 전체에서 기억한다."""
 
     cooldown_until: dict[Combo, float] = field(default_factory=dict)
     unavailable: set[Combo] = field(default_factory=set)
-    last_success: dict[str, str] = field(default_factory=dict)  # role -> endpoint name
+    last_success: dict[str, str] = field(default_factory=dict)  # 역할 -> endpoint 이름
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def is_cooling(self, combo: Combo, now: float) -> bool:
@@ -95,7 +95,7 @@ class RouterState:
 
     def seed_from_model_status(self, path: Path, cooldown_seconds: int, now: float,
                                wall_now: datetime | None = None) -> list[Combo]:
-        """Start quota-exceeded combinations from a recent probe in cooldown (§6.2)."""
+        """최근 probe에서 할당량 초과로 나온 조합을 cooldown 상태로 시작한다(§6.2)."""
         if not path.exists():
             return []
         try:
@@ -119,7 +119,7 @@ class RouterState:
 
 
 class Router:
-    """Runs a call against candidate (endpoint, model) combinations in §6.3 order."""
+    """후보 (endpoint, model) 조합에 §6.3 순서대로 호출을 실행한다."""
 
     def __init__(self, config: ModelConfig, endpoints: list[Endpoint], factory: LLMFactory,
                  state: RouterState | None = None, clock: Callable[[], float] = time.monotonic,
@@ -173,7 +173,7 @@ class Router:
                 tries += 1
                 try:
                     result = call(llm)
-                except Exception as exc:  # noqa: BLE001 - classified below
+                except Exception as exc:  # noqa: BLE001 - 아래에서 분류한다
                     status = classify_error(exc)
                     if status is CallStatus.TRANSIENT and tries < TRANSIENT_MAX_ATTEMPTS:
                         logger.info("llm role=%s endpoint=%s model=%s transient, retrying once",
@@ -208,7 +208,7 @@ class Router:
 
 
 class RoleLLM:
-    """What get_llm(role) returns: invoke / with_structured_output / bind_tools, each call with failover."""
+    """get_llm(role)이 돌려주는 객체: invoke / with_structured_output / bind_tools, 호출마다 failover한다."""
 
     def __init__(self, router: Router, role: str):
         self.router = router
@@ -225,8 +225,8 @@ class RoleLLM:
         )
 
     def bind_tools(self, tools: list, **kwargs: Any) -> Runnable:
-        """Tool-calling model for agent loops (coach, D44). Every turn is one router call, so a throttled or
-        over-quota endpoint mid-loop switches like any other call."""
+        """에이전트 루프(coach, D44)용 tool-calling 모델. 매 턴이 router 호출 하나라서, 루프 도중 호출 제한이나
+        할당량 초과에 걸린 endpoint도 다른 호출처럼 전환된다."""
         role, router = self.role, self.router
         return RunnableLambda(
             lambda inp: router.run(role, lambda llm: llm.bind_tools(tools, **kwargs).invoke(inp)),
@@ -237,7 +237,7 @@ class RoleLLM:
 def bedrock_factory(endpoint: Endpoint, base_model: str, timeout: int):
     from langchain_aws import ChatBedrockConverse
 
-    # Retries off: botocore would also retry timeouts, 5xx and daily-quota throttles (D32).
+    # 재시도를 끈다: 켜 두면 botocore가 타임아웃, 5xx, 일일 할당량 throttle까지 재시도한다(D32).
     cfg = Config(region_name=endpoint.region, connect_timeout=10, read_timeout=timeout,
                  retries={"mode": "standard", "total_max_attempts": 1})
     return ChatBedrockConverse(model=endpoint.model_id(base_model), region_name=endpoint.region, config=cfg)
@@ -248,7 +248,7 @@ _default_lock = threading.Lock()
 
 
 def default_router() -> Router:
-    """Process-wide router built from config/models.yaml, .env and data/model_status.json."""
+    """config/models.yaml, .env, data/model_status.json으로 만든 프로세스 전체 공용 router."""
     global _default_router
     with _default_lock:
         if _default_router is None:

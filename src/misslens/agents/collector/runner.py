@@ -1,7 +1,7 @@
-"""Drive the Collector graph to the end, handing interrupt② (login wait) to a callback.
+"""Collector 그래프를 끝까지 실행하고, interrupt②(로그인 대기)는 콜백에 넘긴다.
 
-The CLI passes a callback that asks the learner and opens the login window; Streamlit (T9) will show the same
-payload on the 자료 tab and resume with the stored thread_id instead.
+CLI는 학습자에게 묻고 로그인 창을 여는 콜백을 넘긴다. Streamlit(T9)은 대신 같은 payload를 자료 탭에 보여 주고
+저장해 둔 thread_id로 재개한다.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ OnLogin = Callable[[dict], str]  # interrupt payload -> "done" | "abort"
 
 
 def sqlite_checkpointer(path: Path | None = None) -> SqliteSaver:
-    """Checkpoints live apart from ledger.sqlite (§5, §10); data/sandbox/ in sandbox mode (D45)."""
+    """체크포인트는 ledger.sqlite와 따로 둔다(§5, §10). 샌드박스 모드에서는 data/sandbox/에 둔다(D45)."""
     if path is None:
         from misslens.paths import checkpoints_path
 
@@ -39,15 +39,15 @@ def new_thread_id(site: str) -> str:
 
 def run_collect(site: Site, sources: list[Source], fetcher: Any, on_login: OnLogin, *, checkpointer: Any,
                 thread_id: str, **graph_kwargs) -> CollectState:
-    """Start a new run, or continue thread_id if it already has a checkpoint (e.g. after Ctrl-C at the login wait)."""
+    """새 실행을 시작한다. thread_id에 이미 체크포인트가 있으면 이어서 실행한다(예: 로그인 대기 중 Ctrl-C 뒤)."""
     graph = build_collector_graph(site, fetcher, checkpointer=checkpointer, **graph_kwargs)
     cfg = run_config(thread_id)
     try:
         snap = graph.get_state(cfg)
-        if snap.values and snap.next:                    # paused run: resume it
+        if snap.values and snap.next:                    # 멈춘 실행: 재개한다
             pending = [i for t in snap.tasks for i in t.interrupts]
             arg: Any = Command(resume=on_login(pending[0].value)) if pending else None
-        elif snap.values:                                # finished run with this id
+        elif snap.values:                                # 이 id로 이미 끝난 실행
             return snap.values
         else:
             arg = initial_state(site, sources)

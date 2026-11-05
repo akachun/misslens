@@ -1,11 +1,11 @@
-"""Check which endpoint x model combinations respond right now (ARCHITECTURE §6.2, TASK T1-b).
+"""지금 응답하는 엔드포인트 x 모델 조합을 확인한다(ARCHITECTURE §6.2, TASK T1-b).
 
-Model existence is already known from config/models.yaml `availability`; this probes whether each
-listed combination answers now (quota exceeded, throttled, access) and writes data/model_status.json.
-Combinations not in `availability` are never called.
+모델이 있는지는 config/models.yaml의 `availability`로 이미 안다. 이 스크립트는 목록에 있는 조합마다 지금
+응답하는지(할당량 초과, 호출 제한, 접근 권한)를 확인하고 data/model_status.json에 쓴다.
+`availability`에 없는 조합은 호출하지 않는다.
 
-Usage:
-    python scripts/probe_models.py                    # all endpoints x models + structured output check
+사용법:
+    python scripts/probe_models.py                    # 모든 엔드포인트 x 모델 + 구조화 출력 확인
     python scripts/probe_models.py --skip-structured
     BEDROCK_ENDPOINTS=usw2-us python scripts/probe_models.py
 """
@@ -39,7 +39,7 @@ PROBE_TIMEOUT = 60
 
 
 def _client(region: str, timeout: int):
-    # No retries: the probe reports the first response as-is.
+    # 재시도하지 않는다: 첫 응답을 그대로 보고한다.
     cfg = Config(region_name=region, connect_timeout=10, read_timeout=timeout,
                  retries={"total_max_attempts": 1, "mode": "standard"})
     return boto3.client("bedrock-runtime", config=cfg)
@@ -58,7 +58,7 @@ def probe_one(endpoint: Endpoint, base_model: str) -> dict:
         )
         text = "".join(b.get("text", "") for b in resp["output"]["message"]["content"]).strip()
         result.update(status=CallStatus.OK.value, reply=text[:40])
-    except Exception as exc:  # noqa: BLE001 - classified below
+    except Exception as exc:  # noqa: BLE001 - 아래에서 분류한다
         status = classify_error(exc)
         result.update(status=status.value, error=f"{type(exc).__name__}: {exc}"[:300])
     result["latency_ms"] = int((time.monotonic() - started) * 1000)
@@ -66,14 +66,14 @@ def probe_one(endpoint: Endpoint, base_model: str) -> dict:
 
 
 class _ProbeAnswer(BaseModel):
-    """Tiny schema shaped like the real Question (list of options + index)."""
+    """실제 Question과 같은 모양의 작은 스키마(보기 목록 + 인덱스)."""
     options: list[str] = Field(description="Exactly 3 short color names")
     answer_index: int = Field(description="Index of the option that is the color of a clear daytime sky")
     reason_ko: str = Field(description="One short sentence in Korean")
 
 
 def probe_structured(config: ModelConfig, endpoints: list[Endpoint], results: list[dict]) -> dict:
-    """One structured-output call with the generator model on the first endpoint that answered."""
+    """처음으로 응답한 엔드포인트에서 generator 모델로 구조화 출력 호출을 한 번 한다."""
     from langchain_aws import ChatBedrockConverse
 
     role = config.roles["generator"]
@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         "probed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "endpoints_order": [e.name for e in endpoints],
         "results": results,
-        # llm.py starts these combinations in cooldown (§6.2).
+        # llm.py는 이 조합들을 cooldown 상태로 시작한다(§6.2).
         "quota_exceeded": [f"{r['endpoint']}:{r['model']}" for r in results if r["status"] == "quota_exceeded"],
         "structured_output": structured,
         "role_coverage": coverage,

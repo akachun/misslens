@@ -38,7 +38,7 @@ def ledger():
 
 
 def make_set(lg, tasks, *, exam=EXAM):
-    """tasks: list of (task_id, payload). Returns (set_id, [question ids])."""
+    """tasks: (task_id, payload) 목록. (set_id, [question id 목록])을 돌려준다."""
     sid = lg.create_set(exam, len(tasks))
     qids = [lg.add_question(sid, seq=i, task_id=t, domain=t.split(".")[0], blueprint_version=1, payload=p)
             for i, (t, p) in enumerate(tasks)]
@@ -46,15 +46,15 @@ def make_set(lg, tasks, *, exam=EXAM):
     return sid, qids
 
 
-# --- judgement table (§4.2) -----------------------------------------------------------------
+# --- 판정 표(§4.2) -----------------------------------------------------------------
 
 @pytest.mark.parametrize("first_correct, is_decoy, reask_correct, confident, expected", [
     (False, False, True, True, "reading"),
     (False, False, True, False, "uncertain"),
     (False, False, False, True, "concept"),
     (False, False, False, False, "concept"),
-    (False, False, None, None, "concept"),   # same-language exam: no re-ask
-    (True, True, True, True, None),          # decoy: no judgement
+    (False, False, None, None, "concept"),   # 같은 언어 시험: 재질문 없음
+    (True, True, True, True, None),          # 미끼: 판정 없음
     (True, True, False, False, None),
 ])
 def test_judge_table(first_correct, is_decoy, reask_correct, confident, expected):
@@ -71,7 +71,7 @@ def test_missed_phrase_is_violates_of_first_choice_on_real_misses(item):
     assert missed_phrase("uncertain", p, item["first_choice"]) is None
 
 
-# --- submission transaction -----------------------------------------------------------------
+# --- 제출 트랜잭션 -----------------------------------------------------------------
 
 def test_submit_grades_and_blocks_double_submit(ledger):
     sid, (q1, q2, q3) = make_set(ledger, [("1.1", payload(0)), ("1.2", payload(2)), ("2.1", payload(1))])
@@ -90,13 +90,13 @@ def test_submit_is_atomic_on_bad_answer(ledger):
         ledger.submit_set(sid, [Answer(q1, 0, 1), Answer(q2, 9, 1)])
     assert ledger.set_attempts(sid) == []
     assert ledger.get_set(sid)["status"] == "in_progress"
-    ledger.submit_set(sid, [Answer(q1, 0, 1), Answer(q2, 0, 1)])  # still submittable
+    ledger.submit_set(sid, [Answer(q1, 0, 1), Answer(q2, 0, 1)])  # 아직 제출할 수 있다
 
 
 def test_submit_requires_every_ready_question(ledger):
     sid, (q1, q2) = make_set(ledger, [("1.1", payload(0)), ("1.2", payload(0))])
     with pytest.raises(LedgerError):
-        ledger.submit_set(sid, [Answer(q1, 0, 1)])           # q2 left out -> rejected, not dropped
+        ledger.submit_set(sid, [Answer(q1, 0, 1)])           # q2 누락 -> 버리지 않고 거부
     assert ledger.get_set(sid)["status"] == "in_progress"
     ledger.submit_set(sid, [Answer(q1, 0, 1), Answer(q2, None, 1)])
     assert task_accuracy(ledger, EXAM)["1.2"].correct == 0
@@ -108,7 +108,7 @@ def test_failed_question_cannot_be_answered(ledger):
     bad = ledger.add_question(sid, seq=1, task_id="1.2", domain="d1", blueprint_version=1, payload=None, status="failed")
     with pytest.raises(LedgerError):
         ledger.submit_set(sid, [Answer(ok, 0, 1), Answer(bad, 0, 1)])
-    ledger.submit_set(sid, [Answer(ok, 0, 1)])                # failed slots need no answer
+    ledger.submit_set(sid, [Answer(ok, 0, 1)])                # 실패한 슬롯은 답이 필요 없다
     sid = ledger.create_set(EXAM, 1)
     with pytest.raises(ValueError):
         ledger.add_question(sid, seq=2, task_id="1.3", domain="d1", blueprint_version=1, payload=None)
@@ -131,10 +131,10 @@ def test_concurrent_double_submit_only_one_wins(ledger):
     assert sorted(results) == ["blocked"] * 4 + ["ok"]
 
 
-# --- review -----------------------------------------------------------------------------------
+# --- 리뷰 -----------------------------------------------------------------------------------
 
 def submitted_set(ledger):
-    """4 questions: two misses (chose B, chose C), two correct."""
+    """문제 4개: 실수 2개(B 선택, C 선택), 정답 2개."""
     sid, qs = make_set(ledger, [("1.1", payload(0)), ("1.2", payload(0)), ("2.1", payload(0)), ("2.2", payload(0))])
     a = ledger.submit_set(sid, [Answer(qs[0], 1, 10), Answer(qs[1], 2, 20), Answer(qs[2], 0, 30), Answer(qs[3], 0, 40)])
     return sid, a
@@ -143,10 +143,10 @@ def submitted_set(ledger):
 def test_review_applies_table_and_records_phrase(ledger):
     sid, a = submitted_set(ledger)
     ledger.record_review(sid, [
-        ReaskAnswer(a[0], False, 0, True),    # miss -> right + sure  = reading, phrase = violates[B]
-        ReaskAnswer(a[1], False, 0, False),   # miss -> right + guess = uncertain
-        ReaskAnswer(a[2], True, 0, True),     # decoy correct
-        ReaskAnswer(a[3], True, 3, True),     # decoy wrong
+        ReaskAnswer(a[0], False, 0, True),    # 실수 -> 정답 + 확신  = reading, 문구 = violates[B]
+        ReaskAnswer(a[1], False, 0, False),   # 실수 -> 정답 + 추측 = uncertain
+        ReaskAnswer(a[2], True, 0, True),     # 미끼 정답
+        ReaskAnswer(a[3], True, 3, True),     # 미끼 오답
     ])
     rows = {r["id"]: r for r in ledger.set_attempts(sid)}
     assert rows[a[0]]["miss_type"] == "reading" and rows[a[0]]["missed_phrase"] == "kc-b"
@@ -155,23 +155,23 @@ def test_review_applies_table_and_records_phrase(ledger):
     assert ledger.get_set(sid)["status"] == "reviewed"
     mb = miss_breakdown(ledger, EXAM, set_id=sid)
     assert (mb.reading, mb.uncertain, mb.concept) == (1, 1, 0)
-    assert mb.reading_ratio == 1.0                 # uncertain excluded from both sides
+    assert mb.reading_ratio == 1.0                 # uncertain은 양쪽 모두에서 제외
     assert mb.baseline == 0.5
 
 
 @pytest.mark.parametrize("bad", [
-    lambda a: [ReaskAnswer(a[0], False, 0, True)],                                    # a miss left out
-    lambda a: [ReaskAnswer(a[0], False, 0, True), ReaskAnswer(a[1], True, 0, True)],  # miss as decoy
+    lambda a: [ReaskAnswer(a[0], False, 0, True)],                                    # 실수 하나 누락
+    lambda a: [ReaskAnswer(a[0], False, 0, True), ReaskAnswer(a[1], True, 0, True)],  # 실수를 미끼로
     lambda a: [ReaskAnswer(a[0], False, 0, True), ReaskAnswer(a[1], False, 0, True),
-               ReaskAnswer(a[2], False, 0, True)],                                     # correct not as decoy
-    lambda a: [ReaskAnswer(a[0], False, None, None), ReaskAnswer(a[1], False, 0, True)],  # missing re-ask
-    lambda a: [ReaskAnswer(a[0], False, 7, True), ReaskAnswer(a[1], False, 0, True)],     # reask out of range
+               ReaskAnswer(a[2], False, 0, True)],                                     # 정답을 미끼가 아닌 것으로
+    lambda a: [ReaskAnswer(a[0], False, None, None), ReaskAnswer(a[1], False, 0, True)],  # 재질문 누락
+    lambda a: [ReaskAnswer(a[0], False, 7, True), ReaskAnswer(a[1], False, 0, True)],     # 재질문 범위 밖
 ])
 def test_review_rejects_inconsistent_input(ledger, bad):
     sid, a = submitted_set(ledger)
     with pytest.raises(LedgerError):
         ledger.record_review(sid, bad(a))
-    assert ledger.get_set(sid)["status"] == "submitted"   # rolled back
+    assert ledger.get_set(sid)["status"] == "submitted"   # 롤백됨
     assert all(r["miss_type"] is None for r in ledger.set_attempts(sid))
 
 
@@ -192,10 +192,10 @@ def test_same_language_review_records_concept(ledger):
     assert miss_breakdown(ledger, EXAM).concept == 2
 
 
-# --- statistics --------------------------------------------------------------------------------
+# --- 통계 --------------------------------------------------------------------------------
 
 def test_task_accuracy_laplace_last_10_and_invalid_excluded(ledger):
-    # 13 attempts on 1.1: first 2 correct, then 11 wrong -> window keeps the last 10 (all wrong).
+    # 1.1에 시도 13번: 처음 2번 정답, 이후 11번 오답 -> 창은 마지막 10번을 유지한다(모두 오답).
     attempt_ids = []
     for i in range(13):
         sid, (q,) = make_set(ledger, [("1.1", payload(0))])
@@ -206,7 +206,7 @@ def test_task_accuracy_laplace_last_10_and_invalid_excluded(ledger):
     for aid in attempt_ids[-2:]:
         ledger.mark_invalid(aid)
     acc = task_accuracy(ledger, EXAM)["1.1"]
-    assert (acc.correct, acc.attempts) == (1, 10)   # 11 valid left; window slides back over one correct
+    assert (acc.correct, acc.attempts) == (1, 10)   # 유효 11개가 남는다. 창이 정답 하나 위로 되돌아간다
 
 
 def test_uncertain_counts_as_wrong_in_accuracy(ledger):
@@ -215,10 +215,10 @@ def test_uncertain_counts_as_wrong_in_accuracy(ledger):
     rows = {r["id"]: r for r in ledger.set_attempts(sid)}
     assert rows[a[0]]["miss_type"] == "uncertain"
     acc = task_accuracy(ledger, EXAM)["1.1"]
-    assert (acc.correct, acc.attempts) == (0, 1)            # uncertain stays wrong
+    assert (acc.correct, acc.attempts) == (0, 1)            # uncertain은 오답으로 남는다
     mb = miss_breakdown(ledger, EXAM)
     assert (mb.uncertain, mb.concept, mb.reading) == (1, 1, 0)
-    assert mb.reading_ratio == 0.0                          # 0 / (0 + 1): uncertain not in denominator
+    assert mb.reading_ratio == 0.0                          # 0 / (0 + 1): uncertain은 분모에 없다
 
 
 def test_task_id_map_merges_old_ids(ledger):
@@ -256,7 +256,7 @@ def test_phrase_correction_only_for_reading_misses(ledger):
     sid, a = submitted_set(ledger)
     ledger.record_review(sid, [ReaskAnswer(a[0], False, 0, False), ReaskAnswer(a[1], False, 1, True),
                                ReaskAnswer(a[2], True, 0, True)])
-    for aid in (a[0], a[1], a[2], a[3]):                    # uncertain, concept, decoy, never re-asked
+    for aid in (a[0], a[1], a[2], a[3]):                    # uncertain, concept, 미끼, 재질문 안 함
         with pytest.raises(LedgerError):
             ledger.correct_missed_phrase(aid, "anything")
     assert top_missed_phrases(ledger, EXAM) == []
@@ -299,7 +299,7 @@ def test_file_db_persists(tmp_path):
 
 
 def test_set_score_counts_valid_first_answers(ledger):
-    sid, a = submitted_set(ledger)          # 2 misses, 2 correct
+    sid, a = submitted_set(ledger)          # 실수 2개, 정답 2개
     assert (set_score(ledger, sid).correct, set_score(ledger, sid).total) == (2, 4)
     ledger.mark_invalid(a[0])
     assert (set_score(ledger, sid).correct, set_score(ledger, sid).total) == (2, 3)

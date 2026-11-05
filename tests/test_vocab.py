@@ -1,4 +1,4 @@
-"""D54: word lists from reviewed sets (verbatim expressions only), cumulative word book, known marks."""
+"""D54: 리뷰한 세트의 단어 목록(원문 그대로의 표현만), 누적 단어장, 아는 단어 표시."""
 
 from __future__ import annotations
 
@@ -38,12 +38,12 @@ def test_clean_items_keeps_verbatim_unique_missed_first(ledger):
     sid, qids = reviewed_set(ledger)
     qs = ledger.set_questions(sid)
     atts = {a["question_id"]: a for a in ledger.set_attempts(sid)}
-    out = clean_items([item(2, "within 12 hours"),                  # right-answer question
-                       item(1, "must not store passwords"),         # missed question: goes first
-                       item(1, "MUST NOT store  passwords"),        # same term, different case/spacing: dropped
-                       item(1, "never retain secrets"),             # not in the text: dropped
-                       item(1, "", meaning="x"),                    # empty: dropped
-                       item(9, "within 12 hours"),                  # no such question: dropped
+    out = clean_items([item(2, "within 12 hours"),                  # 정답 문제
+                       item(1, "must not store passwords"),         # 틀린 문제: 먼저 온다
+                       item(1, "MUST NOT store  passwords"),        # 같은 용어, 다른 대소문자/공백: 버린다
+                       item(1, "never retain secrets"),             # 본문에 없음: 버린다
+                       item(1, "", meaning="x"),                    # 빈 값: 버린다
+                       item(9, "within 12 hours"),                  # 없는 문제: 버린다
                        item(1, "Option 2", kind="general")], qs, atts)
     assert [(o["term"], o["from_miss"]) for o in out] == [("must not store passwords", True), ("Option 2", True),
                                                           ("within 12 hours", False)]
@@ -54,12 +54,12 @@ def test_extract_stores_once_and_reads_back_without_the_model(ledger):
     sid, _ = reviewed_set(ledger)
     llm = FakeRoleLLM([{"items": [item(1, "must not store passwords").model_dump(),
                                   item(1, "agent", kind="technical", meaning="에이전트").model_dump()]},
-                       {"items": []}])                              # follow-up round for Q2 gives nothing
+                       {"items": []}])                              # Q2의 후속 라운드는 아무것도 주지 않는다
     first = extract_vocab(llm, PACK, ledger, sid)
     assert [v["term"] for v in first] == ["must not store passwords", "agent"]
     prompt = llm.prompts[0][1].content
-    assert "MISSED" in prompt or "KEY:" in prompt                   # missed question flagged for the model
-    again = extract_vocab(FakeRoleLLM([]), PACK, ledger, sid)       # an empty fake would raise if called
+    assert "MISSED" in prompt or "KEY:" in prompt                   # 틀린 문제는 모델에 표시된다
+    again = extract_vocab(FakeRoleLLM([]), PACK, ledger, sid)       # 빈 가짜 모델은 호출되면 예외를 낸다
     assert [v["term"] for v in again] == [v["term"] for v in first]
 
 
@@ -88,7 +88,7 @@ def test_context_sentence_finds_the_sentence():
 
 def test_questions_skipped_by_the_model_are_asked_again(ledger):
     sid, _ = reviewed_set(ledger, wrong=(True, False))
-    llm = FakeRoleLLM([{"items": [item(1, "must not store passwords").model_dump()]},     # stops after Q1
+    llm = FakeRoleLLM([{"items": [item(1, "must not store passwords").model_dump()]},     # Q1 뒤에 멈춘다
                        {"items": [item(2, "within 12 hours").model_dump()]}])
     got = extract_vocab(llm, PACK, ledger, sid)
     assert sorted(v["term"] for v in got) == ["must not store passwords", "within 12 hours"]
@@ -100,8 +100,8 @@ def test_long_clauses_only_when_missed(ledger):
     sid, _ = reviewed_set(ledger, wrong=(True, False))
     qs = ledger.set_questions(sid)
     atts = {a["question_id"]: a for a in ledger.set_attempts(sid)}
-    long = "A team builds an agent that must not store passwords"     # 10 words, verbatim in the stem
+    long = "A team builds an agent that must not store passwords"     # 10단어, stem에 원문 그대로
     out = clean_items([item(1, long), item(2, long), item(2, "must not store passwords")], qs, atts)
-    assert [o["term"] for o in out] == ["must not store passwords"]     # long clause dropped in both questions
-    kc = "must not store passwords"                                     # key constraints are short here; a long
-    assert all(len(o["term"].split()) <= 8 or o["term"] == kc for o in out)  # one would pass only for a miss
+    assert [o["term"] for o in out] == ["must not store passwords"]     # 긴 절은 두 문제 모두에서 버린다
+    kc = "must not store passwords"                                     # 여기서는 key constraints가 짧다. 긴 것은
+    assert all(len(o["term"].split()) <= 8 or o["term"] == kc for o in out)  # 실수일 때만 통과한다

@@ -1,4 +1,4 @@
-"""D43: learner self-labels collected during review -> agreement stat and eval export (T10 eval)."""
+"""D43: 리뷰 중 모은 학습자 자기 라벨 -> 일치율 통계와 eval 내보내기(T10 eval)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def ledger():
 
 
 def reviewed_set(ledger, outcomes):
-    """outcomes per question: 'right' | 'reading' | 'concept' | 'uncertain'. Answer is option 0."""
+    """문제별 결과: 'right' | 'reading' | 'concept' | 'uncertain'. 정답은 0번 보기다."""
     sid = ledger.create_set(PACK.exam_id, len(outcomes))
     qids = [ledger.add_question(sid, seq=i, task_id="2.1", domain="d2", blueprint_version=PACK.version,
                                 payload={**draft(0), "task_id": "2.1", "domain": "d2", "scenario_id": None,
@@ -48,7 +48,7 @@ def test_feedback_only_on_reviewed_misses(ledger):
     with pytest.raises(LedgerError):
         ledger.record_miss_feedback(miss, "maybe")
     ledger.record_miss_feedback(miss, "concept")
-    ledger.record_miss_feedback(miss, "reading")                    # changing your mind overwrites
+    ledger.record_miss_feedback(miss, "reading")                    # 마음을 바꾸면 덮어쓴다
     (m,) = ledger.labeled_misses(PACK.exam_id)
     assert m["learner_label"] == "reading" and m["stage"] == "before_explanation"
 
@@ -74,7 +74,7 @@ def test_export_matches_fixture_shape(ledger, tmp_path):
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     (item,) = doc["items"]
     fixture = yaml.safe_load(open("tests/fixtures/eval_misses.yaml", encoding="utf-8"))["items"][0]
-    assert set(fixture) - {"note"} <= set(item)                    # same fields as the T1-a fixture
+    assert set(fixture) - {"note"} <= set(item)                    # T1-a fixture와 같은 필드
     assert item["first_choice"] == 1 and item["violates"][item["answer_index"]] is None
     assert all(kc in item["stem_en"] for kc in item["key_constraints"])
     assert item["self_label"]["miss_type"] == "concept" and item["system"]["miss_type"] == "reading"

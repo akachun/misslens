@@ -1,8 +1,8 @@
-"""Turn uploaded files and pasted text into plain text documents (SERVICE F1).
+"""업로드한 파일과 붙여 넣은 텍스트를 일반 텍스트 문서로 바꾼다(SERVICE F1).
 
-Supported: .pdf (pypdf, page by page), .md / .markdown / .txt, .html / .htm (BeautifulSoup text).
-Files saved by a web fetch tool may start with a "BEGIN UNTRUSTED EXTERNAL CONTENT (source: URL)" marker;
-the marker lines are dropped and the URL becomes the document's source.
+지원 형식: .pdf(pypdf, 페이지 단위), .md / .markdown / .txt, .html / .htm(BeautifulSoup 텍스트).
+웹 fetch 도구로 저장한 파일은 "BEGIN UNTRUSTED EXTERNAL CONTENT (source: URL)" 표시로 시작할 수 있다.
+표시 줄은 지우고 URL은 문서의 source로 쓴다.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ class UnsupportedFile(ValueError):
 @dataclass(frozen=True)
 class Document:
     text: str
-    source: str        # shown in prompts and kept as materials.source_uri
+    source: str        # 프롬프트에 보이고 materials.source_uri로 저장된다
     source_type: str   # 'upload' | 'paste' | 'collect' (materials.source_type)
 
     @property
@@ -33,7 +33,7 @@ class Document:
 
 
 def content_hash(text: str) -> str:
-    """Hash of the text with whitespace normalized, so re-saving a file does not create a duplicate."""
+    """공백을 정규화한 텍스트의 해시. 파일을 다시 저장해도 중복이 생기지 않는다."""
     return hashlib.sha256(" ".join(text.split()).encode("utf-8")).hexdigest()
 
 

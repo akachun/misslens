@@ -1,7 +1,7 @@
-"""Ledger storage: the only module that reads or writes ledger.sqlite (ARCHITECTURE §5, D9, D10).
+"""Ledger 저장소: ledger.sqlite를 읽고 쓰는 유일한 모듈(ARCHITECTURE §5, D9, D10).
 
-Writes that must be atomic (set submission, review) run in one transaction and are guarded by
-quiz_sets.status, so a double submit fails instead of writing twice.
+원자적이어야 하는 쓰기(세트 제출, 리뷰)는 한 트랜잭션에서 실행하고 quiz_sets.status로 막는다.
+그래서 두 번 제출하면 두 번 기록되지 않고 실패한다.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Any
 from misslens.bedrock import PROJECT_ROOT
 from misslens.ledger.judge import judge, missed_phrase
 
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "ledger.sqlite"   # real record; misslens.paths.ledger_path() honours the sandbox
+DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "ledger.sqlite"   # 실제 기록. 샌드박스는 misslens.paths.ledger_path()가 반영한다
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS quiz_sets (
@@ -136,19 +136,19 @@ class LedgerError(RuntimeError):
 
 
 class SetStateError(LedgerError):
-    """The set is not in a state that allows this operation (e.g. double submit)."""
+    """세트가 이 작업을 허용하지 않는 상태다(예: 두 번 제출)."""
 
 
 @dataclass(frozen=True)
 class Answer:
     question_id: int
-    chosen_index: int | None  # None = left unanswered (counts as wrong)
+    chosen_index: int | None  # None = 답하지 않음(오답으로 센다)
     elapsed_ms: int | None
 
 
 @dataclass(frozen=True)
 class ReaskAnswer:
-    """One row of the re-ask form, with reask_choice mapped back to the ORIGINAL option order."""
+    """재질문 양식의 한 행. reask_choice는 '원래' 보기 순서로 되돌려 둔 값이다."""
     attempt_id: int
     is_decoy: bool
     reask_choice: int | None
@@ -168,7 +168,7 @@ class Ledger:
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        # One connection shared across threads (Streamlit, generator thread), serialized by a lock.
+        # 연결 하나를 여러 스레드(Streamlit, 생성기 스레드)가 공유하고, lock으로 직렬화한다.
         self._conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
@@ -194,11 +194,11 @@ class Ledger:
             self._conn.execute("COMMIT")
 
     def _query(self, sql: str, params: tuple | dict = ()) -> list[sqlite3.Row]:
-        """Read helper for the ledger package (stats). Private: rule 1 keeps SQL inside misslens.ledger."""
+        """ledger 패키지(stats)용 읽기 도우미. 비공개다: rule 1에 따라 SQL은 misslens.ledger 안에만 둔다."""
         with self._lock:
             return self._conn.execute(sql, params).fetchall()
 
-    # --- sets and questions ---------------------------------------------------------------
+    # --- 세트와 문제 ---------------------------------------------------------------------
 
     def create_set(self, exam_id: str, size: int) -> int:
         with self._tx() as c:
@@ -207,7 +207,7 @@ class Ledger:
             return int(cur.lastrowid)
 
     def start_set(self, set_id: int) -> None:
-        """First question shown: generating -> in_progress (no-op if already in progress)."""
+        """첫 문제를 보여 줄 때: generating -> in_progress(이미 in_progress면 아무것도 하지 않음)."""
         with self._tx() as c:
             status = self._set_status(c, set_id)
             if status == "generating":
@@ -217,9 +217,9 @@ class Ledger:
 
     def add_question(self, set_id: int, *, seq: int, task_id: str, domain: str, blueprint_version: int,
                      payload: dict[str, Any] | None, status: str = "ready") -> int:
-        """Store a question that PASSED validation (status ready), or a failed slot (§4.1).
+        """검증을 '통과한' 문제(status ready)나 실패한 자리(§4.1)를 저장한다.
 
-        Rule 2: never call this with a question that failed the validator or grounding check.
+        Rule 2: validator나 근거 검증에서 떨어진 문제로는 절대 호출하지 않는다.
         """
         if status == "ready" and payload is None:
             raise ValueError("ready question needs a payload")
@@ -237,10 +237,10 @@ class Ledger:
             return int(cur.lastrowid)
 
     def submit_set(self, set_id: int, answers: list[Answer]) -> list[int]:
-        """Grade and store all answers in one transaction; returns attempt ids in input order.
+        """모든 답을 한 트랜잭션에서 채점하고 저장한다. attempt id를 입력 순서대로 돌려준다.
 
-        `answers` must cover every ready question of the set; pass chosen_index=None for one left
-        unanswered so it counts as wrong instead of silently disappearing from the statistics.
+        `answers`는 세트의 ready 문제를 빠짐없이 담아야 한다. 답하지 않은 문제는 chosen_index=None으로 넘겨,
+        통계에서 조용히 사라지지 않고 오답으로 세어지게 한다.
         """
         with self._tx() as c:
             cur = c.execute("UPDATE quiz_sets SET status='submitted', submitted_at=? "
@@ -273,11 +273,11 @@ class Ledger:
             return ids
 
     def record_review(self, set_id: int, reasks: list[ReaskAnswer], *, reask_skipped: bool = False) -> None:
-        """Apply the §4.2 table and store the review in one transaction.
+        """§4.2 표를 적용해 리뷰를 한 트랜잭션에서 저장한다.
 
-        Every valid miss of the set must be included. Decoys must be attempts answered correctly.
-        reask_skipped=True (exam and learner language are the same): pass misses with
-        reask_choice=None; they are all stored as concept, and no decoys are allowed.
+        세트의 유효한 오답은 모두 포함해야 한다. 미끼는 정답을 맞힌 풀이여야 한다.
+        reask_skipped=True(시험 언어와 학습자 언어가 같음)이면 오답을 reask_choice=None으로 넘긴다.
+        이들은 모두 concept로 저장하며 미끼는 허용하지 않는다.
         """
         with self._tx() as c:
             cur = c.execute("UPDATE quiz_sets SET status='reviewed', reviewed_at=? WHERE id=? AND status='submitted'",
@@ -287,7 +287,7 @@ class Ledger:
             rows = {r["id"]: r for r in c.execute(
                 "SELECT a.id, a.chosen_index, a.is_correct, a.invalid, q.payload_json FROM attempts a "
                 "JOIN questions q ON q.id = a.question_id WHERE a.set_id=?", (set_id,))}
-            # Misses already flagged '문제 이상' are not re-asked (they are out of every statistic).
+            # 이미 '문제 이상'으로 표시된 오답은 다시 묻지 않는다(모든 통계에서 빠져 있다).
             misses = {i for i, r in rows.items() if not r["is_correct"] and not r["invalid"]}
             given = [r.attempt_id for r in reasks]
             if len(given) != len(set(given)):
@@ -324,7 +324,7 @@ class Ledger:
                     c.execute("INSERT INTO missed_phrases (attempt_id, phrase) VALUES (?,?)", (r.attempt_id, phrase))
 
     def correct_missed_phrase(self, attempt_id: int, phrase: str) -> None:
-        """Learner edits the recorded phrase. Only reading misses carry a phrase (§4.2, rule 3)."""
+        """학습자가 기록된 문구를 고친다. 문구는 reading 실수에만 있다(§4.2, rule 3)."""
         with self._tx() as c:
             row = c.execute("SELECT miss_type FROM attempts WHERE id=?", (attempt_id,)).fetchone()
             if row is None:
@@ -336,10 +336,10 @@ class Ledger:
                       (attempt_id, phrase))
 
     def record_miss_feedback(self, attempt_id: int, label: str, *, stage: str = "before_explanation") -> None:
-        """Learner's own view of a reviewed miss, for evaluating the diagnosis (T10 eval, D43).
+        """리뷰한 오답에 대한 학습자 자신의 판단. 진단을 평가하는 데 쓴다(T10 eval, D43).
 
-        Stored apart from miss_type: the judge table stays the only source of the diagnosis (rule 3).
-        Asked after the correct answer is shown but before the verdict and explanation, so it is not biased by them.
+        miss_type과 따로 저장한다: 진단의 출처는 여전히 판정 표뿐이다(rule 3).
+        정답을 보여 준 뒤, 판정과 해설을 보여 주기 전에 묻는다. 그래서 판정과 해설에 영향받지 않는다.
         """
         if label not in ("concept", "reading", "unsure"):
             raise LedgerError(f"unknown label {label!r}")
@@ -354,7 +354,7 @@ class Ledger:
                       "stage=excluded.stage, created_at=excluded.created_at", (attempt_id, label, stage, _now()))
 
     def labeled_misses(self, exam_id: str) -> list[dict[str, Any]]:
-        """Reviewed misses that carry learner feedback, with their question, for eval export (invalid excluded)."""
+        """학습자 피드백이 붙은 리뷰한 오답을 문제와 함께 돌려준다. eval 내보내기용이다(무효 풀이 제외)."""
         out = []
         for r in self._query(
                 "SELECT a.id AS attempt_id, a.chosen_index, a.miss_type, m.phrase AS missed_phrase, f.learner_label,"
@@ -368,16 +368,16 @@ class Ledger:
         return out
 
     def mark_invalid(self, attempt_id: int, invalid: bool = True) -> None:
-        """'문제 이상' (F8): the attempt drops out of every statistic, including phrase ranking."""
+        """'문제 이상'(F8): 이 풀이를 문구 순위를 포함한 모든 통계에서 뺀다."""
         with self._tx() as c:
             if c.execute("UPDATE attempts SET invalid=? WHERE id=?", (int(invalid), attempt_id)).rowcount != 1:
                 raise LedgerError(f"no attempt {attempt_id}")
 
-    # --- materials and failures -----------------------------------------------------------
+    # --- 자료와 실패 기록 ---------------------------------------------------------------
 
     def add_material(self, exam_id: str, *, source_type: str, content_hash: str,
                      source_uri: str | None = None, task_id: str | None = None) -> int | None:
-        """Returns the new id, or None if the same content is already stored for this exam."""
+        """새 id를 돌려준다. 이 시험에 같은 내용이 이미 저장되어 있으면 None을 돌려준다."""
         with self._tx() as c:
             cur = c.execute("INSERT OR IGNORE INTO materials (exam_id, source_type, source_uri, content_hash, task_id,"
                             " collected_at) VALUES (?,?,?,?,?,?)",
@@ -385,7 +385,7 @@ class Ledger:
             return int(cur.lastrowid) if cur.rowcount == 1 else None
 
     def remove_materials(self, exam_id: str, source_uris: list[str]) -> int:
-        """Forget material rows whose chunks were removed from the index (e.g. re-cleaned collection, D48)."""
+        """chunk가 색인에서 지워진 자료 행을 잊는다(예: 다시 정리한 수집본, D48)."""
         if not source_uris:
             return 0
         with self._tx() as c:
@@ -394,9 +394,9 @@ class Ledger:
                             (exam_id, *source_uris))
             return cur.rowcount
 
-    # --- plans, drafts, open sets (D52) ------------------------------------------------------
-    # Not statistics: a plan is what the learner approved, a draft is an answer not yet submitted. Neither feeds
-    # any number until submit_set turns drafts into attempts (rule 1).
+    # --- 계획, 임시 답안, 열린 세트(D52) ---------------------------------------------------
+    # 통계가 아니다: 계획은 학습자가 승인한 것이고, 임시 답안은 아직 제출하지 않은 답이다. submit_set이 임시 답안을
+    # attempts로 바꾸기 전까지는 어느 쪽도 어떤 숫자에도 반영되지 않는다(rule 1).
 
     def record_plan(self, exam_id: str, *, set_id: int | None, kind: str, total: int, counts: dict | None,
                     rationale: str = "", source: str = "", thread_id: str | None = None) -> int:
@@ -412,7 +412,7 @@ class Ledger:
         return self._plan_row(rows[0]) if rows else None
 
     def list_plans(self, exam_id: str, *, kind: str = "plan", limit: int = 20) -> list[dict[str, Any]]:
-        """Newest first, with the linked set's status and progress."""
+        """최신순으로, 연결된 세트의 상태와 진행도를 함께 돌려준다."""
         rows = self._query("SELECT * FROM plans WHERE exam_id=? AND kind=? ORDER BY id DESC LIMIT ?",
                            (exam_id, kind, limit))
         return [self._plan_row(r) for r in rows]
@@ -433,8 +433,8 @@ class Ledger:
 
     def list_sets(self, exam_id: str, *, statuses: tuple[str, ...] = ("submitted", "reviewed"),
                   limit: int = 30) -> list[dict[str, Any]]:
-        """Sets in the given states, newest first, with progress and how they were made (D53).
-        origin: plan | quick | ask (free-text request) | cli | unknown (made before plans were recorded)."""
+        """주어진 상태의 세트를 최신순으로, 진행도와 만들어진 방식과 함께 돌려준다(D53).
+        origin: plan | quick | ask(자유 입력 요청) | cli | unknown(계획을 기록하기 전에 만든 세트)."""
         marks = ",".join("?" * len(statuses))
         rows = self._query(f"SELECT id FROM quiz_sets WHERE exam_id=? AND status IN ({marks}) ORDER BY id DESC LIMIT ?",
                            (exam_id, *statuses, limit))
@@ -454,7 +454,7 @@ class Ledger:
         return out
 
     def open_sets(self, exam_id: str) -> list[dict[str, Any]]:
-        """Sets not submitted yet (generating / in_progress), newest first, with progress."""
+        """아직 제출하지 않은 세트(generating / in_progress)를 최신순으로, 진행도와 함께 돌려준다."""
         rows = self._query("SELECT id FROM quiz_sets WHERE exam_id=? AND status IN ('generating','in_progress')"
                            " ORDER BY id DESC", (exam_id,))
         return [self.set_progress(r["id"]) for r in rows]
@@ -476,10 +476,10 @@ class Ledger:
         return {r["question_id"]: dict(r) for r in self._query(
             "SELECT question_id, chosen_index, elapsed_ms FROM draft_answers WHERE set_id=?", (set_id,))}
 
-    # --- vocabulary (D54) ---------------------------------------------------------------------
+    # --- 단어장(D54) -------------------------------------------------------------------------
 
     def save_vocab(self, exam_id: str, set_id: int, items: list[dict[str, Any]]) -> None:
-        """Replace the set's word list (items from agents.grader.vocab.clean_items)."""
+        """세트의 단어 목록을 교체한다(items는 agents.grader.vocab.clean_items에서 온다)."""
         with self._tx() as c:
             c.execute("DELETE FROM vocab WHERE set_id=?", (set_id,))
             for it in items:
@@ -496,8 +496,8 @@ class Ledger:
             " WHERE v.set_id=? ORDER BY v.from_miss DESC, q.seq, v.id", (set_id,))]
 
     def vocab_book(self, exam_id: str) -> list[dict[str, Any]]:
-        """Every expression across sets: latest meaning, how often it came up, whether it came from a missed
-        question, known mark. Missed first, then most frequent (counts are computed here, rule 1)."""
+        """모든 세트에 걸친 표현 전체: 최신 뜻, 나온 횟수, 틀린 문제에서 나왔는지, 아는 단어 표시.
+        틀린 문제에서 나온 것 먼저, 그다음 자주 나온 순서다(횟수는 여기서 계산한다, rule 1)."""
         rows = self._query(
             "SELECT v.term_key, count(*) AS seen, count(DISTINCT v.set_id) AS sets, max(v.from_miss) AS from_miss,"
             " max(v.id) AS last_id, (k.term_key IS NOT NULL) AS known FROM vocab v"
@@ -528,7 +528,7 @@ class Ledger:
                             " VALUES (?,?,?,?,?)", (exam_id, task_id, tries, reason, _now()))
             return int(cur.lastrowid)
 
-    # --- reads for the core loop ----------------------------------------------------------
+    # --- 핵심 루프용 읽기 ---------------------------------------------------------------
 
     def get_set(self, set_id: int) -> dict[str, Any]:
         rows = self._query("SELECT * FROM quiz_sets WHERE id=?", (set_id,))

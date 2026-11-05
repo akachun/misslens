@@ -1,7 +1,7 @@
-"""Exam pack loader (SERVICE F3, ARCHITECTURE §5, §7).
+"""시험 팩 로더(SERVICE F3, ARCHITECTURE §5, §7).
 
-exams/<exam_id>/exam.yaml is the single source of domains, weights and task statements
-(CLAUDE.md rule 6). Code and prompts get them from here and never copy them.
+exams/<exam_id>/exam.yaml이 영역, 가중치, 세부 항목의 유일한 출처다(CLAUDE.md rule 6).
+코드와 프롬프트는 여기서 가져오며 절대 복사하지 않는다.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ WEIGHT_TOLERANCE = 0.005
 
 
 class Task(BaseModel):
-    # extra="forbid": an unquoted title with commas in a YAML flow mapping ({id: x, title: A, B}) parses as
-    # extra keys; ignoring them silently cut 4 titles at the first comma (fixed in exam.yaml v3).
+    # extra="forbid": YAML flow mapping({id: x, title: A, B})에서 따옴표 없이 쉼표가 든 제목은 추가 키로
+    # 파싱된다. 이를 조용히 무시하다 제목 4개가 첫 쉼표에서 잘렸다(exam.yaml v3에서 수정).
     model_config = ConfigDict(frozen=True, extra="forbid")
     id: str
     title: str
@@ -92,7 +92,7 @@ class ExamPack(BaseModel):
             raise ValueError(f"scenarios reference unknown domains: {bad_dom}")
         return self
 
-    # --- lookups -------------------------------------------------------------------------
+    # --- 조회 ---------------------------------------------------------------------------
 
     @cached_property
     def _task_index(self) -> dict[str, tuple[Domain, Task]]:
@@ -115,31 +115,31 @@ class ExamPack(BaseModel):
             raise KeyError(f"unknown task_id {task_id!r} in exam pack {self.exam_id} v{self.version}") from None
 
     def task_weight(self, task_id: str) -> float:
-        """Per-task share of the exam: domain weight / number of tasks in the domain (§7, D11)."""
+        """세부 항목 하나가 시험에서 차지하는 몫: 영역 가중치 / 영역의 세부 항목 수(§7, D11)."""
         d = self.domain_of(task_id)
         return d.weight / len(d.tasks)
 
     def current_task_id(self, task_id: str) -> str:
-        """Map a task_id from an older version to the current one (unknown IDs pass through)."""
+        """예전 버전의 task_id를 현재 ID로 바꾼다(모르는 ID는 그대로 통과)."""
         return self.task_id_map.get(task_id, task_id)
 
     @property
     def needs_reask(self) -> bool:
-        """Re-ask in the learner language only when it differs from the exam language (§4.2)."""
+        """학습자 언어가 시험 언어와 다를 때만 학습자 언어로 다시 묻는다(§4.2)."""
         return self.exam_language != self.learner_language
 
     def scenarios_for_domain(self, domain_id: str) -> list[Scenario]:
-        """Scenarios whose primary domains include `domain_id` (for scenario-framed questions)."""
+        """주 영역에 `domain_id`가 들어 있는 시나리오(시나리오형 문제용)."""
         return [s for s in self.scenarios if domain_id in s.primary_domains]
 
-    # --- prompt helpers ------------------------------------------------------------------
+    # --- 프롬프트 도우미 ----------------------------------------------------------------
 
     def prompt_out_of_scope(self) -> str:
-        """Topics the exam never tests, as a bullet list for generator prompts."""
+        """시험에 나오지 않는 주제를 생성기 프롬프트용 글머리표 목록으로 돌려준다."""
         return "\n".join(f"- {t}" for t in self.out_of_scope)
 
     def prompt_task_list(self, task_ids: list[str] | None = None) -> str:
-        """Domains and task statements as text for prompts (never hard-code them in prompts)."""
+        """영역과 세부 항목을 프롬프트용 텍스트로 돌려준다(프롬프트에 직접 적지 않는다)."""
         wanted = set(task_ids) if task_ids is not None else None
         lines: list[str] = []
         for d in self.domains:

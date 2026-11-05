@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-# Make tests/fakes.py importable as `fakes`.
+# tests/fakes.py를 `fakes`로 import할 수 있게 한다.
 sys.path.insert(0, str(Path(__file__).parent))
 
 
@@ -10,7 +10,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _no_writes_to_real_collection(tmp_path, monkeypatch):
-    """Every test saves collected pages under tmp_path, never into data/sources/collected/ (found 2026-11-05)."""
+    """모든 테스트는 수집한 페이지를 data/sources/collected/가 아니라 tmp_path 아래에 저장한다(2026-11-05 발견)."""
     import misslens.agents.collector.graph as cg
 
     monkeypatch.setattr(cg, "COLLECTED_DIR", tmp_path / "collected-default")

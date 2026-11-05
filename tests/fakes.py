@@ -1,4 +1,4 @@
-"""Fake LLMs for tests (CLAUDE.md: replace LLMs with GenericFakeChatModel)."""
+"""테스트용 가짜 LLM(CLAUDE.md: LLM은 GenericFakeChatModel로 대체한다)."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from langchain_core.runnables import RunnableLambda
 
 
 class FakeRoleLLM:
-    """Stands in for misslens.llm.RoleLLM.
+    """misslens.llm.RoleLLM 대신 쓴다.
 
-    Each queued response is a dict / pydantic model (returned as JSON by a GenericFakeChatModel and parsed
-    into the requested schema), a plain string (for .invoke), or an Exception (raised on that call).
+    큐에 넣은 응답은 dict / pydantic 모델(GenericFakeChatModel이 JSON으로 돌려주고 요청한 스키마로 파싱한다),
+    일반 문자열(.invoke용), 또는 Exception(그 호출에서 발생시킨다)이다.
     """
 
     def __init__(self, responses: list[Any]):
@@ -30,7 +30,7 @@ class FakeRoleLLM:
         return item
 
     def _model(self, item) -> GenericFakeChatModel:
-        if isinstance(item, AIMessage):          # e.g. a tool call for agent loops
+        if isinstance(item, AIMessage):          # 예: 에이전트 루프용 tool call
             return GenericFakeChatModel(messages=iter([item]))
         if hasattr(item, "model_dump_json"):
             text = item.model_dump_json()
@@ -53,7 +53,7 @@ class FakeRoleLLM:
         return RunnableLambda(run)
 
     def bind_tools(self, tools, **kwargs):
-        """Queued AIMessage items may carry tool_calls; plain strings become a final text answer."""
+        """큐에 넣은 AIMessage는 tool_calls를 담을 수 있다. 일반 문자열은 최종 텍스트 답이 된다."""
         self.bound_tools = [getattr(t, "name", str(t)) for t in tools]
 
         def run(prompt):
@@ -65,7 +65,7 @@ class FakeRoleLLM:
 
 def draft(answer_index: int = 0, *, stem_extra: str = "", kcs=("must not store passwords", "within 12 hours"),
           bad_violates: str | None = None) -> dict:
-    """A QuestionDraft-shaped dict that passes the validator unless told otherwise."""
+    """따로 지정하지 않으면 validator를 통과하는 QuestionDraft 형태의 dict."""
     stem = (f"A team builds an agent that must not store passwords and must answer within 12 hours. {stem_extra}"
             "What should they do?")
     violates = [kcs[0], kcs[1], kcs[0], kcs[1]]

@@ -1,12 +1,12 @@
-"""Planner agent: today's plan from ledger statistics -> interrupt① approval -> approved plan (SERVICE F4, §4.3).
+"""Planner 에이전트: ledger 통계로 오늘 계획 -> interrupt① 승인 -> 승인된 계획(SERVICE F4, §4.3).
 
-The numbers come only from ledger.domain_summary (CLAUDE.md rule 1). A rule-based draft is always computed; the
-planner model (Haiku) may adjust the counts and writes the Korean rationale. Anything the model returns that does
-not validate falls back to the rule-based counts, so a model failure never blocks studying.
+숫자는 ledger.domain_summary에서만 가져온다(CLAUDE.md 규칙 1). 규칙 기반 초안은 항상 계산한다. planner 모델
+(Haiku)은 문제 수를 조정하고 한국어 근거를 쓸 수 있다. 모델이 돌려준 것이 검증을 통과하지 못하면 규칙 기반
+문제 수로 돌아가므로, 모델이 실패해도 공부가 막히지 않는다.
 
 Graph:  START -> draft -> approve --interrupt①--> (approved | cancelled) -> END
-        approve re-asks (another interrupt) when the learner's edited plan is invalid.
-Resume values: {"action": "approve", "counts": {"d1": 3, ...}?}  (counts omitted = approve as drafted)
+        학습자가 고친 계획이 유효하지 않으면 approve가 다시 묻는다(interrupt 한 번 더).
+Resume values: {"action": "approve", "counts": {"d1": 3, ...}?}  (counts 생략 = 초안대로 승인)
                {"action": "cancel"}
 """
 
@@ -35,7 +35,7 @@ class PlanError(ValueError):
 
 class Plan(BaseModel):
     total: int
-    counts: dict[str, int]          # domain id -> questions
+    counts: dict[str, int]          # 영역 id -> 문제 수
     rationale: str = ""
     source: str = "rule"            # "rule" | "model" | "learner"
 
@@ -71,7 +71,7 @@ def validate_counts(pack: ExamPack, counts: dict[str, Any], total: int | None = 
 
 
 def rule_plan(pack: ExamPack, stats: dict[str, DomainSummary], total: int) -> Plan:
-    """Exam weight x (1 + share of never-asked tasks) x (1.5 - accuracy); largest-remainder rounding."""
+    """시험 비중 x (1 + 미출제 세부 항목 비율) x (1.5 - 정답률). 최대 나머지 방식으로 반올림한다."""
     scores = {d.id: d.weight * (1 + stats[d.id].unasked_ratio) * (1.5 - stats[d.id].accuracy) for d in pack.domains}
     z = sum(scores.values())
     raw = {k: total * v / z for k, v in scores.items()}
@@ -142,7 +142,7 @@ def build_planner_graph(pack: ExamPack, ledger: Ledger, llm: Any = None, *, chec
             try:
                 counts = validate_counts(pack, answer["counts"])
             except PlanError as exc:
-                return {"plan_error": str(exc)}          # ask again with the reason
+                return {"plan_error": str(exc)}          # 이유와 함께 다시 묻는다
             if counts != plan.counts:
                 plan = Plan(total=sum(counts.values()), counts=counts, source="learner",
                             rationale=plan.rationale + " (학습자가 문제 수를 고쳤습니다)")

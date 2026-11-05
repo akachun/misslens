@@ -1,4 +1,4 @@
-"""Collector: sources.yaml rules, lesson expansion, safety, interrupt② login wait and resume (TASK T7)."""
+"""Collector: sources.yaml 규칙, 강의 펼치기, 안전장치, interrupt② 로그인 대기와 재개(TASK T7)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def srcs():
 
 
 class FakeFetcher:
-    """Scripted pages. `expire_once` URLs answer with the login redirect the first time they are fetched."""
+    """각본대로 응답하는 페이지. `expire_once` URL은 처음 가져올 때 로그인 리다이렉트로 응답한다."""
 
     def __init__(self, pages: dict[str, FetchResult], expire_once: set[str] = frozenset()):
         self.pages = pages
@@ -115,7 +115,7 @@ def test_invalid_sources_rejected(mutate):
         SourceList.model_validate(raw)
 
 
-# --- lesson expansion ---------------------------------------------------------------------------
+# --- 강의 펼치기 ---------------------------------------------------------------------------
 
 
 def test_lesson_links_one_level_same_course_only(srcs):
@@ -124,7 +124,7 @@ def test_lesson_links_one_level_same_course_only(srcs):
         f"{HOST}/course-a/101", f"{HOST}/course-a/102"]
 
 
-# --- graph --------------------------------------------------------------------------------------
+# --- 그래프 --------------------------------------------------------------------------------------
 
 
 def test_collects_lessons_saves_text_and_reports_empty(srcs, tmp_path):
@@ -136,7 +136,7 @@ def test_collects_lessons_saves_text_and_reports_empty(srcs, tmp_path):
     status = {r["url"]: r["status"] for r in out["results"]}
     assert status == {f"{HOST}/course-a": "expanded", f"{HOST}/course-a/101": "saved",
                       f"{HOST}/course-a/102": "empty", f"{HOST}/page/notes": "saved"}
-    assert clock.slept == [2, 2, 2]  # at least delay_seconds between requests, none before the first
+    assert clock.slept == [2, 2, 2]  # 요청 사이에는 최소 delay_seconds, 첫 요청 전에는 없음
     doc = load_file(next(r["path"] for r in out["results"] if r["status"] == "saved"))
     assert doc.source == f"{HOST}/course-a/101" and "PreToolUse" in doc.text
 
@@ -156,7 +156,7 @@ def test_expired_session_interrupts_then_resumes_at_same_url(srcs, tmp_path):
     payload = out["__interrupt__"][0].value
     assert payload == {"kind": "login", "site": "academy", "login_url": f"{HOST}/auth/login",
                        "url": f"{HOST}/course-a/101", "attempt": 1}
-    assert f.closed == 1  # headless browser released before the learner logs in
+    assert f.closed == 1  # 학습자가 로그인하기 전에 headless 브라우저를 해제한다
     out = g.invoke(Command(resume="done"), cfg)
     assert "__interrupt__" not in out
     assert f.fetched.count(f"{HOST}/course-a/101") == 2
@@ -183,11 +183,11 @@ def test_login_that_never_sticks_stops_after_max_waits(srcs, tmp_path):
     out = run_collect(srcs.sites["academy"], srcs.sources, f, lambda p: "done", checkpointer=InMemorySaver(),
                       thread_id="t5", out_dir=tmp_path, sleep=lambda s: None)
     assert "세션이 확인되지 않아" in out["stopped"]
-    assert len(f.fetched) == 4  # first try + 3 retries after login
+    assert len(f.fetched) == 4  # 첫 시도 + 로그인 후 재시도 3회
 
 
 def test_run_collect_survives_process_restart_at_login_wait(srcs, tmp_path):
-    """Ctrl-C at the login prompt: a new process resumes the same thread_id from the SQLite checkpoint."""
+    """로그인 프롬프트에서 Ctrl-C: 새 프로세스가 SQLite checkpoint에서 같은 thread_id를 재개한다."""
     db = tmp_path / "checkpoints.sqlite"
 
     class Quit(Exception):
@@ -205,7 +205,7 @@ def test_run_collect_survives_process_restart_at_login_wait(srcs, tmp_path):
     f2 = FakeFetcher(course_pages())
     out = run_collect(srcs.sites["academy"], srcs.sources, f2, lambda p: "done", checkpointer=sqlite_checkpointer(db),
                       thread_id="t6", out_dir=tmp_path, sleep=lambda s: None)
-    assert f2.fetched == [f"{HOST}/course-a/102", f"{HOST}/page/notes"]  # nothing fetched twice
+    assert f2.fetched == [f"{HOST}/course-a/102", f"{HOST}/page/notes"]  # 두 번 가져온 것은 없다
     assert [r["status"] for r in out["results"]] == ["expanded", "saved", "empty", "saved"]
 
 
@@ -217,7 +217,7 @@ def test_save_page_keeps_file_when_content_unchanged(tmp_path):
     assert "changed" in p.read_text(encoding="utf-8")
 
 
-# --- CLI pieces ---------------------------------------------------------------------------------
+# --- CLI 부분 ---------------------------------------------------------------------------------
 
 
 def test_login_prompt_answers():
@@ -241,7 +241,7 @@ def test_summary_lists_problems_and_returns_saved_paths():
 
 
 def test_logged_out_course_page_triggers_login_wait(srcs, tmp_path):
-    """Skilljar shows a logged-out course page with a Sign In link instead of redirecting."""
+    """Skilljar는 리다이렉트하는 대신 Sign In 링크가 있는 로그아웃 상태의 강좌 페이지를 보여 준다."""
     pages = course_pages()
     pages[f"{HOST}/course-a"] = page(f"{HOST}/course-a", "Course A", [f"{HOST}/auth/login?next=%2Fcourse-a"])
     out = graph(srcs, FakeFetcher(pages), tmp_path).invoke(
@@ -267,7 +267,7 @@ def test_clean_markdown_drops_menus_keeps_prose():
     assert "Use [hooks](https://x/h) to block" in out and 'claude -p "hi"' in out
 
 
-# --- page chrome and reindex (D48) ---------------------------------------------------------------
+# --- 페이지 장식과 재색인(D48) ---------------------------------------------------------------
 
 PLAYER = """## Lesson title
 Open in Claude
@@ -328,7 +328,7 @@ def test_reindex_replaces_collected_chunks(tmp_path, monkeypatch):
     reindex_collected(CLI(pack, ledger, console=Console(file=out, width=200)), pack, ledger, srcs, ["skilljar"])
 
     sources = [c.source for c in index.chunks]
-    assert "guide.pdf" in sources and url_video not in sources          # guide kept, video-only page gone
+    assert "guide.pdf" in sources and url_video not in sources          # 가이드는 남고, 동영상만 있는 페이지는 사라진다
     assert all("WhiteBlackRed" not in c.text for c in index.chunks)
     assert any(c.source == url_text and "must stay" in c.text for c in index.chunks)
     rows = [tuple(r) for r in ledger._query("SELECT source_uri, content_hash FROM materials")]

@@ -1,8 +1,8 @@
-"""Supervisor routing (SERVICE F10, ARCHITECTURE §2, D6/D20).
+"""Supervisor 라우팅(SERVICE F10, ARCHITECTURE §2, D6/D20).
 
-Commands and buttons arrive with an intent and go straight to a branch (no model call). Free text goes to the
-router model (Haiku 4.5) for {intent, domain, count, confidence}; low confidence or an unknown intent ends with a
-guide message and runs nothing.
+명령과 버튼은 intent를 달고 들어오므로 바로 분기로 간다(모델 호출 없음). 자유 문장은 router 모델(Haiku 4.5)에
+보내 {intent, domain, count, confidence}를 받는다. confidence가 낮거나 intent를 알 수 없으면 안내 메시지로
+끝내고 아무것도 실행하지 않는다.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from misslens.llm import LLMCallError
 
 logger = logging.getLogger(__name__)
 
-INTENTS = ("plan_quiz", "quiz", "status", "collect", "ingest", "submit", "resume")   # resume: buttons only
+INTENTS = ("plan_quiz", "quiz", "status", "collect", "ingest", "submit", "resume")   # resume: 버튼 전용
 MIN_CONFIDENCE = 0.6
 DEFAULT_COUNT = 10
 
@@ -44,7 +44,7 @@ or for a plan is "plan_quiz". Fill domain only when the learner clearly names an
 
 
 def route_text(pack: ExamPack, text: str, llm: Any) -> tuple[str, dict, str | None]:
-    """-> (intent, args, message). intent "end" means: show the message and run nothing."""
+    """-> (intent, args, message). intent "end"는 메시지를 보여 주고 아무것도 실행하지 않는다는 뜻이다."""
     domains = "\n".join(f"- {d.id}: {d.name} ({d.name_native or ''})" for d in pack.domains)
     try:
         out = llm.with_structured_output(RouteDecision).invoke(

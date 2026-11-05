@@ -1,4 +1,4 @@
-"""Ingest agent: uploaded or pasted material -> tagged, searchable chunks (SERVICE F1)."""
+"""Ingest 에이전트: 업로드하거나 붙여 넣은 자료 -> 태그가 붙고 검색 가능한 chunk(SERVICE F1)."""
 
 from misslens.agents.ingest.loaders import Document, UnsupportedFile, from_paste, load_file
 from misslens.agents.ingest.pipeline import Ingestor, IngestResult, split_text

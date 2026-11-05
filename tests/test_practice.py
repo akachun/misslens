@@ -1,4 +1,4 @@
-"""Practice bank: parsing, quality flags, per-task style samples, copy guard (TASK T6-b, D39)."""
+"""연습 문제 은행: 파싱, 품질 플래그, 세부 항목별 문체 예시, 복사 방지(TASK T6-b, D39)."""
 
 from __future__ import annotations
 
@@ -55,9 +55,9 @@ def test_parse_dir_flags_duplicates_unconfirmed_and_disputed(src):
     q = bank["s1q01"]
     assert q.task_id == "2.3" and q.answer_index == 1 and q.options[3] == "four" and q.answer_confirmed
     assert q.source == "https://example.com/quiz"
-    assert not bank["s1q02"].answer_confirmed          # no explanation says "Correct"
-    assert bank["s2q01"].duplicate_of == "s1q01"       # same stem up to case and spaces
-    assert bank["s2q02"].disputed                      # named in the index caveat
+    assert not bank["s1q02"].answer_confirmed          # "Correct"라고 하는 해설이 없다
+    assert bank["s2q01"].duplicate_of == "s1q01"       # 대소문자와 공백을 빼면 같은 stem
+    assert bank["s2q02"].disputed                      # 색인 주의 문구에 이름이 나온다
     assert [q.id for q in bank.values() if q.usable_as_sample] == ["s1q01"]
 
 

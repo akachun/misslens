@@ -1,4 +1,4 @@
-"""Generator and verifier prompts. Exam facts come from the exam pack only (CLAUDE.md rule 6)."""
+"""Generator와 verifier 프롬프트. 시험 정보는 시험 팩에서만 가져온다(CLAUDE.md 규칙 6)."""
 
 from __future__ import annotations
 

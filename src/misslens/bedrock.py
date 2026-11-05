@@ -1,7 +1,7 @@
-"""Bedrock endpoint configuration and error classification (ARCHITECTURE §6.2, §6.3).
+"""Bedrock endpoint 설정과 오류 분류(ARCHITECTURE §6.2, §6.3).
 
-Shared by scripts/probe_models.py and (later) llm.get_llm(). Holds no model IDs or regions;
-everything comes from config/models.yaml.
+scripts/probe_models.py와 (이후) llm.get_llm()이 함께 쓴다. 모델 ID나 리전을 직접 갖지 않고
+모두 config/models.yaml에서 가져온다.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class ModelConfig:
         return base_model in self.availability.get(endpoint.name, [])
 
     def role_models(self) -> list[str]:
-        """Distinct base models used by any role (primary first, then fallbacks), in config order."""
+        """어느 역할이든 쓰는 기본 모델을 중복 없이 설정 순서대로 돌려준다(주 모델 먼저, 그다음 fallback)."""
         seen: list[str] = []
         for role in self.roles.values():
             for key in ("model", "fallback_model"):
@@ -66,7 +66,7 @@ def load_model_config(path: Path = DEFAULT_CONFIG_PATH) -> ModelConfig:
 
 
 def resolve_endpoints(config: ModelConfig, override: str | None = None) -> list[Endpoint]:
-    """Endpoint order: BEDROCK_ENDPOINTS (comma list of names) if set, else config order."""
+    """Endpoint 순서: BEDROCK_ENDPOINTS(쉼표로 구분한 이름 목록)가 있으면 그 순서, 없으면 설정 순서."""
     if override is None:
         override = os.environ.get("BEDROCK_ENDPOINTS")
     if not override or not override.strip():
@@ -85,13 +85,13 @@ def resolve_endpoints(config: ModelConfig, override: str | None = None) -> list[
 
 class CallStatus(str, Enum):
     OK = "ok"
-    THROTTLED = "throttled"            # rate limit -> adaptive retry, then cooldown
-    QUOTA_EXCEEDED = "quota_exceeded"  # daily/cumulative quota -> cooldown immediately
-    UNAVAILABLE = "unavailable"        # model not in region / no access -> skip for process lifetime
-    TRANSIENT = "transient"            # timeout / connection -> retry once
-    INVALID_REQUEST = "invalid_request"  # malformed request -> fail now, no switching
-    AUTH = "auth"                      # credentials problem -> abort, not an endpoint issue
-    ERROR = "error"                    # anything else
+    THROTTLED = "throttled"            # 호출 제한 -> adaptive retry 후 cooldown
+    QUOTA_EXCEEDED = "quota_exceeded"  # 일일/누적 할당량 -> 즉시 cooldown
+    UNAVAILABLE = "unavailable"        # 리전에 모델이 없거나 접근 권한 없음 -> 프로세스가 끝날 때까지 건너뜀
+    TRANSIENT = "transient"            # 타임아웃 / 연결 오류 -> 한 번 재시도
+    INVALID_REQUEST = "invalid_request"  # 잘못된 요청 -> 바로 실패, 전환하지 않음
+    AUTH = "auth"                      # 자격 증명 문제 -> 중단, endpoint 문제가 아님
+    ERROR = "error"                    # 그 밖의 모든 경우
 
 
 _QUOTA_MARKERS = ("too many tokens per day", "tokens per day", "quota", "daily limit")
@@ -99,7 +99,7 @@ _MODEL_ID_MARKERS = ("model identifier", "model id", "on-demand throughput")
 
 
 def classify_error(exc: BaseException) -> CallStatus:
-    """Map a boto/botocore exception to the §6.3 switching action."""
+    """boto/botocore 예외를 §6.3의 전환 동작으로 대응시킨다."""
     from botocore.exceptions import (
         ClientError,
         ConnectionError as BotoConnectionError,
@@ -119,15 +119,15 @@ def classify_error(exc: BaseException) -> CallStatus:
         if code == "ServiceQuotaExceededException":
             return CallStatus.QUOTA_EXCEEDED
         if code in ("ThrottlingException", "TooManyRequestsException"):
-            # Bedrock reports daily token quota as ThrottlingException with a distinct message.
+            # Bedrock은 일일 토큰 할당량 초과를 별도 메시지가 붙은 ThrottlingException으로 알린다.
             if any(m in message for m in _QUOTA_MARKERS):
                 return CallStatus.QUOTA_EXCEEDED
             return CallStatus.THROTTLED
         if code in ("ResourceNotFoundException", "AccessDeniedException"):
             return CallStatus.UNAVAILABLE
         if code == "ValidationException":
-            # Only a bad model ID for this region marks the combination unavailable (§6.3).
-            # Other validation errors (e.g. input too long) are request bugs: switching would not help.
+            # 이 리전에 맞지 않는 모델 ID일 때만 그 조합을 unavailable로 표시한다(§6.3).
+            # 다른 검증 오류(예: 입력이 너무 김)는 요청의 버그라서 전환해도 소용없다.
             if any(m in message for m in _MODEL_ID_MARKERS):
                 return CallStatus.UNAVAILABLE
             return CallStatus.INVALID_REQUEST

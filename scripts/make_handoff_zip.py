@@ -1,17 +1,16 @@
-"""Build a private hand-off zip: the project plus the working data, without secrets (D56).
+"""비공개 전달용 zip을 만든다: 프로젝트와 작업 데이터를 담고, 비밀 정보는 뺀다(D56).
 
-The public repository leaves data/ and secrets/ out (CLAUDE.md rule 7). For the instructor's hands-on review we
-send, privately, a zip that runs like the current setup: the index, the source material it was built from, the
-practice style bank and one learning record. Everything else is excluded on purpose.
+공개 저장소에는 data/와 secrets/가 빠져 있다(CLAUDE.md 규칙 7). 강사의 실습 검토를 위해, 지금 환경처럼 돌아가는
+zip을 비공개로 보낸다: 색인, 색인을 만든 원본 자료, 연습 문제 문체 은행, 학습 기록 하나. 나머지는 모두 일부러 뺀다.
 
-    python scripts/make_handoff_zip.py --list                 # show what would go in, change nothing
+    python scripts/make_handoff_zip.py --list                 # 무엇이 들어갈지 보여 주고, 아무것도 바꾸지 않는다
     python scripts/make_handoff_zip.py                        # dist/misslens-handoff-<date>.zip
-    python scripts/make_handoff_zip.py --record real          # ship the real record instead of the sandbox one
-    python scripts/make_handoff_zip.py --record none          # no learning record (starts empty)
+    python scripts/make_handoff_zip.py --record real          # 샌드박스 기록 대신 실제 기록을 넣는다
+    python scripts/make_handoff_zip.py --record none          # 학습 기록 없음(빈 상태로 시작)
 
-Safety: allow-list only (git-tracked files + the data folders below), a fixed deny-list on top, SQLite copied
-through the backup API (safe while the app is running), and a final scan of every text file for credentials;
-any hit stops the build.
+안전장치: 허용 목록만 쓴다(git이 추적하는 파일 + 아래 데이터 폴더). 그 위에 고정 거부 목록을 적용하고, SQLite는
+backup API로 복사하며(앱이 실행 중이어도 안전), 마지막으로 모든 텍스트 파일에서 자격 증명을 검사한다.
+하나라도 걸리면 빌드를 멈춘다.
 """
 
 from __future__ import annotations
@@ -28,19 +27,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Data folders that make the app work like the current setup (relative to the project root).
+# 앱이 지금 환경처럼 돌아가게 하는 데이터 폴더(프로젝트 루트 기준 상대 경로).
 DATA_DIRS = ["data/index", "data/sources/exam_guide", "data/sources/collected", "data/sources/practice_problems",
              "data/practice"]
 RECORDS = {"sandbox": "data/sandbox/ledger.sqlite", "real": "data/ledger.sqlite"}
 RECORD_TARGET = "data/ledger.sqlite"
 
-# Never shipped, even if tracked or inside an allowed folder.
+# git이 추적하거나 허용된 폴더 안에 있더라도 절대 넣지 않는다.
 DENY = [r"(^|/)\.env($|\.)", r"^secrets(/|$)", r"(^|/)\.venv(/|$)", r"(^|/)__pycache__(/|$)", r"(^|/)\.gstack(/|$)",
         r"\.egg-info(/|$)", r"(^|/)\.DS_Store$", r"checkpoints\.sqlite", r"model_status\.json$", r"^data/eval(/|$)",
         r"^data/sources/uploads(/|$)", r"\.sqlite-(wal|shm)$", r"(^|/)\.pytest_cache(/|$)", r"^dist(/|$)"]
 DENY_RE = [re.compile(p) for p in DENY]
 
-# Credential patterns checked in every text file that would be shipped.
+# 내보낼 모든 텍스트 파일에서 검사하는 자격 증명 패턴.
 SECRET_RE = [
     (re.compile(r"AKIA[0-9A-Z]{16}"), "AWS access key id"),
     (re.compile(r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+]{30,}"), "AWS secret key"),
@@ -154,7 +153,7 @@ def data_files() -> list[str]:
 
 
 def plan(record: str) -> tuple[list[str], list[str], str | None]:
-    """-> (included paths, denied paths that were candidates, record source path or None)."""
+    """-> (포함할 경로, 후보였지만 거부된 경로, 학습 기록 원본 경로 또는 None)."""
     candidates = sorted(set(tracked_files()) | set(data_files()))
     included = [p for p in candidates if not denied(p)]
     dropped = [p for p in candidates if denied(p)]
@@ -180,7 +179,7 @@ def scan_secrets(paths: list[Path], root: Path) -> list[str]:
 
 
 def copy_sqlite(src: Path, dst: Path) -> None:
-    """Consistent snapshot even while the app writes (WAL); the copy has no -wal/-shm companions."""
+    """앱이 쓰는 중(WAL)에도 일관된 스냅샷을 만든다. 복사본에는 -wal/-shm 파일이 딸려 오지 않는다."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(f"file:{src}?mode=ro", uri=True) as s, sqlite3.connect(dst) as d:
         s.backup(d)

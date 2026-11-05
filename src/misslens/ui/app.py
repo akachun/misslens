@@ -1,12 +1,12 @@
-"""Streamlit UI: 학습 · 자료 · 현황 · 계획 tabs over the Supervisor graph (SERVICE §5, ARCHITECTURE §10, T9).
+"""Streamlit UI: Supervisor 그래프 위의 학습 · 자료 · 현황 · 계획 탭(SERVICE §5, ARCHITECTURE §10, T9).
 
-Every agent request goes through the Supervisor graph and runs as a background *job* keyed by its thread_id, so
-long work (collection, generation start) never freezes the page and an interrupt (plan approval, login wait) is
-read back from the checkpointer. The plan thread_id and the active set id are mirrored into the URL
-(`?plan=<thread>&set=<id>`), so a refresh resumes the approval screen or the set in progress.
+에이전트 요청은 모두 Supervisor 그래프를 거치며, thread_id를 키로 하는 백그라운드 *job*으로 실행된다. 그래서
+오래 걸리는 작업(수집, 생성 시작)이 페이지를 멈추지 않고, interrupt(계획 승인, 로그인 대기)는 checkpointer에서
+다시 읽어 온다. 계획 thread_id와 진행 중인 set id는 URL(`?plan=<thread>&set=<id>`)에도 반영되므로, 새로고침해도
+승인 화면이나 진행 중인 세트가 이어진다.
 
-Solving and the review form are plain widgets (no interrupts, CLAUDE.md rule 4). Questions shown come from the
-ledger (status 'ready' only: they passed the validator and grounding check, rule 2).
+풀이와 리뷰 폼은 일반 위젯이다(interrupt 없음, CLAUDE.md 규칙 4). 보여 주는 문제는 ledger에서 가져온다
+(status 'ready'만: validator와 근거 검증을 통과한 문제, 규칙 2).
 """
 
 from __future__ import annotations
@@ -56,26 +56,26 @@ VERDICT_HELP = """처음 영어로 틀린 문제를 리뷰에서 **한국어로 
 
 **미끼**는 처음에 맞힌 문제를 섞어 다시 물은 것입니다. 미끼를 한국어로 다시 맞힌 비율이 **미끼 기준선**이고, '다시 보면 맞히는 효과'를 따로 보여 줍니다. 해석 실수 비율은 이 기준선과 나란히 봅니다."""
 SUBMIT_HINT = "Ctrl+Enter(macOS는 ⌘+Enter)로 보내기 · Enter는 줄바꿈"
-# Wider sidebar so a long request stays readable (users can still drag it wider). Only while expanded: Streamlit
-# hides a collapsed sidebar by shifting it by its own width, so a fixed width there left an empty 380px strip and
-# the main area did not grow (demo feedback).
+# 긴 요청도 읽기 쉽게 사이드바를 넓힌다(사용자가 끌어서 더 넓힐 수도 있다). 펼쳐져 있을 때만 적용한다: Streamlit은
+# 접힌 사이드바를 자기 너비만큼 밀어서 숨기므로, 거기에 고정 너비를 주면 빈 380px 띠가 남고
+# 본문 영역이 넓어지지 않았다(시연 피드백).
 SIDEBAR_CSS = "<style>section[data-testid='stSidebar'][data-collapsed='false']{min-width:380px}</style>"
 
 
-# --- resources (one per process) -------------------------------------------------------------
+# --- 리소스(프로세스당 하나) -------------------------------------------------------------
 
 @dataclass
 class Resources:
     pack: Any
     ledger: Any
     svc: Any                      # misslens.graph.Services
-    graph: Any                    # compiled Supervisor graph with a checkpointer
+    graph: Any                    # checkpointer를 붙여 컴파일한 Supervisor 그래프
     explainer: Any = None
     index_stats: Callable[[], dict] = lambda: {}
     upload_dir: Path = UPLOAD_DIR
     jobs: dict = field(default_factory=dict)   # thread_id -> {"thread", "out", "error"}
-    coach_checkpointer: Any = None             # keeps each miss's coach conversation (None: in-memory)
-    vocab_llm: Any = None                      # vocab role (D54); None hides the word list generation
+    coach_checkpointer: Any = None             # 오답마다 코치 대화를 보관한다(None: 메모리)
+    vocab_llm: Any = None                      # vocab 역할(D54). None이면 단어장 생성을 숨긴다
 
     def __post_init__(self) -> None:
         if self.coach_checkpointer is None:
@@ -109,7 +109,7 @@ def default_resources() -> Resources:
                      coach_checkpointer=sqlite_checkpointer(), vocab_llm=get_llm("vocab"))
 
 
-RESOURCE_FACTORY: Callable[[], Resources] | None = None   # tests replace this
+RESOURCE_FACTORY: Callable[[], Resources] | None = None   # 테스트에서 바꿔 끼운다
 
 
 @st.cache_resource
@@ -117,7 +117,7 @@ def resources() -> Resources:
     return (RESOURCE_FACTORY or default_resources)()
 
 
-# --- supervisor jobs ---------------------------------------------------------------------------
+# --- supervisor job ---------------------------------------------------------------------------
 
 def run_config(thread_id: str) -> dict:
     return {"configurable": {"thread_id": thread_id}, "recursion_limit": 2000}
@@ -133,7 +133,7 @@ def start_job(r: Resources, thread_id: str, payload: Any) -> None:
     def work() -> None:
         try:
             job["out"] = r.graph.invoke(payload, run_config(thread_id))
-        except Exception as exc:  # noqa: BLE001 - shown to the learner, never swallowed
+        except Exception as exc:  # noqa: BLE001 - 학습자에게 보여 주며, 삼키지 않는다
             job["error"] = f"{type(exc).__name__}: {exc}"
 
     job["thread"] = threading.Thread(target=work, name=f"job-{thread_id}", daemon=True)
@@ -143,7 +143,7 @@ def start_job(r: Resources, thread_id: str, payload: Any) -> None:
 
 def job_state(r: Resources, thread_id: str) -> tuple[str, Any]:
     """-> ("running", None) | ("error", msg) | ("interrupt", payload) | ("done", values) | ("none", None).
-    Falls back to the checkpointer when the job is not in memory (page refresh after a restart)."""
+    job이 메모리에 없으면(재시작 후 페이지 새로고침) checkpointer에서 읽는다."""
     job = r.jobs.get(thread_id)
     if job is not None:
         if job["thread"].is_alive():
@@ -160,20 +160,20 @@ def job_state(r: Resources, thread_id: str) -> tuple[str, Any]:
 
 
 def wait_rerun() -> None:
-    """A panel is waiting for background work. The page then polls through one small status fragment and reruns
-    only when something actually changed (D55); a long job in one tab never hides the others."""
+    """패널이 백그라운드 작업을 기다리는 중임을 표시한다. 그러면 페이지는 작은 상태 fragment 하나로 폴링하고,
+    실제로 무언가 바뀌었을 때만 rerun한다(D55). 한 탭의 긴 job이 다른 탭을 가리지 않는다."""
     st.session_state["_poll"] = True
 
 
-# "fragment": poll in a status fragment, full rerun only on change (browser). "rerun": sleep + full rerun after
-# every render (AppTest cannot drive run_every fragments, so tests use this).
+# "fragment": 상태 fragment에서 폴링하고, 바뀌었을 때만 전체 rerun(브라우저). "rerun": 매 렌더링 뒤
+# sleep + 전체 rerun(AppTest는 run_every fragment를 돌릴 수 없어서 테스트에서 쓴다).
 POLL_MODE = "fragment"
 JOB_LABELS = {"ui-ask": "요청 처리", "ui-plan": "계획 세우기", "ui-quiz": "세트 준비", "ui-resume": "문제 생성 재개",
               "ui-collect": "교안 수집", "ui-ingest": "자료 색인", "vocab": "단어장 만들기"}
 
 
 def background_signature(r: Resources) -> tuple:
-    """What the waiting panels depend on: which jobs are alive or failed, and how far each live stream got."""
+    """기다리는 패널이 의존하는 값: 어떤 job이 살아 있거나 실패했는지, 살아 있는 stream마다 어디까지 왔는지."""
     jobs = tuple(sorted((k, bool(j.get("thread") and j["thread"].is_alive()), bool(j.get("error")))
                         for k, j in r.jobs.items()))
     streams = tuple(sorted((sid, s.running, r.ledger.set_progress(sid)["ready"])
@@ -193,7 +193,7 @@ def activity_lines(r: Resources) -> list[str]:
 
 
 def status_ticker(r: Resources) -> None:
-    """The single loading indicator: refreshes itself every POLL_SECONDS without redrawing the page."""
+    """유일한 로딩 표시: 페이지를 다시 그리지 않고 POLL_SECONDS마다 스스로 새로 고친다."""
     @st.fragment(run_every=POLL_SECONDS)
     def _tick() -> None:
         lines = activity_lines(r)
@@ -204,10 +204,10 @@ def status_ticker(r: Resources) -> None:
     _tick()
 
 
-# --- quiz session ------------------------------------------------------------------------------
+# --- 풀이 세션 ------------------------------------------------------------------------------
 
 def start_quiz(r: Resources, set_id: int) -> None:
-    """Open a set where it stands: answers saved as drafts come back, submitted sets go to review/diagnosis (D52)."""
+    """세트를 현재 상태 그대로 연다: 임시 저장한 답은 되살리고, 제출한 세트는 리뷰/진단으로 보낸다(D52)."""
     s = r.ledger.get_set(set_id)
     drafts = r.ledger.draft_answers(set_id)
     st.session_state.quiz = {
@@ -219,7 +219,7 @@ def start_quiz(r: Resources, set_id: int) -> None:
 
 
 def adopt_result(values: dict, thread_id: str) -> None:
-    """Handle a finished Supervisor run once: a new set starts the quiz."""
+    """끝난 Supervisor 실행을 한 번만 처리한다: 새 세트면 풀이를 시작한다."""
     done = st.session_state.setdefault("adopted", set())
     if thread_id in done:
         return
@@ -246,7 +246,7 @@ def tab_study(r: Resources) -> None:
 
 
 def request_resume(r: Resources, set_id: int) -> None:
-    """Restart generation for a set whose stream is gone (server restart) and open it."""
+    """stream이 사라진(서버 재시작) 세트의 생성을 다시 시작하고 세트를 연다."""
     prog = r.ledger.set_progress(set_id)
     live = r.svc.streams.get(set_id)
     if (prog["status"] in ("generating", "in_progress") and prog["ready"] < prog["size"]
@@ -276,7 +276,7 @@ ORIGIN_KO = {"plan": "계획", "quick": "바로 풀기", "ask": "자연어 요�
 
 
 def past_sets_panel(r: Resources) -> None:
-    """Every submitted set, whichever way it was made (plan, quick start, free text, CLI), newest first (D53)."""
+    """제출한 모든 세트를, 만든 방식(계획, 바로 풀기, 자연어, CLI)과 상관없이 최신순으로 보여 준다(D53)."""
     sets = r.ledger.list_sets(r.pack.exam_id)
     if not sets:
         return
@@ -340,11 +340,11 @@ def study_solve(r: Resources, quiz: dict) -> None:
         reset_quiz()
     for note in quiz["notes"]:
         st.caption(note)
-    # The next question is the first one without an answer, so a resumed set continues where it stopped.
+    # 다음 문제는 답이 없는 첫 문제이므로, 이어 푸는 세트는 멈춘 곳부터 계속된다.
     quiz["idx"] = next((i for i, q in enumerate(ready) if q["id"] not in quiz["answers"]), len(ready))
     if quiz["idx"] < len(ready):
         if not quiz.get("started"):
-            # First question on screen: generating -> in_progress, as the CLI does (§4.1).
+            # 첫 문제가 화면에 나오면 generating -> in_progress로 바꾼다. CLI와 같다(§4.1).
             if r.ledger.get_set(sid)["status"] == "generating":
                 r.ledger.start_set(sid)
             quiz["started"] = True
@@ -358,7 +358,7 @@ def study_solve(r: Resources, quiz: dict) -> None:
         if st.button("다음", key=f"next_{q['id']}", type="primary"):
             ans = {"question_id": q["id"], "chosen_index": choice,
                    "elapsed_ms": int((time.monotonic() - quiz["shown"][q["id"]]) * 1000)}
-            r.ledger.save_draft_answer(sid, q["id"], choice, ans["elapsed_ms"])   # survives a closed tab or restart
+            r.ledger.save_draft_answer(sid, q["id"], choice, ans["elapsed_ms"])   # 탭을 닫거나 재시작해도 남는다
             quiz["answers"][q["id"]] = ans
             st.rerun()
         return
@@ -425,7 +425,7 @@ SELF_LABELS = {"concept": "몰랐던 내용(개념)", "reading": "알았는데 �
 
 
 def study_self_check(r: Resources, quiz: dict) -> None:
-    """Learner's own label per miss: answer shown, verdict and explanation not yet (D43, eval data)."""
+    """오답마다 학습자가 직접 붙이는 라벨: 정답은 보여 주고 판정과 해설은 아직 보여 주지 않는다(D43, eval 데이터)."""
     sid = quiz["set_id"]
     misses = [x for x in diagnosis_rows(r.ledger, sid) if not x.is_correct and x.miss_type]
     st.subheader("자기 판단")
@@ -526,7 +526,7 @@ def vocab_row(item: dict, key: str, stem: str | None = None, extra: str = "") ->
 
 
 def set_vocab_panel(r: Resources, sid: int) -> None:
-    """'이번 세트 단어장' under the diagnosis: built once in the background, then read from the ledger (D54)."""
+    """진단 아래의 '이번 세트 단어장': 백그라운드에서 한 번 만들고, 그다음부터는 ledger에서 읽는다(D54)."""
     st.subheader("이번 세트 단어장")
     items = r.ledger.set_vocab(sid)
     job_key = f"vocab-{sid}"
@@ -541,7 +541,7 @@ def set_vocab_panel(r: Resources, sid: int) -> None:
             def work() -> None:
                 try:
                     extract_vocab(r.vocab_llm, r.pack, r.ledger, sid)
-                except Exception as exc:  # noqa: BLE001 - shown with a retry button
+                except Exception as exc:  # noqa: BLE001 - 다시 시도 버튼과 함께 보여 준다
                     job["error"] = f"{type(exc).__name__}: {exc}"[:300]
 
             job["thread"] = threading.Thread(target=work, name=job_key, daemon=True)
@@ -570,7 +570,7 @@ def set_vocab_panel(r: Resources, sid: int) -> None:
 
 
 def tab_vocab(r: Resources) -> None:
-    """The cumulative word book across sets (D54)."""
+    """세트를 넘나들며 쌓이는 누적 단어장(D54)."""
     book = r.ledger.vocab_book(r.pack.exam_id)
     if not book:
         st.info("아직 단어장이 없습니다. 세트를 풀고 진단 화면까지 가면 그 세트의 단어장이 만들어집니다.")
@@ -590,7 +590,7 @@ def tab_vocab(r: Resources) -> None:
 
 
 def source_links(sources: list[str]) -> str:
-    """Markdown: URLs become links the learner can open (Skilljar lessons open in their logged-in browser)."""
+    """Markdown: URL은 학습자가 열 수 있는 링크가 된다(Skilljar 강의는 로그인된 브라우저에서 열린다)."""
     parts = []
     for s in sources:
         if s.startswith(("http://", "https://")):
@@ -609,7 +609,7 @@ def show_turn_meta(sources: list[str], tool_calls: list[str]) -> None:
 
 
 def coach_panel(r: Resources, row: Any) -> None:
-    """Coach explanation below the stored one, then a follow-up conversation on the same miss (D47)."""
+    """저장된 해설 아래에 코치 해설을, 이어서 같은 오답에 대한 후속 대화를 보여 준다(D47)."""
     if r.explainer is None:
         return
     tid = coach_thread(r.pack.exam_id, row.attempt_id)
@@ -624,10 +624,10 @@ def coach_panel(r: Resources, row: Any) -> None:
             with st.spinner("코치가 자료를 찾아 해설을 쓰는 중..."):
                 res = coach_explain(r.explainer, r.pack, row, ledger=r.ledger, index=r.svc.index,
                                     checkpointer=r.coach_checkpointer, thread_id=tid)
-            if not coach_history(r.coach_checkpointer, tid):     # coach failed: plain explanation, no thread
+            if not coach_history(r.coach_checkpointer, tid):     # 코치 실패: 일반 해설만, thread 없음
                 st.session_state[f"coach_fallback_{row.attempt_id}"] = res.text
             st.rerun()
-    elif turns[0].question is None:                              # started with the coach explanation
+    elif turns[0].question is None:                              # 코치 해설로 시작한 대화
         st.markdown("**코치 해설**")
         st.write(turns[0].answer)
         show_turn_meta(turns[0].sources, turns[0].tool_calls)
@@ -656,7 +656,7 @@ def reset_quiz() -> None:
     st.rerun()
 
 
-# --- plan tab (interrupt①) ---------------------------------------------------------------------
+# --- 계획 탭(interrupt①) ---------------------------------------------------------------------
 
 def tab_plan(r: Resources) -> None:
     tid = st.session_state.get("plan_thread") or st.query_params.get("plan")
@@ -694,7 +694,7 @@ STATUS_KO = {"generating": "생성 중", "in_progress": "푸는 중", "submitted
 
 
 def plan_history(r: Resources) -> None:
-    """Approved plans, newest first, with the set each one produced (D52)."""
+    """승인한 계획을 최신순으로, 각 계획이 만든 세트와 함께 보여 준다(D52)."""
     plans = r.ledger.list_plans(r.pack.exam_id)
     if not plans:
         return
@@ -749,7 +749,7 @@ def clear_plan_button() -> None:
         st.rerun()
 
 
-# --- material tab ------------------------------------------------------------------------------
+# --- 자료 탭 ------------------------------------------------------------------------------
 
 def tab_material(r: Resources) -> None:
     from misslens.paths import sandbox
@@ -844,7 +844,7 @@ def show_job_result(r: Resources, key: str, running_msg: str) -> None:
             st.warning(val["stopped"])
 
 
-# --- status tab ---------------------------------------------------------------------------------
+# --- 현황 탭 ---------------------------------------------------------------------------------
 
 def tab_status(r: Resources) -> None:
     from misslens.agents.reporter import build_report
@@ -878,12 +878,12 @@ def render_report(rep: dict) -> None:
         st.caption(f"생성 실패 {f['task_id']} ({f['tries']}회): {f['reason'][:160]}")
 
 
-# --- sidebar: natural-language request (F10) ----------------------------------------------------
+# --- 사이드바: 자연어 요청(F10) ----------------------------------------------------
 
 def sidebar_request(r: Resources) -> None:
     with st.sidebar:
         st.markdown("### MissLens에게 요청")
-        # A form: Ctrl+Enter (⌘+Enter on macOS) submits a text_area; plain Enter stays a newline.
+        # 폼으로 감싼다: Ctrl+Enter(macOS는 ⌘+Enter)로 text_area를 보내고, 그냥 Enter는 줄바꿈으로 남는다.
         with st.form("nl_form", clear_on_submit=True, border=False):
             text = st.text_area("요청", key="nl_text", height=130, label_visibility="collapsed",
                                 placeholder="예: 오늘 공부 계획 세워줘 / 도구 설계 영역 5문제 / 현황 보여줘")
@@ -954,7 +954,7 @@ def main() -> None:
         tab_study(r)
     if st.session_state.pop("_poll", False):
         if POLL_MODE == "fragment":
-            st.session_state["_sig"] = background_signature(r)     # what this render already shows
+            st.session_state["_sig"] = background_signature(r)     # 이번 렌더링이 이미 보여 주는 상태
             with status_box:
                 status_ticker(r)
         else:

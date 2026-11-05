@@ -1,5 +1,5 @@
-"""Real index vs saved baseline (D50). Reads data/index; run with `pytest -m realdata` after changing chunking,
-cleaning, tagging or ranking. Accept new scores with `python -m misslens.cli retrieval-eval --save-baseline`."""
+"""실제 색인 vs 저장한 기준선(D50). data/index를 읽는다. 청킹, 정리, 태깅, 순위를 바꾼 뒤
+`pytest -m realdata`로 실행한다. 새 점수는 `python -m misslens.cli retrieval-eval --save-baseline`으로 받아들인다."""
 
 import pytest
 
@@ -25,4 +25,4 @@ def test_real_index_health_and_no_regression():
     print(rep.as_dict()["golden"]["modes"])
     assert rep.health["ok"], rep.health["checks"]
     assert rep.regressions == []
-    assert rep.golden["modes"]["plain"]["hit@5"] >= 0.8                 # absolute floor besides the baseline
+    assert rep.golden["modes"]["plain"]["hit@5"] >= 0.8                 # 기준선 외의 절대 하한

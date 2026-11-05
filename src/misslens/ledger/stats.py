@@ -1,12 +1,12 @@
-"""All statistics (CLAUDE.md rule 1, ARCHITECTURE §5, §7, D9).
+"""모든 통계(CLAUDE.md rule 1, ARCHITECTURE §5, §7, D9).
 
-Common rules:
-  - Only attempts with invalid=0 count, everywhere (phrase ranking included).
-  - Accuracy is Laplace-smoothed: (correct + 1) / (attempts + 2), over the last 10 valid attempts per task.
-  - `uncertain` misses count as wrong (they are wrong first answers).
-  - Re-ask reading ratio = reading / (reading + concept); uncertain is excluded from both and reported apart.
-  - Baseline = re-ask accuracy on decoys (questions answered correctly the first time).
-Callers (Generator, Planner, Reporter) use these functions and never aggregate SQL themselves.
+공통 규칙:
+  - 어디서나(문구 순위 포함) invalid=0인 풀이만 센다.
+  - 정답률은 Laplace 평활화한다: (correct + 1) / (attempts + 2), 세부 항목별 최근 유효 풀이 10개 기준.
+  - `uncertain` 실수는 오답으로 센다(첫 답이 틀렸으므로).
+  - 재질문 해석 실수 비율 = reading / (reading + concept). uncertain은 양쪽에서 빼고 따로 보고한다.
+  - 기준선(baseline) = 미끼(처음에 맞힌 문제)에 대한 재질문 정답률.
+호출하는 쪽(Generator, Planner, Reporter)은 이 함수들을 쓰고 직접 SQL로 집계하지 않는다.
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ class TaskAccuracy:
 
 def task_accuracy(ledger: Ledger, exam_id: str, *, task_id_map: dict[str, str] | None = None,
                   window: int = ACCURACY_WINDOW) -> dict[str, TaskAccuracy]:
-    """Per task, over its last `window` valid attempts. Tasks never asked are absent
-    (their accuracy is laplace(0, 0) = 0.5). task_id_map merges IDs from older pack versions."""
+    """세부 항목별로 최근 `window`개의 유효 풀이를 기준으로 한다. 한 번도 출제되지 않은 세부 항목은 빠진다
+    (정답률은 laplace(0, 0) = 0.5). task_id_map은 예전 팩 버전의 ID를 합친다."""
     mapping = task_id_map or {}
     recent: dict[str, list[int]] = defaultdict(list)
     for r in ledger._query(_VALID_ATTEMPTS + " ORDER BY a.id DESC", (exam_id,)):
@@ -69,7 +69,7 @@ class Coverage:
 
 def coverage(ledger: Ledger, exam_id: str, task_ids: list[str], *,
              task_id_map: dict[str, str] | None = None) -> Coverage:
-    """A task is covered once it has at least one valid attempt. Order follows `task_ids`."""
+    """유효 풀이가 하나라도 있으면 그 세부 항목은 다룬 것으로 본다. 순서는 `task_ids`를 따른다."""
     mapping = task_id_map or {}
     seen = {mapping.get(r["task_id"], r["task_id"]) for r in ledger._query(_VALID_ATTEMPTS, (exam_id,))}
     return Coverage(asked=[t for t in task_ids if t in seen], never_asked=[t for t in task_ids if t not in seen])
@@ -77,7 +77,7 @@ def coverage(ledger: Ledger, exam_id: str, task_ids: list[str], *,
 
 @dataclass(frozen=True)
 class DomainSummary:
-    """Per domain: coverage (tasks asked at least once) and accuracy over each task's recent window."""
+    """영역별 범위(한 번 이상 출제된 세부 항목)와, 세부 항목마다 최근 window 기준으로 낸 정답률."""
     domain: str
     tasks: int
     asked: int
@@ -95,8 +95,8 @@ class DomainSummary:
 
 def domain_summary(ledger: Ledger, exam_id: str, task_domain: dict[str, str], *,
                    task_id_map: dict[str, str] | None = None) -> dict[str, DomainSummary]:
-    """task_domain: current task_id -> domain id (from the exam pack). Built from coverage() and task_accuracy(),
-    so the Planner and Reporter see the same numbers as the rest of the app."""
+    """task_domain: 현재 task_id -> 영역 id(시험 팩에서 가져옴). coverage()와 task_accuracy()로 만들므로
+    Planner와 Reporter가 앱의 나머지 부분과 같은 숫자를 본다."""
     cov = coverage(ledger, exam_id, list(task_domain), task_id_map=task_id_map)
     acc = task_accuracy(ledger, exam_id, task_id_map=task_id_map)
     asked = set(cov.asked)
@@ -119,18 +119,18 @@ class MissBreakdown:
 
     @property
     def reading_ratio(self) -> float | None:
-        """reading / (reading + concept); uncertain excluded from both."""
+        """reading / (reading + concept). uncertain은 양쪽에서 뺀다."""
         n = self.reading + self.concept
         return self.reading / n if n else None
 
     @property
     def baseline(self) -> float | None:
-        """Re-ask accuracy on decoys."""
+        """미끼에 대한 재질문 정답률."""
         return self.decoys_correct / self.decoys if self.decoys else None
 
 
 def miss_breakdown(ledger: Ledger, exam_id: str, *, set_id: int | None = None) -> MissBreakdown:
-    """Over all reviewed sets of the exam, or one set (per-set baseline) when set_id is given."""
+    """그 시험의 리뷰한 세트 전체를 집계한다. set_id를 주면 그 세트 하나만 집계한다(세트별 기준선)."""
     sql = _VALID_ATTEMPTS + (" AND a.set_id = ?" if set_id is not None else "")
     params = (exam_id, set_id) if set_id is not None else (exam_id,)
     counts = {"concept": 0, "reading": 0, "uncertain": 0}
@@ -147,11 +147,11 @@ def miss_breakdown(ledger: Ledger, exam_id: str, *, set_id: int | None = None) -
 
 @dataclass(frozen=True)
 class DiagnosisAgreement:
-    """System diagnosis (judge table) vs the learner's own label on the same misses (T10 eval, D43)."""
+    """같은 오답에 대해 시스템 진단(판정 표)과 학습자가 직접 붙인 라벨을 비교한다(T10 eval, D43)."""
     labeled: int
-    compared: int          # system concept/reading and learner concept/reading
+    compared: int          # 시스템도 concept/reading이고 학습자도 concept/reading인 경우
     agree: int
-    confusion: dict = field(default_factory=dict)   # "system->learner" -> count, all labeled misses
+    confusion: dict = field(default_factory=dict)   # "system->learner" -> 개수, 라벨이 붙은 모든 오답
 
     @property
     def rate(self) -> float | None:
@@ -173,7 +173,7 @@ def diagnosis_agreement(ledger: Ledger, exam_id: str) -> DiagnosisAgreement:
 
 
 def top_missed_phrases(ledger: Ledger, exam_id: str, limit: int = 10) -> list[tuple[str, int]]:
-    """Most often missed condition phrases; invalid attempts are excluded from the join."""
+    """가장 자주 놓친 조건 문구. 무효 풀이는 join에서 뺀다."""
     rows = ledger._query(
         "SELECT m.phrase, COUNT(*) AS n FROM missed_phrases m "
         "JOIN attempts a ON a.id = m.attempt_id JOIN questions q ON q.id = a.question_id "
@@ -205,7 +205,7 @@ class SetScore:
 
 
 def set_score(ledger: Ledger, set_id: int) -> SetScore:
-    """First-answer score of one set over valid attempts (shown right after submission)."""
+    """한 세트의 첫 답 점수(유효 풀이 기준, 제출 직후 보여 준다)."""
     rows = ledger._query("SELECT is_correct FROM attempts WHERE set_id = ? AND invalid = 0", (set_id,))
     return SetScore(correct=sum(r["is_correct"] for r in rows), total=len(rows))
 

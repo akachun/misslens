@@ -7,7 +7,7 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D56) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D57) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |

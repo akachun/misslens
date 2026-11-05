@@ -1,16 +1,16 @@
-"""Collector subgraph: read listed pages with the learner's login profile (ARCHITECTURE §4.4, §9).
+"""Collector subgraph: 학습자의 로그인 프로필로 목록에 있는 페이지를 읽는다(ARCHITECTURE §4.4, §9).
 
     START -> fetch --(queue left)--> fetch
                    --(session expired)--> wait_login --interrupt②--> fetch (same URL again)
                    --(queue empty)--> END
 
-interrupt② is the ONLY interrupt here (CLAUDE.md rule 4). wait_login closes the headless browser first so the
-learner can open the same profile in a visible window, then pauses the graph until resumed with
-Command(resume="done") or Command(resume="abort"). The run's state lives in the checkpointer
-(data/checkpoints.sqlite), so a resume picks up from the URL that hit the login wall.
+여기서 interrupt는 interrupt② 하나뿐이다(CLAUDE.md 규칙 4). wait_login은 먼저 headless 브라우저를 닫아
+학습자가 같은 프로필을 보이는 창에서 열 수 있게 한 뒤, Command(resume="done") 또는 Command(resume="abort")로
+재개될 때까지 그래프를 멈춘다. 실행 상태는 checkpointer(data/checkpoints.sqlite)에 있으므로 재개하면
+로그인 벽에 막힌 URL부터 다시 시작한다.
 
-Pages are saved to data/sources/collected/<site>/ wrapped in the "untrusted external content" marker, so the
-Ingest loader keeps their URL as the source and the text is treated as reference data, never instructions.
+페이지는 "untrusted external content" 표시로 감싸 data/sources/collected/<site>/에 저장한다. 그래서 Ingest
+loader가 URL을 source로 유지하고, 본문은 지시가 아니라 참고 자료로만 다뤄진다.
 """
 
 from __future__ import annotations
@@ -35,14 +35,14 @@ from misslens.bedrock import PROJECT_ROOT
 logger = logging.getLogger(__name__)
 
 COLLECTED_DIR = PROJECT_ROOT / "data" / "sources" / "collected"
-MIN_TEXT_CHARS = 200          # less than this after extraction = treat as empty (§9: report failure)
-MAX_LOGIN_WAITS = 3           # consecutive login waits for one URL before the run stops
+MIN_TEXT_CHARS = 200          # 추출 후 이보다 짧으면 빈 페이지로 본다(§9: 실패로 보고)
+MAX_LOGIN_WAITS = 3           # 한 URL에서 연속 로그인 대기가 이 횟수를 넘으면 실행을 멈춘다
 _SKIP_PATH = ("logout", "signout", "sign_out", "delete", "remove", "cancel", "unsubscribe", "checkout", "purchase")
 
 
 class CollectState(TypedDict, total=False):
     site: str
-    queue: list[dict]       # {"url", "expand", "title"}; queue[0] is the URL in progress
+    queue: list[dict]       # {"url", "expand", "title"}; queue[0]이 처리 중인 URL
     seen: list[str]
     results: list[dict]     # {"url", "status", "path"?, "chars"?, "note"?}
     need_login: bool
@@ -56,7 +56,7 @@ def initial_state(site: Site, sources: list[Source]) -> CollectState:
 
 
 def lesson_links(course_url: str, links: list[str], site: Site) -> list[str]:
-    """Links one path segment below the course page on the same host (D38). Order kept, duplicates removed."""
+    """같은 호스트에서 코스 페이지 바로 아래 경로 한 단계의 링크(D38). 순서는 유지하고 중복은 없앤다."""
     base = urlparse(course_url)
     prefix = base.path.rstrip("/") + "/"
     out: list[str] = []
@@ -77,7 +77,7 @@ _MD_LINK = re.compile(r"!?\[[^\]]*\]\([^)]*\)")
 
 
 def clean_markdown(text: str) -> str:
-    """Drop menu-like lines (two or more links and little else) and image-only lines; keep prose and code."""
+    """메뉴 같은 줄(링크가 둘 이상이고 다른 내용이 거의 없음)과 이미지만 있는 줄은 지우고, 본문과 코드는 남긴다."""
     out: list[str] = []
     for line in text.splitlines():
         links = _MD_LINK.findall(line)
@@ -94,21 +94,21 @@ def _slug(url: str) -> str:
 
 
 def save_page(site: str, url: str, text: str, root: Path | None = None) -> Path:
-    # Resolved at call time: a default bound at import time once let a test write into the real folder.
+    # 호출 시점에 정한다. import 시점에 기본값을 묶어 두었다가 테스트가 실제 폴더에 쓴 적이 있다.
     d = (root or COLLECTED_DIR) / site
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{_slug(url)}.md"
     if path.exists():
-        old_body = path.read_text(encoding="utf-8").splitlines()[2:-1]  # drop marker, timestamp, end marker
+        old_body = path.read_text(encoding="utf-8").splitlines()[2:-1]  # 시작 표시, 시각, 끝 표시를 뺀다
         if content_hash("\n".join(old_body)) == content_hash(text):
-            return path  # same content: keep the file (and its first-collected time)
+            return path  # 내용이 같으면 파일(과 처음 수집한 시각)을 그대로 둔다
     path.write_text(f"--- BEGIN UNTRUSTED EXTERNAL CONTENT (source: {url}) ---\n"
                     f"<!-- collected {datetime.now(timezone.utc).isoformat(timespec='seconds')} -->\n"
                     f"{text.strip()}\n--- END UNTRUSTED EXTERNAL CONTENT ---\n", encoding="utf-8")
     return path
 
 
-RECURSION_LIMIT = 2000  # one graph step per page; LangGraph's default (25) would stop a course midway
+RECURSION_LIMIT = 2000  # 페이지마다 그래프 한 단계. LangGraph 기본값(25)이면 코스 중간에 멈춘다
 
 
 def run_config(thread_id: str) -> dict:
@@ -118,7 +118,7 @@ def run_config(thread_id: str) -> dict:
 def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = None,
                           out_dir: Path | None = None, sleep: Callable[[float], None] | None = None,
                           clock: Callable[[], float] | None = None):
-    # Defaults resolved at call time (not import time) so tests can patch the module.
+    # 테스트가 모듈을 patch할 수 있도록 기본값은 (import 시점이 아니라) 호출 시점에 정한다.
     out_dir = out_dir or COLLECTED_DIR
     sleep = sleep or time.sleep
     clock = clock or time.monotonic
@@ -154,7 +154,7 @@ def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = N
             known = set(seen) | {q["url"] for q in rest}
             lessons = [u for u in lesson_links(url, r.links, site) if u not in known]
             if not lessons and not lesson_links(url, r.links, site):
-                # A logged-out course page does not redirect; it just shows "Sign In" and no lessons.
+                # 로그아웃 상태의 코스 페이지는 리디렉션되지 않고 "Sign In"만 보이며 레슨이 없다.
                 if any(site.is_expired(urljoin(url, h), None) for h in r.links):
                     return {"need_login": True}
                 if any(site.is_not_enrolled(urljoin(url, h)) for h in r.links):
@@ -174,7 +174,7 @@ def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = N
         return update
 
     def wait_login(state: CollectState) -> CollectState:
-        fetcher.close()  # free the profile for the visible login window; idempotent on re-execution
+        fetcher.close()  # 보이는 로그인 창이 프로필을 쓸 수 있게 놓아 준다. 다시 실행돼도 결과가 같다
         waits = state.get("login_waits", 0) + 1
         url = state["queue"][0]["url"]
         if waits > MAX_LOGIN_WAITS:

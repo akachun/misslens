@@ -1,16 +1,16 @@
-"""Third-party practice questions (learner-supplied files) -> structured bank (TASK T6-b, D39).
+"""외부 연습 문제(학습자가 넣은 파일) -> 구조화된 문제 은행(TASK T6-b, D39).
 
-Input: data/sources/practice_problems/CCAR-F-set<N>-questions.md + -answers.md (CertSafari, saved by the learner).
-Output: data/practice/<exam_id>/bank.jsonl, one record per question.
+입력: data/sources/practice_problems/CCAR-F-set<N>-questions.md + -answers.md(CertSafari, 학습자가 저장).
+출력: data/practice/<exam_id>/bank.jsonl, 문제 하나당 레코드 하나.
 
-The bank is used ONLY as style examples for the generator (few-shot, §7) and for the copy guard below.
-It is NOT put into the retrieval index: its answers are the site's, not verified, and grounding checks must not
-lean on them. Questions from the bank are never shown to the learner as MissLens questions (CLAUDE.md rule 2).
+은행은 생성기의 문체 예시(few-shot, §7)와 아래의 베끼기 방지에만 쓴다.
+검색 색인에는 넣지 않는다: 정답이 사이트가 제시한 것이라 검증되지 않았고, 근거 검증이 여기에 기대면 안 된다.
+은행의 문제를 MissLens 문제로 학습자에게 보여 주는 일은 없다(CLAUDE.md rule 2).
 
-Quality flags per record:
-  answer_confirmed  the answer option's explanation starts with "Correct" and no other option's does
-  disputed          named in the index file's caveat note ("2세트 32번") -> never used as a sample
-  duplicate_of      same stem (whitespace/case-insensitive) as an earlier record -> never used as a sample
+레코드별 품질 표시:
+  answer_confirmed  정답 보기의 해설이 "Correct"로 시작하고 다른 보기의 해설은 그렇지 않다
+  disputed          색인 파일의 주의 메모에 이름이 있다("2세트 32번") -> 예시로 쓰지 않는다
+  duplicate_of      앞선 레코드와 문제 본문이 같다(공백·대소문자 무시) -> 예시로 쓰지 않는다
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def summarize(bank: list[PracticeQuestion]) -> dict:
             "answer_letters": {c: sum(q.answer_index == i for q in bank) for i, c in enumerate(LETTERS)}}
 
 
-# --- generator hooks ----------------------------------------------------------------------------
+# --- 생성기 연결부 ------------------------------------------------------------------------------
 
 def format_sample(q: PracticeQuestion) -> str:
     opts = "\n".join(f"{c}. {o}" for c, o in zip(LETTERS, q.options))
@@ -156,7 +156,7 @@ def format_sample(q: PracticeQuestion) -> str:
 
 
 class PracticeSamples:
-    """Per-task style examples and copy guard for the generator (D39)."""
+    """생성기용 세부 항목별 문체 예시와 베끼기 방지(D39)."""
 
     def __init__(self, bank: list[PracticeQuestion], *, per_task: int = 2, rng: random.Random | None = None,
                  max_overlap: float = 0.6):
@@ -175,8 +175,9 @@ class PracticeSamples:
         return [format_sample(q) for q in self.rng.sample(pool, min(self.per_task, len(pool)))]
 
     def copy_reason(self, task_id: str, stem: str) -> str | None:
-        """A reason if the stem reuses a bank question of the same task: the share of the bank stem's tokens found
-        in the new stem is over max_overlap. Containment, not Jaccard, so padding a copied stem does not hide it."""
+        """문제 본문이 같은 세부 항목의 은행 문제를 재사용하면 이유를 돌려준다: 은행 문제 본문의 토큰 중 새 본문에
+        들어 있는 비율이 max_overlap을 넘는 경우다. Jaccard가 아니라 포함 비율이라 베낀 본문에 내용을 덧붙여도
+        숨겨지지 않는다."""
         toks = set(tokenize(stem))
         if not toks:
             return None

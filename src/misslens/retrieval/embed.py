@@ -1,7 +1,7 @@
-"""Embeddings: bge-m3 via sentence-transformers, loaded once per process (ARCHITECTURE §8, D17).
+"""임베딩: sentence-transformers로 bge-m3를 프로세스당 한 번 불러온다(ARCHITECTURE §8, D17).
 
-The model name comes from config/models.yaml (`embedding:`), next to the Bedrock models.
-Tests use any object with `name`, `dim` and `encode(texts) -> np.ndarray` (L2-normalized float32 rows).
+모델 이름은 Bedrock 모델과 나란히 config/models.yaml(`embedding:`)에서 가져온다.
+테스트는 `name`, `dim`, `encode(texts) -> np.ndarray`(L2 정규화된 float32 행)를 갖춘 아무 객체나 쓴다.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class Embedder(Protocol):
 
 
 def embedding_config() -> dict:
-    """`embedding:` in config/models.yaml, the only place the model name lives (same rule as Bedrock IDs)."""
+    """config/models.yaml의 `embedding:`. 모델 이름은 여기에만 둔다(Bedrock ID와 같은 규칙)."""
     raw = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
     if not raw.get("embedding", {}).get("model"):
         raise ValueError(f"{DEFAULT_CONFIG_PATH}: missing embedding.model")
@@ -32,14 +32,14 @@ def embedding_config() -> dict:
 
 class SentenceTransformerEmbedder:
     def __init__(self, model: str, dim: int, batch_size: int = 16):
-        from sentence_transformers import SentenceTransformer  # heavy import, only when really used
+        from sentence_transformers import SentenceTransformer  # 무거운 import라 실제로 쓸 때만 한다
 
         self.name = model
         self.batch_size = batch_size
-        try:  # cached copy first: no Hub round trips at startup, works offline
+        try:  # 캐시된 사본 먼저: 시작할 때 Hub 왕복이 없고 오프라인에서도 동작
             self._model = SentenceTransformer(model, local_files_only=True)
         except OSError:
-            self._model = SentenceTransformer(model)  # first run: download
+            self._model = SentenceTransformer(model)  # 첫 실행: 내려받기
         get_dim = getattr(self._model, "get_embedding_dimension", None) or self._model.get_sentence_embedding_dimension
         self.dim = int(get_dim() or dim)
 
@@ -54,7 +54,7 @@ _default: SentenceTransformerEmbedder | None = None
 
 
 def get_embedder() -> SentenceTransformerEmbedder:
-    """The process-wide embedder (first call loads bge-m3: tens of seconds, then cached)."""
+    """프로세스 전체에서 쓰는 embedder(첫 호출에 bge-m3를 불러오느라 수십 초 걸리고, 이후 캐시된다)."""
     global _default
     with _lock:
         if _default is None:

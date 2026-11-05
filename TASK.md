@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T21 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리. 테스트 기본 305·realdata 1·live 9 통과. 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
+| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T23 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화. 테스트 기본 312·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀). 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
 | 마지막 갱신 | 2026-11-05 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -155,7 +155,7 @@
   - [x] 실호출 스모크(`pytest -m live`) 8개 통과(2026-11-05): 실제 `Question` 스키마로 문제 생성(D40 순서 변경 후 재확인, `tests/test_generator_live.py`), 라우터 한국어 4문장·Planner 모델 계획(`tests/test_supervisor_live.py`), LLM 기본 2개
   - [x] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM) → `tests/test_cli_e2e.py`(Phase 2에서 작성)
   - [~] eval: 진단 일치율은 `python -m misslens.cli eval`(현황 탭에도 표시)로 확인. 데이터는 공부하면서 자동으로 쌓임(D43, 테스트 `tests/test_eval_feedback.py`). 조건 문구 번역 보존은 진단 화면의 놓친 문구 강조로 눈으로 확인(자동화는 TODOS)
-- [x] **T11** 문서 갱신: `README.md`(구조·설치·처음 쓰는 순서·명령·데이터와 보안·테스트), ARCHITECTURE는 작업마다 반영(D27~D42), LangGraph 그래프 다이어그램은 컴파일된 그래프에서 생성(`scripts/draw_graph.py` → `docs/graph.mmd`, README에 포함)
+- [x] **T11** 문서 갱신: `README.md`(구조·설치·처음 쓰는 순서·명령·데이터와 보안·테스트), ARCHITECTURE는 작업마다 반영(D27~D42), LangGraph 그래프 다이어그램은 컴파일된 그래프에서 생성(`scripts/draw_graph.py` → `docs/graphs/*.mmd`, README에 포함)
 - [x] **T12** `TODOS.md` 작성(v1 이후 항목 + 구현 중 발견한 항목)
 - [x] **T13** 코치 해설을 tool 사용 에이전트로(D44, 학습자 선택 A): `agents/grader/coach.py`(ReAct: `bind_tools` + `ToolNode`, tool `search_material`·`learner_history`, 최대 3회, 단계별 대체 경로), `RoleLLM.bind_tools`(엔드포인트 전환 유지), CLI·Streamlit 진단에 근거·사용한 도구 표시. 테스트 `tests/test_coach.py` 5개 + 라우터 1개, 실호출 `tests/test_coach_live.py` 통과(실제로 두 tool 호출, 출처 표시)
 - [x] **T14** 코치와 이어서 대화(D47, 학습자 리허설 피드백): 기본 해설 유지 + 코치 해설을 아래에, 오답별 대화 thread(체크포인터), 질문마다 tool 상한 3회, 출처 링크(레슨 URL·`guide.pdf p.N`). 테스트 coach 3개·UI 2개 추가, 실호출로 후속 질문(코드 예시 요청)에 다시 자료를 찾아 답하는 것 확인
@@ -168,9 +168,10 @@
 - [x] **T21** 리허설 피드백(D55): 진단에 한국어 재질문 결과·판정 근거·판정 설명, 로딩 표시를 상태 줄 하나로(fragment 부분 갱신, 변화 때만 전체 다시 그리기), '사용법' 안내, `.streamlit/config.toml` 최소 툴바. 브라우저로 Deploy 숨김·요청 처리 중 전체 다시 그리기 1회 확인
 - [x] 데모 시나리오: [`docs/demo.md`](docs/demo.md) — 준비 점검표, 7단계(구조 → 자연어 → 계획 승인·새로고침 → RAG 풀이 → 리뷰·자기 판단·진단 → 현황 → 로그인 대기), 실패할 때 대체 경로
   - [x] CLI 리허설(샌드박스, 실제 색인·모델): 계획 → 2문제 → 재질문 → 자기 판단 → 해석 실수 판정 → 코치 해설(수집한 Skilljar 레슨 인용) → 현황, 83초
-  - [ ] Streamlit 화면으로 시연 리허설(학습자, `docs/demo.md` 순서)
+  - [~] Streamlit 화면으로 시연 리허설(학습자, `docs/demo.md` 순서): 진단 화면·코치 대화·이어 풀기·평가용 패키지(Windows) 화면까지 확인, 피드백은 T14~T21·헤드리스 설정으로 반영. 남은 것: 데모 당일 전체 순서 한 번
 - [x] **T22** 평가용 전달 방식(D56, 학습자 결정): 공개 저장소(데이터 제외) + 비공개 zip. `scripts/make_handoff_zip.py`(화이트리스트·거부 목록·SQLite 백업 복사·자격 증명 검사·HANDOFF.md). 새 clone에서 데이터·자격 증명 없이 기본 테스트 305 통과, 앱 기동 확인. zip 압축을 풀어 status·retrieval-eval(회귀 없음) 확인. 테스트 `tests/test_handoff.py` 4개
-  - [ ] 제출 직전에 zip 생성(`python scripts/make_handoff_zip.py`) → 강사님께 비공개 전달
+  - [ ] 제출 직전에 zip 생성(`python scripts/make_handoff_zip.py`) → 강사님께 비공개 전달(헤드리스 설정 `a3386ee` 이후 zip이어야 이메일 질문이 안 나옴)
+- [x] **T23** 마무리(D57, 학습자 요청): 코드 주석과 docstring을 한국어로(모델에 보내는 프롬프트·스키마·도구 설명은 영어 유지, `tests/test_model_facing_text.py`로 고정). 주석 외 코드 변화 없음을 AST 비교로 확인. 문서 최종 교차 확인(TASK 수치·경로, testing.md 수치, CLAUDE.md 언어 규칙)
 - [ ] 제출
 
 ---
@@ -203,7 +204,7 @@
 
 ## 세션 인계 메모
 
-**다음 작업(2026-11-05 갱신):** 구현은 끝났다(T1~T21). 남은 것: 학습자 Streamlit 리허설(`MISSLENS_SANDBOX=1`, `docs/demo.md` 순서) → 데모 30분 전 `python scripts/probe_models.py`·`pytest -m live` → 제출. 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
+**다음 작업(2026-11-05 갱신):** 구현은 끝났다(T1~T23). 남은 것: 학습자 Streamlit 리허설(`MISSLENS_SANDBOX=1`, `docs/demo.md` 순서) → 데모 30분 전 `python scripts/probe_models.py`·`pytest -m live` → 제출. 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
 - 근거 자료 주의: `guide.pdf`에는 공식 샘플 문제와 정답이 들어 있다. 생성 문제가 샘플과 비슷해질 수 있으니 실제로 풀어 보며 확인한다.
 
 새 세션을 시작할 때 다음 순서로 진행한다.
@@ -261,3 +262,4 @@
 | 2026-11-05 | 학습자 Windows 실행 피드백(PowerShell에서 `&&`·`source` 오류): HANDOFF.md·README에 Windows(PowerShell·cmd) 안내 추가. Windows 점검: 인코딩 없는 텍스트 입출력 8곳(테스트) 수정 + `test_portability.py`로 고정. 압축 해제 패키지에서 git 의존 테스트 1개 실패 발견 → git 체크아웃이 아니면 건너뜀·스크립트는 이유를 알리고 중단. 압축 해제 패키지 308 통과·1 건너뜀, 저장소 310 통과 |
 | 2026-11-05 | Windows 실기 확인(학습자 PC): Python 3.14.8, uv 없이 venv + pip, 평가용 패키지에서 `pytest` 309 통과·1 건너뜀(의도). README·HANDOFF.md에 uv 없는 설치 경로 추가 |
 | 2026-11-05 | 학습자 Windows에서 `streamlit run` 시 Streamlit 첫 실행 이메일 질문 → `.streamlit/config.toml`에 `server.headless=true`(질문 없음, 터미널 주소를 직접 열기), HANDOFF.md·README 안내 |
+| 2026-11-05 | T23: 코드 주석·docstring 한국어화(src·scripts·tests 73개 파일, 4개 에이전트 분담). 주석 외 코드 변화 0건을 AST 비교로 확인, 모델에 보내는 docstring 3곳은 영어 유지 + `test_model_facing_text.py`. 문서 최종 교차 확인: TASK 헤더(T1~T23·테스트 수)·T11 그래프 경로·리허설 상태, testing.md 수치·테스트 지도, CLAUDE.md 언어 규칙, ARCHITECTURE D57 |

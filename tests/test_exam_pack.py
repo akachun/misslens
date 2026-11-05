@@ -13,7 +13,7 @@ def test_ccar_f_pack_loads():
     pack = load_exam_pack("ccar-f")
     assert pack.exam_id == "ccar-f"
     assert pack.status == "final"
-    # Guide v1.0 blueprint: 5 domains, 7/5/6/6/6 task statements, 6 scenarios, 16 out-of-scope topics.
+    # 가이드 v1.0 출제 범위: 영역 5개, 세부 항목 7/5/6/6/6개, 시나리오 6개, 범위 밖 주제 16개.
     assert [len(d.tasks) for d in pack.domains] == [7, 5, 6, 6, 6]
     assert len(pack.scenarios) == 6
     assert len(pack.out_of_scope) == 16
@@ -53,14 +53,14 @@ def _mutated(fn):
 
 
 @pytest.mark.parametrize("mutate", [
-    lambda r: r["domains"][0].update(weight=0.5),                                  # weights != 1
-    lambda r: r["domains"][1]["tasks"].append(dict(r["domains"][0]["tasks"][0])),  # duplicate task id
-    lambda r: r["domains"][1].update(id=r["domains"][0]["id"]),                     # duplicate domain id
-    lambda r: r.update(task_id_map={"old": "missing"}),                             # map to unknown id
+    lambda r: r["domains"][0].update(weight=0.5),                                  # 가중치 합 != 1
+    lambda r: r["domains"][1]["tasks"].append(dict(r["domains"][0]["tasks"][0])),  # 세부 항목 id 중복
+    lambda r: r["domains"][1].update(id=r["domains"][0]["id"]),                     # 영역 id 중복
+    lambda r: r.update(task_id_map={"old": "missing"}),                             # 알 수 없는 id로 매핑
     lambda r: r.update(question_format="essay"),
     lambda r: r.update(version=0),
-    lambda r: r["scenarios"][0].update(primary_domains=["d9"]),                    # unknown domain
-    lambda r: r["scenarios"][1].update(id=r["scenarios"][0]["id"]),                # duplicate scenario id
+    lambda r: r["scenarios"][0].update(primary_domains=["d9"]),                    # 알 수 없는 영역
+    lambda r: r["scenarios"][1].update(id=r["scenarios"][0]["id"]),                # 시나리오 id 중복
 ])
 def test_invalid_packs_rejected(mutate):
     with pytest.raises(ValidationError):
@@ -98,7 +98,7 @@ def test_scenarios_and_out_of_scope_helpers():
 
 
 def test_unquoted_title_with_commas_is_rejected():
-    """YAML reads {id: "1.3", title: A, B, and C} as a title "A" plus extra keys; that must fail, not cut the title."""
+    """YAML은 {id: "1.3", title: A, B, and C}를 제목 "A"와 추가 키로 읽는다. 제목을 자르지 말고 실패해야 한다."""
     flow = yaml.safe_load('{id: "1.3", title: Configure subagent invocation, context passing, and spawning}')
     assert flow["title"] == "Configure subagent invocation"
     bad = copy.deepcopy(RAW)

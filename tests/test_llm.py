@@ -44,10 +44,10 @@ class FakeClock:
 
 
 class Script:
-    """Factory whose models fail per (endpoint, model) according to a plan, then answer 'ok'."""
+    """(endpoint, model)별 계획대로 모델이 실패한 뒤 'ok'로 답하는 팩토리."""
 
     def __init__(self, plan=None):
-        self.plan = plan or {}  # (endpoint, model) -> list of exceptions raised before succeeding
+        self.plan = plan or {}  # (endpoint, model) -> 성공하기 전에 발생시킬 예외 목록
         self.calls: list[tuple[str, str]] = []
         self.built: list[tuple[str, str]] = []
 
@@ -68,7 +68,7 @@ class Script:
 
 
 def throttled_out():
-    """Enough throttles to exhaust the router's retries on one endpoint."""
+    """한 엔드포인트에서 라우터의 재시도를 다 쓰게 할 만큼의 throttle."""
     return [throttle() for _ in range(THROTTLE_MAX_ATTEMPTS)]
 
 
@@ -100,7 +100,7 @@ def test_daily_token_quota_reported_as_throttling_cools_down():
     r, s = make_router({(EP[0], SONNET): [throttle("Too many tokens per day, please wait")]})
     get_llm("generator", r).invoke("hi")
     assert r.state.is_cooling((EP[0], SONNET), r.clock())
-    assert s.calls == [(EP[0], SONNET), (EP[1], SONNET)]   # quota: no retry on the same endpoint
+    assert s.calls == [(EP[0], SONNET), (EP[1], SONNET)]   # 할당량: 같은 엔드포인트에서 재시도하지 않는다
     assert s.sleeps == []
 
 
@@ -109,13 +109,13 @@ def test_throttle_retries_same_endpoint_with_backoff():
     out = get_llm("generator", r).invoke("hi")
     assert out.content == f"ok:{EP[0]}:{SONNET}"
     assert s.calls == [(EP[0], SONNET)] * 3
-    assert len(s.sleeps) == 2 and s.sleeps[1] > s.sleeps[0] * 0.9 / 2  # grows (with jitter)
+    assert len(s.sleeps) == 2 and s.sleeps[1] > s.sleeps[0] * 0.9 / 2  # 늘어난다(jitter 포함)
     assert not r.state.is_cooling((EP[0], SONNET), r.clock())
 
 
 def test_botocore_retries_are_disabled():
     llm = bedrock_factory(CFG.endpoints[0], SONNET, 60)
-    assert llm.client.meta.config.retries["total_max_attempts"] == 1  # one try, no botocore retry
+    assert llm.client.meta.config.retries["total_max_attempts"] == 1  # 한 번만 시도, botocore 재시도 없음
 
 
 def test_cooldown_is_skipped_then_expires():
@@ -123,10 +123,10 @@ def test_cooldown_is_skipped_then_expires():
     r, s = make_router({(EP[0], SONNET): throttled_out()}, clock=clock)
     llm = get_llm("generator", r)
     llm.invoke("1")
-    r.state.last_success.clear()          # force start from endpoint 1 again
+    r.state.last_success.clear()          # 다시 엔드포인트 1부터 시작하게 강제
     s.calls.clear()
     llm.invoke("2")
-    assert s.calls == [(EP[1], SONNET)]   # endpoint 1 still cooling
+    assert s.calls == [(EP[1], SONNET)]   # 엔드포인트 1은 아직 냉각 중
     clock.t += CFG.cooldown_seconds + 1
     r.state.last_success.clear()
     s.calls.clear()
@@ -147,7 +147,7 @@ def test_last_success_is_tried_first():
     llm = get_llm("generator", r)
     llm.invoke("1")
     clock_after = r.clock.t + CFG.cooldown_seconds + 1
-    r.clock.t = clock_after                # endpoint 1 no longer cooling
+    r.clock.t = clock_after                # 엔드포인트 1은 더 이상 냉각 중이 아니다
     s.calls.clear()
     llm.invoke("2")
     assert s.calls == [(EP[1], SONNET)]
@@ -254,7 +254,7 @@ def test_seed_from_model_status(tmp_path):
     stale_now = now + timedelta(days=2)
     assert old.seed_from_model_status(p, 900, now=100.0, wall_now=stale_now) == []
 
-    naive = tmp_path / "naive.json"   # no timezone in probed_at -> treated as UTC, no crash
+    naive = tmp_path / "naive.json"   # probed_at에 시간대 없음 -> UTC로 다루고, 오류 없음
     naive.write_text(json.dumps({"probed_at": now.replace(tzinfo=None).isoformat(),
                                  "quota_exceeded": [f"{EP[0]}:{SONNET}"]}), encoding="utf-8")
     assert RouterState().seed_from_model_status(naive, 900, now=0.0) == [(EP[0], SONNET)]
@@ -265,7 +265,7 @@ class Pick(BaseModel):
 
 
 def test_structured_output_with_fake_chat_model():
-    """with_structured_output goes through the router; GenericFakeChatModel stands in for Bedrock."""
+    """with_structured_output은 라우터를 거친다. GenericFakeChatModel이 Bedrock 대신 쓰인다."""
 
     def factory(endpoint, model, timeout):
         fake = GenericFakeChatModel(messages=iter([AIMessage(content='{"answer_index": 2}')]))
@@ -282,12 +282,12 @@ def test_structured_output_with_fake_chat_model():
 
 
 def test_bind_tools_switches_endpoint_like_other_calls():
-    """D44: each agent turn of a tool-calling model goes through the router (quota mid-loop -> next endpoint)."""
+    """D44: tool calling 모델의 에이전트 턴마다 라우터를 거친다(루프 중 할당량 초과 -> 다음 엔드포인트)."""
     r, s = make_router({(EP[0], SONNET): [quota()]})
 
     def factory(endpoint, model, timeout):
         m = Script.factory(s, endpoint, model, timeout)
-        m.bind_tools = lambda tools, **kw: m          # the bound model invokes like the plain one
+        m.bind_tools = lambda tools, **kw: m          # 바인딩한 모델도 일반 모델처럼 invoke한다
         return m
 
     r.factory = factory

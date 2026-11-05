@@ -1,19 +1,19 @@
-"""Retrieval evaluation over the real index: golden-query scores, generator-context quality, index health (D50).
+"""실제 색인에 대한 검색 평가: golden 질의 점수, 생성기 컨텍스트 품질, 색인 건강(D50).
 
-Run after changing chunking, cleaning, tagging or ranking, and compare with the saved baseline:
+청킹, 정리, 태깅, 순위를 바꾼 뒤 실행해 저장된 baseline과 비교한다:
 
-    python -m misslens.cli retrieval-eval                 # report; exit 1 on a regression or a failed health check
-    python -m misslens.cli retrieval-eval --save-baseline # accept the current scores as the new baseline
-    pytest -m realdata                                    # the same checks as a test
+    python -m misslens.cli retrieval-eval                 # 보고. 회귀나 건강 검사 실패가 있으면 exit 1
+    python -m misslens.cli retrieval-eval --save-baseline # 현재 점수를 새 baseline으로 받아들인다
+    pytest -m realdata                                    # 같은 검사를 테스트로 실행
 
-Golden queries (evals/<exam_id>/retrieval.yaml) judge relevance by content, not chunk ids, so they survive
-re-chunking: a hit is relevant when every `text` phrase occurs in it (case-insensitive) and, if given, its source
-contains `source`. An item with no relevant chunk in the index is reported as unanswerable, not scored.
+Golden 질의(evals/<exam_id>/retrieval.yaml)는 chunk id가 아니라 내용으로 관련성을 판단하므로 다시 청킹해도
+유지된다: 모든 `text` 문구가 결과에 들어 있고(대소문자 무시), `source`가 주어졌다면 결과의 출처에 그것이
+포함될 때 관련 있는 결과로 본다. 색인에 관련 chunk가 없는 항목은 점수를 매기지 않고 답할 수 없음으로 보고한다.
 
-Three ranking modes mirror the callers:
-  plain  no task filter (a learner's free question)
-  coach  task-tagged first but at most 2, rest by relevance (coach search_material, D49)
-  task   task-tagged first, no cap, k=6 (Generator RetrievalContext)
+순위 방식 세 가지는 호출하는 쪽을 그대로 따른다:
+  plain  세부 항목 필터 없음(학습자의 자유 질문)
+  coach  세부 항목 태그가 붙은 것을 먼저 두되 최대 2개, 나머지는 관련도순(coach search_material, D49)
+  task   세부 항목 태그가 붙은 것을 먼저, 제한 없음, k=6(Generator RetrievalContext)
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ COACH_MAX_TAGGED = 2
 SHORT_CHARS = 40
 THIN_TASK_CHUNKS = 5
 DUP_JACCARD = 0.8
-# Page chrome that must never reach the index (collector rules may change; these are the known offenders).
+# 색인에 절대 들어가면 안 되는 페이지 장식 문구(collector 규칙은 바뀔 수 있다. 아래는 알려진 문제 문구다).
 JUNK_PATTERNS = [r"WhiteBlackRedGreenBlueYellowMagentaCyan", r"Keyboard Shortcuts(Enabled|Disabled)",
                  r"Press shift question mark", r"Copy full course notes for LLMs", r"^Open in Claude\s*$",
                  r"Uh oh! Something went wrong"]
@@ -57,7 +57,7 @@ class GoldenItem(BaseModel):
     query: str
     domain: str
     task_id: str | None = None
-    expect: list[Expect] = Field(min_length=1)    # any alternative matching makes a chunk relevant
+    expect: list[Expect] = Field(min_length=1)    # 대안 중 하나라도 맞으면 그 chunk는 관련 있다
 
 
 class Golden(BaseModel):
@@ -88,7 +88,7 @@ def source_group(source: str) -> str:
     return source.split(" p.")[0]
 
 
-# --- golden queries ------------------------------------------------------------------------------
+# --- golden 질의 ---------------------------------------------------------------------------------
 
 def _search(index: Any, item: GoldenItem, mode: str, k: int):
     if mode == "plain":
@@ -139,10 +139,10 @@ def score_golden(index: Any, golden: Golden, modes: tuple[str, ...] = ("plain", 
     return out
 
 
-# --- generator context ---------------------------------------------------------------------------
+# --- 생성기 컨텍스트 -----------------------------------------------------------------------------
 
 def score_task_context(index: Any, pack: Any) -> dict:
-    """For every task statement, the Generator's own query: share of tagged chunks and source variety in top 6."""
+    """세부 항목마다 Generator가 실제로 쓰는 질의로 검색해, 상위 6개 중 태그된 chunk 비율과 출처 다양성을 잰다."""
     tagged_share, groups, weak = [], [], []
     for t in pack.task_ids:
         d = pack.domain_of(t)
@@ -156,7 +156,7 @@ def score_task_context(index: Any, pack: Any) -> dict:
             "avg_source_groups": round(float(np.mean(groups)), 3), "tasks_below_half_tagged": weak}
 
 
-# --- index health --------------------------------------------------------------------------------
+# --- 색인 건강 -----------------------------------------------------------------------------------
 
 def index_health(index: Any, pack: Any, site_rules: list[Any] = ()) -> dict:
     junk = [re.compile(p, re.M) for p in JUNK_PATTERNS]
@@ -205,7 +205,7 @@ def index_health(index: Any, pack: Any, site_rules: list[Any] = ()) -> dict:
             "checks": checks, "ok": all(checks.values())}
 
 
-# --- report and baseline -------------------------------------------------------------------------
+# --- 보고와 baseline -----------------------------------------------------------------------------
 
 @dataclass
 class RetrievalReport:
@@ -231,7 +231,7 @@ def _get(d: dict, section: str, mode: str | None, metric: str) -> float | None:
 
 
 def compare(report: dict, baseline: dict | None, max_drop: float) -> list[str]:
-    """Scores that fell more than max_drop below the baseline, plus failed health checks."""
+    """baseline보다 max_drop 넘게 떨어진 점수와, 실패한 건강 검사."""
     out = [f"health: {k} failed" for k, ok in report["health"]["checks"].items() if not ok]
     if baseline:
         for section, mode, metric in GUARDED:

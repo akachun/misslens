@@ -1,4 +1,4 @@
-"""D45: sandbox mode keeps reviews and rehearsals out of the real record and off shared material."""
+"""D45: 샌드박스 모드는 검토와 리허설을 실제 기록과 공유 자료에서 떼어 놓는다."""
 
 from __future__ import annotations
 
@@ -42,12 +42,12 @@ def test_checkpointer_default_goes_to_sandbox(sandbox):
 @pytest.mark.parametrize("argv", [["ingest", "README.md"], ["collect", "run"], ["practice", "import"]])
 def test_cli_refuses_shared_writes(sandbox, argv, capsys):
     assert main(argv) == 2
-    assert not (sandbox / "ledger.sqlite").exists()             # refused before opening anything
+    assert not (sandbox / "ledger.sqlite").exists()             # 아무것도 열기 전에 거부
 
 
 @pytest.mark.parametrize("intent", ["collect", "ingest"])
 def test_supervisor_refuses_shared_writes(sandbox, intent):
-    from fakes import FakeRoleLLM  # noqa: F401  (keeps fakes importable alongside)
+    from fakes import FakeRoleLLM  # noqa: F401  (fakes를 함께 import할 수 있게 유지)
     from misslens.exam_pack import load_exam_pack
     from misslens.graph import Services, build_supervisor_graph
 
