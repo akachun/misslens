@@ -6,6 +6,7 @@
     python -m misslens.cli search "query" [--task 2.1]   # inspect what retrieval returns
     python -m misslens.cli plan [-n 10]                  # Planner draft -> approve (interrupt①) -> solve
     python -m misslens.cli ask "도구 설계 5문제"          # free text -> Supervisor router -> agent
+    python -m misslens.cli eval [--export]               # diagnosis vs the learner's own labels (T10 eval)
     python -m misslens.cli practice import [DIR]         # parse learner-supplied practice sets into the style bank
     python -m misslens.cli collect login skilljar        # sign in by hand in a visible browser (profile only)
     python -m misslens.cli collect run [--site skilljar] # collect sources.yaml pages, then ingest them
@@ -21,6 +22,7 @@ import argparse
 import logging
 import sys
 import time
+from datetime import datetime
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -134,7 +136,34 @@ class CLI:
                 choice = self.ask_choice("답 (A-D): ", allow_blank=False)
                 responses.append((choice, self.ask_yes_no("확신하나요? (y=확신 / n=추측): ")))
         submit_review(self.ledger, self.pack, set_id, items, responses)
+        self.self_check(set_id)
         self.show_diagnosis(set_id, explainer=explainer)
+
+    SELF_CHECK_PROMPT = "정답을 보니: c=몰랐던 내용(개념) · r=알았는데 조건을 놓침(해석) · u=모르겠음 · Enter=건너뛰기 > "
+
+    def self_check(self, set_id: int) -> int:
+        """Learner's own label per miss, after the answer but before the verdict and explanation (D43).
+        Builds the diagnosis eval data while studying. Returns how many labels were saved."""
+        c, saved = self.console, 0
+        misses = [r for r in diagnosis_rows(self.ledger, set_id) if not r.is_correct and r.miss_type]
+        if misses:
+            c.print(Panel("틀린 문제의 정답을 먼저 봅니다. 해설을 보기 전에, 왜 틀렸다고 생각하는지 골라 주세요.\n"
+                          "(진단이 맞는지 확인하는 데만 쓰고, 판정은 바꾸지 않습니다)", title="자기 판단"))
+        for r in misses:
+            q = r.question
+            chosen = "-" if r.chosen_index is None else f"{LETTERS[r.chosen_index]}. {q['options'][r.chosen_index]['text_en']}"
+            right = f"{LETTERS[q['answer_index']]}. {q['options'][q['answer_index']]['text_en']}"
+            c.print(Panel(f"{escape(q['stem_en'])}\n\n고른 답: {escape(chosen)}\n정답: {escape(right)}",
+                          title=f"문제 {r.seq + 1}"))
+            while True:
+                a = self._ask(self.SELF_CHECK_PROMPT).strip().lower()
+                label = {"c": "concept", "r": "reading", "u": "unsure"}.get(a)
+                if a == "" or label:
+                    break
+            if label:
+                self.ledger.record_miss_feedback(r.attempt_id, label)
+                saved += 1
+        return saved
 
     def show_diagnosis(self, set_id: int, *, explainer: Any = None) -> None:
         c = self.console
@@ -189,6 +218,10 @@ class CLI:
             for p, n in r["top_phrases"]:
                 tbl.add_row(escape(p), str(n))
             c.print(tbl)
+        ag = r.get("agreement") or {}
+        if ag.get("labeled"):
+            rate = "-" if ag["rate"] is None else f"{ag['rate']:.0%}"
+            c.print(f"진단 일치율(내 판단과) {rate} ({ag['agree']}/{ag['compared']}, 판단 남긴 오답 {ag['labeled']}개)")
         if r["never_asked"]:
             c.print("미출제: " + ", ".join(r["never_asked"]))
         for f in r["failures"]:
@@ -401,6 +434,10 @@ def main(argv: list[str] | None = None) -> int:
     ak.add_argument("text")
     ak.add_argument("--exam", default="ccar-f")
     ak.add_argument("--no-explain", action="store_true")
+    ev = sub.add_parser("eval", help="진단 일치율(내 판단 vs 판정) 보기, --export로 eval 데이터 저장")
+    ev.add_argument("--export", nargs="?", const="", metavar="PATH",
+                    help="기본값 data/eval/misses-<날짜>.yaml (git 제외)")
+    ev.add_argument("--exam", default="ccar-f")
     pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
     pr.add_argument("action", choices=["import"])
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
@@ -450,6 +487,8 @@ def main(argv: list[str] | None = None) -> int:
             request = ({"intent": "plan_quiz", "args": {"count": args.n}} if args.cmd == "plan"
                        else {"text": args.text})
             run_supervisor(cli, request, explainer=explainer)
+        elif args.cmd == "eval":
+            eval_command(cli, args.export)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 
@@ -496,6 +535,47 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         ledger.close()
     return 0
+
+
+def export_eval(ledger: Ledger, pack: ExamPack, path: Path) -> int:
+    """Misses with the learner's own label, in the shape of tests/fixtures/eval_misses.yaml (T10 eval, D43)."""
+    import yaml
+
+    items = []
+    for m in ledger.labeled_misses(pack.exam_id):
+        q = m["payload"]
+        items.append({
+            "id": f"a{m['attempt_id']}", "is_decoy": False, "domain": m["domain"], "task_id": m["task_id"],
+            "stem_en": q["stem_en"], "options_en": [o["text_en"] for o in q["options"]],
+            "answer_index": q["answer_index"], "key_constraints": q["key_constraints"],
+            "violates": [o["violates"] for o in q["options"]], "first_choice": m["chosen_index"],
+            "self_label": {"miss_type": m["learner_label"], "missed_phrase": None, "stage": m["stage"]},
+            "system": {"miss_type": m["miss_type"], "missed_phrase": m["missed_phrase"]},
+        })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {"version": 1, "exam_id": pack.exam_id, "collected_at": datetime.now().strftime("%Y-%m-%d"),
+           "source": "MissLens review self-check (label given after the answer, before the explanation)",
+           "items": items}
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return len(items)
+
+
+def eval_command(cli: CLI, export: str | None) -> None:
+    from misslens.bedrock import PROJECT_ROOT
+    from misslens.ledger import diagnosis_agreement
+
+    ag = diagnosis_agreement(cli.ledger, cli.pack.exam_id)
+    rate = "-" if ag.rate is None else f"{ag.rate:.0%}"
+    cli.console.print(f"판단을 남긴 오답 {ag.labeled}개 · 비교 가능 {ag.compared}개 · 일치 {ag.agree}개 · 일치율 {rate}")
+    if ag.confusion:
+        tbl = Table("판정 → 내 판단", "개수")
+        for k, v in sorted(ag.confusion.items()):
+            tbl.add_row(k, str(v))
+        cli.console.print(tbl)
+    if export is not None:
+        path = Path(export) if export else PROJECT_ROOT / "data" / "eval" / f"misses-{datetime.now():%Y%m%d}.yaml"
+        n = export_eval(cli.ledger, cli.pack, path)
+        cli.console.print(f"{n}개를 저장했습니다: {path}")
 
 
 def collect_command(args, pack: ExamPack, ledger: Ledger, cli: CLI) -> int:

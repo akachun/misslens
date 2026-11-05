@@ -23,6 +23,7 @@ class ScriptedLearner:
         self.solve_count = 0
         self.form = None
         self.reask_index = 0
+        self.self_checks = 0
         self.log = []
 
     def __call__(self, prompt: str) -> str:
@@ -44,6 +45,9 @@ class ScriptedLearner:
             return "y"
         if prompt.startswith("문제 이상"):
             return ""
+        if prompt.startswith("정답을 보니"):       # self-check (D43): label the reading miss first, skip the rest
+            self.self_checks += 1
+            return "r" if self.self_checks == 1 else ""
         raise AssertionError(f"unexpected prompt {prompt!r}")
 
     # The learner "sees" the question being shown: read the latest ready question from the ledger.
@@ -88,6 +92,10 @@ def test_cli_five_question_set_records_diagnosis(monkeypatch):
     assert sum(a["is_decoy"] for a in attempts.values()) == 2          # 3 correct -> 2 decoys
     assert all(a["elapsed_ms"] is not None for a in attempts.values())
     assert ledger.get_set(sid)["status"] == "reviewed"
+    assert learner.self_checks == 2                                    # asked once per miss (reading + concept)
+    from misslens.ledger import diagnosis_agreement
+    labeled = ledger.labeled_misses(PACK.exam_id)
+    assert len(labeled) == 1 and labeled[0]["learner_label"] in ("reading",)
     mb = miss_breakdown(ledger, PACK.exam_id, set_id=sid)
     assert (mb.reading, mb.concept, mb.baseline) == (1, 1, 1.0)
     assert top_missed_phrases(ledger, PACK.exam_id)[0][0] == by_seq[1]["missed_phrase"]
@@ -123,6 +131,8 @@ def test_cli_mark_invalid_from_review(monkeypatch):
             return LETTERS[form["items"][0].order.index(answer_index())]   # right on re-ask
         if prompt.startswith("확신하나요"):
             return "y"
+        if prompt.startswith("정답을 보니"):
+            return "c"                                                     # learner thinks: concept
         return "1"                                                         # mark question 1 invalid
 
     cli = CLI(PACK, ledger, console=Console(file=io.StringIO()), ask=ask)

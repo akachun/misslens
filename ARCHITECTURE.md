@@ -113,6 +113,7 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 - 판정 표는 `ledger/judge.py`의 순수 함수로 구현하고, ledger가 리뷰를 저장할 때(`record_review`) 직접 적용한다. 호출하는 쪽은 재질문 답과 확신 여부만 넘긴다(D28).
 - `reask_choice`는 섞기 전의 **원래 보기 순서**로 바꿔서 저장한다. `missed_phrase`는 `reading`일 때만 기록한다(`uncertain`은 기록하지 않음).
 - 리뷰에는 세트의 오답이 모두 들어 있어야 하고, 미끼는 처음에 맞힌 문제여야 한다. 어기면 저장하지 않는다. 리뷰 전에 '문제 이상'으로 표시한 오답은 재질문하지 않는다.
+- **자기 판단(D43):** 재질문 제출 뒤, 진단을 보여 주기 전에 오답마다 정답만 보여 주고 "몰랐던 내용(개념) / 조건을 놓침(해석) / 모르겠음"을 고르게 한다(건너뛰기 가능). `miss_feedback`에 저장하고 `diagnosis_agreement`로 판정과의 일치율을 낸다. 해설을 본 뒤에 고르면 해석 실수 쪽으로 치우치므로(T1-a 관찰) 이 순서를 지킨다. `eval --export`는 T1-a 픽스처와 같은 형식으로 `data/eval/`에 저장한다.
 - 구현: 재질문 폼과 대응표는 `agents/grader/reask.py`, 저장과 진단 화면 데이터는 `agents/grader/review.py`. 오답 해설은 explainer 역할(Sonnet 4.6)이 판정 유형(해석/불확실/개념)에 맞춰 쓰고, 호출이 실패하면 문제에 저장된 해설을 보여 준다.
 
 ### 4.3 계획 승인 (interrupt①, D21)
@@ -156,6 +157,7 @@ Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
 | `missed_phrases` | attempt_id(FK), phrase, user_corrected | 순위를 낼 때 invalid인 attempt는 조인에서 뺀다 |
 | `materials` | id, exam_id, source_type(`upload`/`paste`/`collect`), source_uri, content_hash, task_id(NULL 허용), collected_at | |
 | `generation_failures` | id, exam_id, task_id, tries, reason, created_at | 근거 검증에서 실패한 이유를 기록한다. 현황 탭에 표시 |
+| `miss_feedback` | attempt_id(PK, FK), learner_label(`concept`/`reading`/`unsure`), stage, created_at | 리뷰 중 학습자가 남긴 자기 판단(D43). 판정(`miss_type`)은 바꾸지 않고 진단 일치율 eval에만 쓴다. 2026-11-05 추가 |
 
 - 인덱스: `attempts(question_id)`, `attempts(set_id)`, `questions(exam_id, task_id)`
 - 구현 세부(2026-11-04): 세트 제출에는 `ready` 문제 전부의 답이 있어야 한다(안 푼 문제는 `chosen_index=NULL`로 오답 처리, 빠뜨리면 제출 거부). `attempts.question_id`는 UNIQUE(문제당 시도 1개), `missed_phrases.attempt_id`가 기본 키(시도당 문구 1개, 사용자가 고치면 `user_corrected=1`, `reading` 판정에만 허용), `failed` 문제는 `payload_json`이 NULL, `materials`는 `(exam_id, content_hash)`로 중복 제거. 연결은 프로세스당 1개 + Lock, 쓰기는 `BEGIN IMMEDIATE` 트랜잭션.
@@ -430,6 +432,7 @@ misslens/
 | D40 | `QuestionDraft` 필드 순서를 `stem_en → key_constraints → … → options`로 바꿈, 리스트 필드가 JSON 문자열로 오면 풀어서 받음 | 기존 순서(보기 다음에 key_constraints) | 근거 자료를 붙인 뒤 첫 시도 validator 통과율이 1/8로 떨어짐(모델이 가이드 문장을 key_constraints로 씀). 순서를 바꾸자 6/8. tool calling이 리스트를 문자열로 보내 실패하는 경우를 실측으로 확인 |
 | D41 | Supervisor 그래프는 Planner·Collector를 서브그래프 노드로, Generator·Reporter·Ingest·Grader(제출)는 함수 노드로 둔다. 진행 중인 문제 스트림과 수집 브라우저는 상태가 아니라 `Services`에 두고 상태에는 id만 둔다. 영역별 통계는 ledger `domain_summary`로 추가 | 모든 에이전트를 서브그래프로, 스트림을 상태에 저장 | interrupt가 있는 두 에이전트만 서브그래프여야 부모 체크포인터로 재개됨. 스레드·브라우저 객체는 체크포인트에 직렬화할 수 없음. 풀이·리뷰는 interrupt 없이 UI가 진행하고 결과만 `submit`으로 보냄(규칙 4) |
 | D42 | Streamlit은 Supervisor 요청을 thread_id별 백그라운드 작업으로 돌리고 상태를 폴링, 계획 thread_id·세트 id를 URL에 둠, 다시 그리기는 페이지 끝에서 한 번 | 요청을 스크립트 안에서 동기 실행, 탭마다 바로 `st.rerun` | 수집처럼 긴 작업이 페이지를 멈추지 않게 하고, interrupt는 체크포인터에서 읽어 새로고침에도 이어짐(T9 완료 기준). 탭 안에서 바로 다시 그리면 뒤 탭이 그려지지 않음 |
+| D43 | 진단 eval 데이터(학습자 자기 판단)를 리뷰 흐름 안에서 모은다: 정답 공개 → 자기 판단 → 판정·해설. 별도 테이블 `miss_feedback`, 일치율은 ledger 통계 | 학습자가 따로 시간을 내 오답을 기록(T1-a 원안), 판정 화면에서 동의 여부만 묻기 | 따로 기록할 시간이 없음(학습자 의견). 판정을 먼저 보여 주면 동의 쪽으로, 해설을 먼저 보여 주면 해석 쪽으로 치우침. 판정 표(규칙 3)와 섞이지 않게 테이블을 분리 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |

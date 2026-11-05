@@ -234,9 +234,23 @@ def test_cli_plan_flow_approve_edit_solve_and_review(ledger):
 
     from misslens.cli import CLI, run_supervisor
 
-    answers = iter(["e", "0 2 0 0 0", "A", "B", "n"] + ["A", "y"] * 4)
+    plan_answers = iter(["e", "0 2 0 0 0"])
+
+    def ask(prompt: str) -> str:
+        if prompt.startswith("Enter=승인") or prompt.startswith("d1 d2"):
+            return next(plan_answers)
+        if prompt.startswith("답 (A-D, 건너뛰기"):
+            return "A"
+        if prompt.startswith("답 (A-D)"):
+            return "A"
+        if prompt.startswith("확신하나요"):
+            return "y"
+        if prompt.startswith("정답을 보니"):
+            return "c"
+        return ""
+
     out = io.StringIO()
-    cli = CLI(PACK, ledger, console=Console(file=out, width=200), ask=lambda _: next(answers))
+    cli = CLI(PACK, ledger, console=Console(file=out, width=200), ask=ask)
     res = run_supervisor(cli, {"intent": "plan_quiz", "args": {"count": 3}}, svc=services(ledger),
                          checkpointer=InMemorySaver())
     text = out.getvalue()

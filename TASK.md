@@ -32,7 +32,7 @@
 
 - [x] **T1-a** 오답 10개 직접 분류: 최근 틀린 문제 10개를 한국어로 다시 풀고 개념/해석으로 나눈 뒤, 놓친 영어 문구를 기록한다 → `tests/fixtures/eval_misses.yaml` (eval 픽스처로 재사용)
   - 결과: **목표 10개 중 오답 4개**(concept 1, uncertain 2, reading 1) + 미끼 3개로 형식을 먼저 확정. 해설을 이미 본 문제라 다시 풀지 않고 학습자가 직접 판정했다(방식 변경)
-  - [ ] 공부하면서 **해설을 보기 전에** 기록한 오답을 계속 추가해 10개 이상으로 늘린다(T10 eval 전까지)
+  - [x] ~~공부하면서 해설을 보기 전에 기록한 오답을 추가~~ → 앱 안에서 자동 수집으로 바꿈(D43): 리뷰 중 '자기 판단' 단계에서 남긴 라벨이 `miss_feedback`에 쌓이고 `eval --export`로 같은 형식 파일이 나온다. 학습자는 평소처럼 풀기만 하면 된다
   - `key_constraints`·`violates`는 Claude 초안. `tests/test_eval_fixture.py`가 §7 validator 규칙과 맞는지 검사한다
   - 관찰: m02에서 규칙으로 정한 문구(처음 고른 보기의 `violates`)와 학습자가 놓쳤다고 한 문구가 다르다 → T10 eval에서 일치율로 확인한다
 - [x] **T1-b** 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지 확인: `scripts/probe_models.py` → `data/model_status.json` (ARCHITECTURE §6.2)
@@ -63,7 +63,7 @@
   - [x] 테스트: 가짜 예외로 전환 순서, 쿨다운, 모델 폴백, 전부 실패하는 경우 확인
   - [x] 실호출 스모크 `tests/test_llm_live.py`(router 일반 호출, generator 구조화 출력) 통과
 - [x] **T3** ledger(`src/misslens/ledger/`)
-  - [x] 테이블 6개 + 인덱스 3개(ARCHITECTURE §5)
+  - [x] 테이블 6개 + 인덱스 3개(ARCHITECTURE §5). 2026-11-05 `miss_feedback` 추가로 7개(D43)
   - [x] 세트 제출 트랜잭션 + 상태 가드(이중 제출 방지)
   - [x] 통계 함수: `task_accuracy`(Laplace, 최근 10회, uncertain=오답, invalid 제외), `coverage`, `miss_breakdown`(+ 미끼 기준선), `top_missed_phrases`, `avg_time`, `generation_failures`
   - [x] 테스트: 통계 규칙, invalid 제외(문구 순위 포함), 트랜잭션
@@ -152,10 +152,11 @@
 - [~] **T10** 테스트 마무리
   - [x] 실호출 스모크(`pytest -m live`) 8개 통과(2026-11-05): 실제 `Question` 스키마로 문제 생성(D40 순서 변경 후 재확인, `tests/test_generator_live.py`), 라우터 한국어 4문장·Planner 모델 계획(`tests/test_supervisor_live.py`), LLM 기본 2개
   - [x] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM) → `tests/test_cli_e2e.py`(Phase 2에서 작성)
-  - [ ] eval: T1-a 픽스처(현재 오답 4 + 미끼 3, 10개 이상으로 늘릴 예정)로 진단 일치율과 조건 문구 번역 보존을 확인(수동 실행)
+  - [~] eval: 진단 일치율은 `python -m misslens.cli eval`(현황 탭에도 표시)로 확인. 데이터는 공부하면서 자동으로 쌓임(D43, 테스트 `tests/test_eval_feedback.py`). 조건 문구 번역 보존은 진단 화면의 놓친 문구 강조로 눈으로 확인(자동화는 TODOS)
 - [x] **T11** 문서 갱신: `README.md`(구조·설치·처음 쓰는 순서·명령·데이터와 보안·테스트), ARCHITECTURE는 작업마다 반영(D27~D42), LangGraph 그래프 다이어그램은 컴파일된 그래프에서 생성(`scripts/draw_graph.py` → `docs/graph.mmd`, README에 포함)
 - [x] **T12** `TODOS.md` 작성(v1 이후 항목 + 구현 중 발견한 항목)
-- [ ] 데모 시나리오: 자연어 지시 → 계획 승인(interrupt①) → 세트 풀이 → 리뷰·진단 → 현황 / 로그인 대기(interrupt②)
+- [x] 데모 시나리오: [`docs/demo.md`](docs/demo.md) — 준비 점검표, 7단계(구조 → 자연어 → 계획 승인·새로고침 → RAG 풀이 → 리뷰·자기 판단·진단 → 현황 → 로그인 대기), 실패할 때 대체 경로
+  - [ ] 리허설 1회(수집이 끝난 뒤 실제 데이터로)
 - [ ] 제출
 
 ---
@@ -223,3 +224,4 @@
 | 2026-11-05 | T8: Supervisor 그래프(6개 에이전트 라우팅, 자유 발화 라우터), Planner(interrupt①, 규칙 초안 + Haiku 조정), Reporter, ledger `domain_summary`, Generator 영역별 계획 상한, CLI `plan`/`ask`(D41). 수집 진행 중에 코드만 바꾸고 데이터 파일은 건드리지 않음. 테스트 237개 |
 | 2026-11-05 | T9 Streamlit: 탭 4개 + 사이드바 자연어, Supervisor 요청을 백그라운드 작업으로 실행·폴링, URL로 계획 승인·세트 복원(D42), `QuestionStream.poll()`, 붙여넣기 ingest 경로. AppTest로 완료 기준 확인. 테스트 242개 |
 | 2026-11-05 | 문서·진행 대조(디렉터리 지도·인계 메모 정리). T10 실호출 스모크 8개 통과(라우터·Planner 추가), T11 README·그래프 다이어그램(컴파일된 그래프에서 생성), T12 TODOS.md. 수집은 계속 진행 중 |
+| 2026-11-05 | 오답 eval 데이터 자동 수집(D43): 리뷰 뒤 '자기 판단' 단계(정답 공개 → 개념/해석/모르겠음 → 판정·해설), `miss_feedback` 테이블, `diagnosis_agreement` 통계, 현황에 일치율, CLI `eval [--export]`. 학습자가 따로 기록할 필요 없음. 테스트 247개 |

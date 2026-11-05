@@ -161,7 +161,8 @@ def tab_study(r: Resources) -> None:
     if quiz is None:
         study_start(r)
         return
-    {"solving": study_solve, "review": study_review, "diagnosis": study_diagnosis}[quiz["phase"]](r, quiz)
+    {"solving": study_solve, "review": study_review, "self_check": study_self_check,
+     "diagnosis": study_diagnosis}[quiz["phase"]](r, quiz)
 
 
 def study_start(r: Resources) -> None:
@@ -266,6 +267,34 @@ def study_review(r: Resources, quiz: dict) -> None:
             st.error("모든 문제에 답을 고르세요.")
             return
         submit_review(r.ledger, r.pack, sid, items, responses)
+        misses = [x for x in diagnosis_rows(r.ledger, sid) if not x.is_correct and x.miss_type]
+        quiz["phase"] = "self_check" if misses else "diagnosis"
+        st.rerun()
+
+
+SELF_LABELS = {"concept": "몰랐던 내용(개념)", "reading": "알았는데 조건을 놓침(해석)", "unsure": "모르겠음"}
+
+
+def study_self_check(r: Resources, quiz: dict) -> None:
+    """Learner's own label per miss: answer shown, verdict and explanation not yet (D43, eval data)."""
+    sid = quiz["set_id"]
+    misses = [x for x in diagnosis_rows(r.ledger, sid) if not x.is_correct and x.miss_type]
+    st.subheader("자기 판단")
+    st.caption("틀린 문제의 정답을 먼저 봅니다. 해설을 보기 전에 왜 틀렸다고 생각하는지 고르세요. "
+               "진단이 맞는지 확인하는 데만 쓰고 판정은 바꾸지 않습니다. 건너뛰어도 됩니다.")
+    for row in misses:
+        q = row.question
+        chosen = "-" if row.chosen_index is None else f"{LETTERS[row.chosen_index]}. {q['options'][row.chosen_index]['text_en']}"
+        st.markdown(f"**문제 {row.seq + 1}**")
+        st.write(q["stem_en"])
+        st.markdown(f"고른 답: {chosen}  \n정답: **{LETTERS[q['answer_index']]}. {q['options'][q['answer_index']]['text_en']}**")
+        st.radio("정답을 보니", list(SELF_LABELS), index=None, horizontal=True, key=f"self_{row.attempt_id}",
+                 format_func=SELF_LABELS.get)
+    if st.button("진단 보기", key=f"self_done_{sid}", type="primary"):
+        for row in misses:
+            label = st.session_state.get(f"self_{row.attempt_id}")
+            if label:
+                r.ledger.record_miss_feedback(row.attempt_id, label)
         quiz["phase"] = "diagnosis"
         st.rerun()
 
@@ -491,6 +520,11 @@ def render_report(rep: dict) -> None:
     if rep["top_phrases"]:
         st.markdown("**놓친 조건 문구 상위 10**")
         st.dataframe([{"문구": p, "횟수": n} for p, n in rep["top_phrases"]], hide_index=True)
+    ag = rep.get("agreement") or {}
+    if ag.get("labeled"):
+        rate = "-" if ag["rate"] is None else f"{ag['rate']:.0%}"
+        st.caption(f"진단 일치율(내 판단과) {rate} · {ag['agree']}/{ag['compared']} · 판단 남긴 오답 {ag['labeled']}개 "
+                   "(`python -m misslens.cli eval --export`로 eval 데이터 저장)")
     if rep["never_asked"]:
         st.caption("미출제 세부 항목: " + ", ".join(rep["never_asked"]))
     for f in rep["failures"]:

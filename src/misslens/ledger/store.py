@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS generation_failures (
     reason      TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS miss_feedback (
+    attempt_id     INTEGER PRIMARY KEY REFERENCES attempts(id),
+    learner_label  TEXT NOT NULL CHECK (learner_label IN ('concept','reading','unsure')),
+    stage          TEXT NOT NULL DEFAULT 'before_explanation',
+    created_at     TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ix_attempts_question ON attempts(question_id);
 CREATE INDEX IF NOT EXISTS ix_attempts_set ON attempts(set_id);
 CREATE INDEX IF NOT EXISTS ix_questions_exam_task ON questions(exam_id, task_id);
@@ -284,6 +290,38 @@ class Ledger:
             c.execute("INSERT INTO missed_phrases (attempt_id, phrase, user_corrected) VALUES (?,?,1) "
                       "ON CONFLICT(attempt_id) DO UPDATE SET phrase=excluded.phrase, user_corrected=1",
                       (attempt_id, phrase))
+
+    def record_miss_feedback(self, attempt_id: int, label: str, *, stage: str = "before_explanation") -> None:
+        """Learner's own view of a reviewed miss, for evaluating the diagnosis (T10 eval, D43).
+
+        Stored apart from miss_type: the judge table stays the only source of the diagnosis (rule 3).
+        Asked after the correct answer is shown but before the verdict and explanation, so it is not biased by them.
+        """
+        if label not in ("concept", "reading", "unsure"):
+            raise LedgerError(f"unknown label {label!r}")
+        with self._tx() as c:
+            row = c.execute("SELECT is_correct, is_decoy, miss_type FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+            if row is None:
+                raise LedgerError(f"no attempt {attempt_id}")
+            if row["is_correct"] or row["miss_type"] is None:
+                raise LedgerError(f"attempt {attempt_id} is not a reviewed miss")
+            c.execute("INSERT INTO miss_feedback (attempt_id, learner_label, stage, created_at) VALUES (?,?,?,?) "
+                      "ON CONFLICT(attempt_id) DO UPDATE SET learner_label=excluded.learner_label, "
+                      "stage=excluded.stage, created_at=excluded.created_at", (attempt_id, label, stage, _now()))
+
+    def labeled_misses(self, exam_id: str) -> list[dict[str, Any]]:
+        """Reviewed misses that carry learner feedback, with their question, for eval export (invalid excluded)."""
+        out = []
+        for r in self._query(
+                "SELECT a.id AS attempt_id, a.chosen_index, a.miss_type, m.phrase AS missed_phrase, f.learner_label,"
+                " f.stage, f.created_at, q.task_id, q.domain, q.payload_json FROM miss_feedback f"
+                " JOIN attempts a ON a.id = f.attempt_id JOIN questions q ON q.id = a.question_id"
+                " LEFT JOIN missed_phrases m ON m.attempt_id = a.id"
+                " WHERE q.exam_id = ? AND a.invalid = 0 ORDER BY a.id", (exam_id,)):
+            d = dict(r)
+            d["payload"] = json.loads(d.pop("payload_json"))
+            out.append(d)
+        return out
 
     def mark_invalid(self, attempt_id: int, invalid: bool = True) -> None:
         """'문제 이상' (F8): the attempt drops out of every statistic, including phrase ranking."""

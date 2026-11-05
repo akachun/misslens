@@ -2,7 +2,7 @@
 
 자격증 시험 대비 학습 코치 에이전트입니다. 학습자가 지정한 자료로 실전형 문제 세트를 내고, 틀린 문제를 **개념 실수와 해석 실수**로 나눠 진단합니다. 놓친 조건 문구를 기록해 약점 위주로 다시 출제합니다. 첫 시험 팩은 CCA-F(Claude Certified Architect – Foundations, 시험 코드 CCAR-F)입니다.
 
-핵심 루프: **계획 → 세트 풀이 → 제출 → 한국어 재질문(미끼 포함) → 개념/해석/불확실 진단 → 기록 → 약점 반영 재출제**
+핵심 루프: **계획 → 세트 풀이 → 제출 → 한국어 재질문(미끼 포함) → 자기 판단 → 개념/해석/불확실 진단 → 기록 → 약점 반영 재출제**
 
 | 문서 | 내용 |
 |---|---|
@@ -10,6 +10,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D42) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
+| [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
 | [CLAUDE.md](CLAUDE.md) | 코딩 에이전트용 규칙 |
 
 ## 구조
@@ -145,6 +146,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 | `ingest <경로>... [--paste 이름]` | 자료 색인(붙여넣기는 표준 입력) |
 | `search "<질의>" [--task ID]` | 검색 결과 확인 |
 | `collect login\|run [site] [--thread ID] [--limit N]` | 로그인 프로필 저장 / 수집(중단한 수집은 `--thread`로 재개) |
+| `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 
 모든 명령은 `python -m misslens.cli <명령>`으로 실행하고, 시험은 `--exam ccar-f`(기본값)로 고릅니다.
@@ -155,7 +157,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 |---|---|---|
 | `exams/<exam_id>/exam.yaml` | 시험 팩(영역·비중·세부 항목·언어·형식, version) | 포함 |
 | `exams/<exam_id>/sources.yaml` | 수집 대상 URL과 사이트 규칙 | 포함 |
-| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자료·생성 실패) | 제외 |
+| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패) | 제외 |
 | `data/checkpoints.sqlite` | LangGraph 체크포인트(interrupt 재개) | 제외 |
 | `data/index/<exam_id>/` | FAISS 색인과 청크 | 제외 |
 | `data/sources/` | 넣은 자료, 수집본, 연습 문제 원본 | 제외 |

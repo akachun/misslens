@@ -145,6 +145,33 @@ def miss_breakdown(ledger: Ledger, exam_id: str, *, set_id: int | None = None) -
     return MissBreakdown(**counts, decoys=decoys, decoys_correct=decoys_correct)
 
 
+@dataclass(frozen=True)
+class DiagnosisAgreement:
+    """System diagnosis (judge table) vs the learner's own label on the same misses (T10 eval, D43)."""
+    labeled: int
+    compared: int          # system concept/reading and learner concept/reading
+    agree: int
+    confusion: dict = field(default_factory=dict)   # "system->learner" -> count, all labeled misses
+
+    @property
+    def rate(self) -> float | None:
+        return self.agree / self.compared if self.compared else None
+
+
+def diagnosis_agreement(ledger: Ledger, exam_id: str) -> DiagnosisAgreement:
+    rows = ledger._query(
+        "SELECT a.miss_type, f.learner_label FROM miss_feedback f JOIN attempts a ON a.id = f.attempt_id"
+        " JOIN questions q ON q.id = a.question_id WHERE q.exam_id = ? AND a.invalid = 0", (exam_id,))
+    confusion: dict[str, int] = defaultdict(int)
+    compared = agree = 0
+    for r in rows:
+        confusion[f"{r['miss_type']}->{r['learner_label']}"] += 1
+        if r["miss_type"] in ("concept", "reading") and r["learner_label"] in ("concept", "reading"):
+            compared += 1
+            agree += int(r["miss_type"] == r["learner_label"])
+    return DiagnosisAgreement(len(rows), compared, agree, dict(confusion))
+
+
 def top_missed_phrases(ledger: Ledger, exam_id: str, limit: int = 10) -> list[tuple[str, int]]:
     """Most often missed condition phrases; invalid attempts are excluded from the join."""
     rows = ledger._query(

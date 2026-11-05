@@ -98,6 +98,11 @@ def test_plan_refresh_then_full_loop(res):
     submit = [b for b in at2.button if "리뷰 제출" in b.label or "진단 보기" in b.label][0]
     run(submit.click())
     assert res.ledger.get_set(sid)["status"] == "reviewed"
+    if at2.session_state["quiz"]["phase"] == "self_check":         # misses: label them before the verdict
+        for w in [w for w in at2.radio if w.key and w.key.startswith("self_")]:
+            w.set_value("concept")
+        run(at2.button(key=f"self_done_{sid}").click())
+        assert len(res.ledger.labeled_misses(PACK.exam_id)) >= 1
     assert at2.session_state["quiz"]["phase"] == "diagnosis"
     assert "미끼 기준선" in [m.label for m in at2.metric]
 
@@ -133,6 +138,9 @@ def test_quick_quiz_and_mark_invalid(res):
     for i in range(len(items)):
         at.radio(key=f"re_{sid}_{i}").set_value(1)
     run([b for b in at.button if b.label in ("리뷰 제출", "진단 보기")][0].click())
+    if at.session_state["quiz"]["phase"] == "self_check":
+        run(at.button(key=f"self_done_{sid}").click())             # skip labelling: nothing stored
+        assert res.ledger.labeled_misses(PACK.exam_id) == []
     if not att["is_correct"]:
         run(at.button(key=f"inv_{att['id']}").click())
         assert res.ledger.set_attempts(sid)[0]["invalid"] == 1
