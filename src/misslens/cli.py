@@ -620,7 +620,7 @@ def reindex_collected(cli: CLI, pack: ExamPack, ledger: Ledger, srcs: Any, names
             if len(text.strip()) < MIN_TEXT_CHARS:
                 empty += 1
                 continue
-            save_page(n, raw.source, text)
+            save_page(n, raw.source, text, COLLECTED_DIR)
             docs.append(Document(text=text, source=raw.source, source_type="collect"))
         removed = index.remove(lambda c, u=set(uris): c.source in u)
         index.save()

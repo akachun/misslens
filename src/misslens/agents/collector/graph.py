@@ -93,8 +93,9 @@ def _slug(url: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "__" for c in path)[:150]
 
 
-def save_page(site: str, url: str, text: str, root: Path = COLLECTED_DIR) -> Path:
-    d = root / site
+def save_page(site: str, url: str, text: str, root: Path | None = None) -> Path:
+    # Resolved at call time: a default bound at import time once let a test write into the real folder.
+    d = (root or COLLECTED_DIR) / site
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{_slug(url)}.md"
     if path.exists():
