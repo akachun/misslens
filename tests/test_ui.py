@@ -158,8 +158,8 @@ def test_material_paste_ingest_and_index_stats(res):
 
 def test_sidebar_free_text_without_router_is_refused(res):
     at = run(AppTest.from_file(APP, default_timeout=30))
-    at.text_input(key="nl_text").input("뭐든 해줘")
-    run(at.button(key="nl_send").click())
+    at.text_area(key="nl_text").input("뭐든 해줘")
+    run([b for b in at.button if b.label == "보내기"][0].click())
     assert any("요청이 비어" in i.value or "실행하지" in i.value for i in at.info)
 
 
@@ -191,7 +191,7 @@ def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
     assert "**해설**" in texts and "**코치 해설**" in texts             # both kept
     assert draft(0)["explanation_native"] in texts                     # stored explanation still on screen
     assert "코치 첫 해설" in texts
-    at.text_input(key=f"q_{att['id']}").input("tool_choice는 뭐예요?")
+    at.text_area(key=f"q_{att['id']}").input("tool_choice는 뭐예요?")
     run([b for b in at.button if b.label == "질문하기"][0].click())
     assert any(c.name == "user" for c in at.chat_message) and any(c.name == "assistant" for c in at.chat_message)
 
@@ -231,8 +231,21 @@ def test_question_box_is_there_before_any_explanation(res, wrong):
     at = run(AppTest.from_file(APP, default_timeout=30))
     att = _diagnosis(at, res, wrong)
     assert bool(att["is_correct"]) is (not wrong)
-    at.text_input(key=f"q_{att['id']}").input("이 보기는 왜 틀렸어요?")
+    at.text_area(key=f"q_{att['id']}").input("이 보기는 왜 틀렸어요?")
     run([b for b in at.button if b.label == "질문하기"][0].click())
     msgs = [c for c in at.chat_message]
     assert [c.name for c in msgs] == ["user", "assistant"]
     assert "**코치 해설**" not in [m.value for m in at.markdown]         # no explanation was requested
+
+
+def test_sidebar_request_is_multiline_form_and_shows_what_was_sent(res):
+    """Long requests fit (text_area) and are sent by the form (Ctrl/⌘+Enter or the button); the sent text is echoed."""
+    long = "다음 주 시험이라 도구 설계와 MCP 영역 위주로 문제를 많이 풀고 싶은데, 오늘은 어떤 순서로 공부하면 좋을지 계획을 세워줘"
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    assert at.text_area(key="nl_text").value == ""
+    at.text_area(key="nl_text").input(long)
+    run([b for b in at.button if b.label == "보내기"][0].click())
+    assert at.session_state["nl_last"] == long
+    assert any(long in m.value for m in at.sidebar.markdown)
+    # clear_on_submit and Ctrl/⌘+Enter are browser behaviour that AppTest does not replay; checked in a real browser.
+    assert any("Ctrl+Enter" in c.value for c in at.sidebar.caption)

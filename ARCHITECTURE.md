@@ -390,6 +390,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 | 항목 | 방식 |
 |---|---|
 | 탭 | 학습(바로 풀기·풀이·리뷰 폼·진단·문제 이상) / 자료(업로드·붙여넣기·수집·로그인 대기·색인 현황) / 현황(Reporter) / 계획(interrupt① 승인) + 사이드바 자연어 요청(F10) |
+| 입력 | 사이드바 요청과 코치 질문은 여러 줄 입력 칸을 폼으로 감싸 **Ctrl+Enter(맥 ⌘+Enter)로 제출**, Enter는 줄바꿈. 사이드바 폭 380px, 보낸 요청을 그대로 다시 보여 줌 |
 | 요청 처리 | 모든 에이전트 요청은 Supervisor 그래프로 보내고, thread_id별 **백그라운드 작업**으로 실행한다. 화면은 작업 상태를 확인해 진행 중이면 1.5초 뒤 다시 그리고, interrupt가 있으면 체크포인터에서 읽어 승인·로그인 화면을 보여 준다. 다시 그리기는 모든 탭을 그린 뒤 한 번만 한다(오래 걸리는 수집이 다른 탭을 가리지 않게) |
 | interrupt 재개 | 계획 thread_id와 진행 중인 세트 id를 `st.query_params`(`?plan=…&set=…`)에 둔다. 새로고침하면 체크포인터에서 같은 interrupt를 다시 읽고, 세트는 ledger의 `ready` 문제로 다시 구성한다 |
 | DB 연결 | `st.cache_resource`로 Ledger·Services·그래프·bge-m3를 프로세스당 하나만 만든다. Ledger는 연결 1개 + Lock, 체크포인트는 `checkpoints.sqlite`(SqliteSaver)로 학습 기록 DB와 분리 |

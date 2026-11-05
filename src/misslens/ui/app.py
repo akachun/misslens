@@ -31,6 +31,9 @@ LETTERS = "ABCD"
 POLL_SECONDS = 1.5
 UPLOAD_DIR = PROJECT_ROOT / "data" / "sources" / "uploads"
 LABELS = {"reading": "해석 실수", "uncertain": "불확실", "concept": "개념 실수"}
+SUBMIT_HINT = "Ctrl+Enter(macOS는 ⌘+Enter)로 보내기 · Enter는 줄바꿈"
+# Wider sidebar so a long request stays readable (users can still drag the edge).
+SIDEBAR_CSS = "<style>section[data-testid='stSidebar']{min-width:380px;width:380px}</style>"
 
 
 # --- resources (one per process) -------------------------------------------------------------
@@ -405,8 +408,9 @@ def coach_panel(r: Resources, row: Any) -> None:
             st.write(t.answer)
             show_turn_meta(t.sources, t.tool_calls)
     with st.form(f"ask_{row.attempt_id}", clear_on_submit=True):
-        question = st.text_input("코치에게 질문", key=f"q_{row.attempt_id}",
-                                 placeholder="예: tool_choice any와 auto는 언제 다르게 쓰나요?")
+        question = st.text_area("코치에게 질문", key=f"q_{row.attempt_id}", height=90,
+                                placeholder="예: tool_choice any와 auto는 언제 다르게 쓰나요?")
+        st.caption(SUBMIT_HINT)
         if st.form_submit_button("질문하기") and question.strip():
             with st.spinner("코치가 답을 찾는 중..."):
                 coach_ask(r.explainer, r.pack, question, ledger=r.ledger, index=r.svc.index,
@@ -621,14 +625,22 @@ def render_report(rep: dict) -> None:
 def sidebar_request(r: Resources) -> None:
     with st.sidebar:
         st.markdown("### MissLens에게 요청")
-        text = st.text_input("예: 도구 설계 영역 5문제", key="nl_text")
-        if st.button("보내기", key="nl_send") and text.strip():
+        # A form: Ctrl+Enter (⌘+Enter on macOS) submits a text_area; plain Enter stays a newline.
+        with st.form("nl_form", clear_on_submit=True, border=False):
+            text = st.text_area("요청", key="nl_text", height=130, label_visibility="collapsed",
+                                placeholder="예: 오늘 공부 계획 세워줘 / 도구 설계 영역 5문제 / 현황 보여줘")
+            sent = st.form_submit_button("보내기", type="primary", use_container_width=True)
+        st.caption(SUBMIT_HINT)
+        if sent and text.strip():
             tid = new_thread("ask")
             st.session_state.nl_thread = tid
+            st.session_state.nl_last = text.strip()
             start_job(r, tid, {"text": text.strip()})
         tid = st.session_state.get("nl_thread")
         if not tid:
             return
+        if st.session_state.get("nl_last"):
+            st.markdown(f"**보낸 요청**  \n{html.escape(st.session_state['nl_last'])}")
         state, val = job_state(r, tid)
         if state == "running":
             st.info("처리 중...")
@@ -656,6 +668,7 @@ def sidebar_request(r: Resources) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="MissLens", page_icon="🔎", layout="wide")
+    st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
     r = resources()
     st.session_state["_poll"] = False
     from misslens.paths import sandbox
