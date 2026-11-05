@@ -265,3 +265,73 @@ def test_clean_markdown_drops_menus_keeps_prose():
     out = clean_markdown(md)
     assert "Home" not in out and "logo" not in out
     assert "Use [hooks](https://x/h) to block" in out and 'claude -p "hi"' in out
+
+
+# --- page chrome and reindex (D48) ---------------------------------------------------------------
+
+PLAYER = """## Lesson title
+Open in Claude
+Copy notes
+1 minute, 25 seconds of 5 minutes, 44 secondsVolume 90%
+Keyboard ShortcutsEnabledDisabled
+WhiteBlackRedGreenBlueYellowMagentaCyan
+This video is still being processed. Please check back later and refresh the page.
+Uh oh! Something went wrong, please try again.
+Real lesson text about tool_choice that must stay.
+"""
+
+
+def test_strip_chrome_drops_menus_and_player_block():
+    site = load_sources("ccar-f").sites["skilljar"]
+    out = site.strip_chrome(PLAYER)
+    assert out.splitlines() == ["## Lesson title", "Real lesson text about tool_choice that must stay."]
+
+
+def test_strip_chrome_keeps_text_when_block_never_ends():
+    site = load_sources("ccar-f").sites["skilljar"]
+    text = "0 of 1 minute, 25 secondsVolume 90%\nbody without an end marker"
+    assert site.strip_chrome(text) == text
+
+
+def test_reindex_replaces_collected_chunks(tmp_path, monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    import misslens.agents.collector.graph as cg
+    import misslens.cli as cli_mod
+    import misslens.llm as llm_mod
+    from fakes import FakeRoleLLM
+    from misslens.cli import CLI, reindex_collected
+    from misslens.exam_pack import load_exam_pack
+    from misslens.ledger import Ledger
+    from misslens.retrieval import ChunkIndex, IndexedChunk
+    from test_retrieval import FakeEmbedder
+
+    pack = load_exam_pack("ccar-f")
+    srcs = load_sources("ccar-f")
+    monkeypatch.setattr(cg, "COLLECTED_DIR", tmp_path / "collected")
+    url_text, url_video = f"https://anthropic-partners.skilljar.com/c/1", f"https://anthropic-partners.skilljar.com/c/2"
+    save_page("skilljar", url_text, PLAYER + "More real text. " * 20, tmp_path / "collected")
+    save_page("skilljar", url_video, PLAYER.replace("Real lesson text about tool_choice that must stay.", ""),
+              tmp_path / "collected")
+    index = ChunkIndex("ccar-f", FakeEmbedder(), root=tmp_path / "index")
+    index.add([IndexedChunk("guide text about tool_choice", "guide.pdf", "g", ["2.3"]),
+               IndexedChunk("WhiteBlackRed junk " + url_text, url_text, "old1", []),
+               IndexedChunk("old video chunk", url_video, "old2", [])])
+    ledger = Ledger(":memory:")
+    ledger.add_material("ccar-f", source_type="collect", content_hash="old1", source_uri=url_text)
+    ledger.add_material("ccar-f", source_type="collect", content_hash="old2", source_uri=url_video)
+    monkeypatch.setattr(cli_mod, "open_index", lambda exam_id, must_exist=False: index)
+    monkeypatch.setattr(llm_mod, "get_llm", lambda role: FakeRoleLLM([{"items": [{"index": 0, "task_ids": ["2.3"]}]}]))
+    out = io.StringIO()
+    reindex_collected(CLI(pack, ledger, console=Console(file=out, width=200)), pack, ledger, srcs, ["skilljar"])
+
+    sources = [c.source for c in index.chunks]
+    assert "guide.pdf" in sources and url_video not in sources          # guide kept, video-only page gone
+    assert all("WhiteBlackRed" not in c.text for c in index.chunks)
+    assert any(c.source == url_text and "must stay" in c.text for c in index.chunks)
+    rows = [tuple(r) for r in ledger._query("SELECT source_uri, content_hash FROM materials")]
+    assert rows and all(h not in ("old1", "old2") for _, h in rows)
+    assert "본문 없는(영상만) 페이지 1개" in out.getvalue()
+    ledger.close()

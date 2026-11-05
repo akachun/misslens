@@ -13,6 +13,12 @@ sites:
     expired_markers: [/auth/login, /auth/signin]   # redirected here = session expired -> interrupt② (login wait)
     not_enrolled_markers: [/checkout/]             # course needs enrollment: reported, skipped
     delay_seconds: 2.5                             # at least 2 s between requests (§9)
+    # Page chrome to drop before saving (D48). 29% of chunks carried the video player's menus otherwise.
+    drop_lines:                                    # whole lines (regex, full match)
+      - 'Courses|Certifications and badges|Anthropic Open in Claude|Anthropic|Open in Claude'
+      - 'Ask questions about this course|Copy notes|Copy full course notes for LLMs'
+    drop_blocks:                                   # from a start line through the last end line in a row
+      - {start: '.* of .*Volume \d+%', end: 'Uh oh! Something went wrong, please try again\.|This video is still being processed.*'}
 
 # Source: https://anthropic-partners.skilljar.com/page/claude-certified-architect-foundations-prep-courses
 # (the 7 prep courses for Claude Certified Architect – Foundations). Ordered by relevance to the exam domains.

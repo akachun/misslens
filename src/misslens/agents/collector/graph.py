@@ -163,7 +163,7 @@ def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = N
             results.append({"url": url, "status": "expanded", "chars": len(lessons),
                             "note": f"레슨 {len(lessons)}개" + ("" if lessons else " (로그인·수강 등록 상태 확인)")})
             rest = [{"url": u, "expand": None, "title": item.get("title")} for u in lessons] + rest
-        elif len(text := clean_markdown(r.markdown)) < MIN_TEXT_CHARS:
+        elif len(text := clean_markdown(site.strip_chrome(r.markdown))) < MIN_TEXT_CHARS:
             results.append({"url": url, "status": "empty", "chars": len(text),
                             "note": "본문이 거의 없습니다(영상만 있는 레슨이거나 추출 실패)"})
         else:

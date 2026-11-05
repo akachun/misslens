@@ -326,7 +326,15 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
     for row in rows:
         q = row.question
         if row.is_correct:
-            st.markdown(f"✅ 문제 {row.seq + 1} 정답" + (" (미끼)" if row.is_decoy else ""))
+            with st.expander(f"✅ 문제 {row.seq + 1} 정답" + (" (미끼)" if row.is_decoy else "")
+                             + f" · 정답 {LETTERS[q['answer_index']]}", expanded=False):
+                st.write(q["stem_en"])
+                for i, o in enumerate(q["options"]):
+                    mark = "**" if i == q["answer_index"] else ""
+                    st.markdown(f"{mark}{LETTERS[i]}. {o['text_en']}{mark}")
+                st.markdown("**해설**")
+                st.write(q["explanation_native"])
+                coach_panel(r, row)
             continue
         chosen = "-" if row.chosen_index is None else LETTERS[row.chosen_index]
         title = (f"문제 {row.seq + 1} · {LABELS.get(row.miss_type, row.miss_type or '-')} · "
@@ -374,23 +382,23 @@ def coach_panel(r: Resources, row: Any) -> None:
     tid = coach_thread(r.pack.exam_id, row.attempt_id)
     turns = coach_history(r.coach_checkpointer, tid)
     fallback = st.session_state.get(f"coach_fallback_{row.attempt_id}")
-    if not turns and fallback is None:
-        if st.button("코치 해설(자료 검색)", key=f"btn_exp_{row.attempt_id}"):
+    if not turns:
+        if fallback is not None:
+            st.markdown("**코치 해설**")
+            st.write(fallback)
+            st.caption("코치가 자료 검색 없이 답했습니다(모델 호출 실패). 아래에서 질문하면 다시 시도합니다.")
+        elif not row.is_correct and st.button("코치 해설(자료 검색)", key=f"btn_exp_{row.attempt_id}"):
             with st.spinner("코치가 자료를 찾아 해설을 쓰는 중..."):
                 res = coach_explain(r.explainer, r.pack, row, ledger=r.ledger, index=r.svc.index,
                                     checkpointer=r.coach_checkpointer, thread_id=tid)
             if not coach_history(r.coach_checkpointer, tid):     # coach failed: plain explanation, no thread
                 st.session_state[f"coach_fallback_{row.attempt_id}"] = res.text
             st.rerun()
-        return
-    st.markdown("**코치 해설**")
-    if not turns:
-        st.write(fallback)
-        st.caption("코치가 자료 검색 없이 답했습니다(모델 호출 실패). 이어서 질문하려면 잠시 후 '코치 해설'을 다시 누르세요.")
-        return
-    st.write(turns[0].answer)
-    show_turn_meta(turns[0].sources, turns[0].tool_calls)
-    for t in turns[1:]:
+    elif turns[0].question is None:                              # started with the coach explanation
+        st.markdown("**코치 해설**")
+        st.write(turns[0].answer)
+        show_turn_meta(turns[0].sources, turns[0].tool_calls)
+    for t in (turns[1:] if turns and turns[0].question is None else turns):
         with st.chat_message("user"):
             st.write(t.question)
         with st.chat_message("assistant"):
@@ -402,7 +410,7 @@ def coach_panel(r: Resources, row: Any) -> None:
         if st.form_submit_button("질문하기") and question.strip():
             with st.spinner("코치가 답을 찾는 중..."):
                 coach_ask(r.explainer, r.pack, question, ledger=r.ledger, index=r.svc.index,
-                          checkpointer=r.coach_checkpointer, thread_id=tid)
+                          checkpointer=r.coach_checkpointer, thread_id=tid, row=row)
             st.rerun()
 
 

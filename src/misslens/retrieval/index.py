@@ -120,6 +120,22 @@ class ChunkIndex:
             self.chunks.extend(chunks)
             self._rebuild_bm25()
 
+    def remove(self, predicate) -> int:
+        """Drop chunks for which predicate(chunk) is true; vectors are kept for the rest (no re-embedding).
+        Call save() afterwards. Returns how many were removed."""
+        with self._lock:
+            keep = [i for i, c in enumerate(self.chunks) if not predicate(c)]
+            removed = len(self.chunks) - len(keep)
+            if removed:
+                vecs = self._faiss.reconstruct_n(0, self._faiss.ntotal) if self._faiss.ntotal else None
+                new = faiss.IndexFlatIP(self.embedder.dim)
+                if keep:
+                    new.add(np.ascontiguousarray(vecs[keep], dtype=np.float32))
+                self._faiss = new
+                self.chunks = [self.chunks[i] for i in keep]
+                self._rebuild_bm25()
+            return removed
+
     def _rebuild_bm25(self) -> None:
         self._bm25 = BM25Okapi([tokenize(c.text) or ["_"] for c in self.chunks]) if self.chunks else None
 
@@ -148,16 +164,23 @@ class ChunkIndex:
         order = np.argsort(-scores, kind="stable")[:n]
         return [int(i) for i in order if scores[i] > 0]
 
-    def search(self, query: str, k: int = 6, task_id: str | None = None) -> list[Hit]:
+    def search(self, query: str, k: int = 6, task_id: str | None = None, *, max_tagged: int | None = None,
+               where=None) -> list[Hit]:
+        """max_tagged caps how many task-tagged chunks go first (the rest by overall relevance, D49);
+        where(chunk) -> bool restricts the corpus (e.g. one course's lessons)."""
         with self._lock:
             if not self.chunks:
                 return []
             n = min(len(self.chunks), max(CANDIDATES, k))
-            # Rank the whole corpus when filtering by task, so tagged chunks are never cut off early.
-            if task_id is not None:
+            # Rank the whole corpus when filtering, so matching chunks are never cut off early.
+            if task_id is not None or where is not None:
                 n = len(self.chunks)
             fused = rrf([self._dense(query, n), self._sparse(query, n)], [DENSE_WEIGHT, SPARSE_WEIGHT])
+            if where is not None:
+                fused = [(i, s) for i, s in fused if where(self.chunks[i])]
             tagged = [(i, s) for i, s in fused if task_id is not None and task_id in self.chunks[i].task_ids]
+            if max_tagged is not None:
+                tagged = tagged[:max_tagged]
             tagged_ids = {i for i, _ in tagged}
             rest = [(i, s) for i, s in fused if i not in tagged_ids]
             out: list[Hit] = []

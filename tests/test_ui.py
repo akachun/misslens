@@ -199,3 +199,40 @@ def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
 def test_source_links_render_urls_as_links():
     out = ui.source_links(["https://anthropic-partners.skilljar.com/claude-101/123", "guide.pdf p.13"])
     assert out == "[claude-101/123](https://anthropic-partners.skilljar.com/claude-101/123) · `guide.pdf p.13`"
+
+
+def _diagnosis(at, res, wrong: bool):
+    at.number_input(key="quick_n").set_value(1)
+    run(at.button(key="quick_start").click())
+    for _ in range(20):
+        radios = [w for w in at.radio if w.key and w.key.startswith("ans_")]
+        if radios:
+            break
+        run(at)
+    q = res.ledger.set_questions(at.session_state["quiz"]["set_id"])[0]
+    a = q["payload"]["answer_index"]
+    radios[0].set_value((a + 1) % 4 if wrong else a)
+    run(at.button(key=f"next_{radios[0].key[4:]}").click())
+    run(at.button(key="submit_set").click())
+    sid = at.session_state["quiz"]["set_id"]
+    for i in range(len(at.session_state["quiz"]["items"])):
+        at.radio(key=f"re_{sid}_{i}").set_value(1)
+    run([b for b in at.button if b.label in ("리뷰 제출", "진단 보기")][0].click())
+    if at.session_state["quiz"]["phase"] == "self_check":
+        run(at.button(key=f"self_done_{sid}").click())
+    return res.ledger.set_attempts(sid)[0]
+
+
+@pytest.mark.parametrize("wrong", [True, False])
+def test_question_box_is_there_before_any_explanation(res, wrong):
+    """①: ask a miss directly; ②: ask about a question answered correctly."""
+    res.explainer = FakeRoleLLM(["바로 답합니다."])
+    res.svc.index = None
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    att = _diagnosis(at, res, wrong)
+    assert bool(att["is_correct"]) is (not wrong)
+    at.text_input(key=f"q_{att['id']}").input("이 보기는 왜 틀렸어요?")
+    run([b for b in at.button if b.label == "질문하기"][0].click())
+    msgs = [c for c in at.chat_message]
+    assert [c.name for c in msgs] == ["user", "assistant"]
+    assert "**코치 해설**" not in [m.value for m in at.markdown]         # no explanation was requested

@@ -344,6 +344,16 @@ class Ledger:
                             (exam_id, source_type, source_uri, content_hash, task_id, _now()))
             return int(cur.lastrowid) if cur.rowcount == 1 else None
 
+    def remove_materials(self, exam_id: str, source_uris: list[str]) -> int:
+        """Forget material rows whose chunks were removed from the index (e.g. re-cleaned collection, D48)."""
+        if not source_uris:
+            return 0
+        with self._tx() as c:
+            marks = ",".join("?" * len(source_uris))
+            cur = c.execute(f"DELETE FROM materials WHERE exam_id=? AND source_uri IN ({marks})",
+                            (exam_id, *source_uris))
+            return cur.rowcount
+
     def record_generation_failure(self, exam_id: str, task_id: str, tries: int, reason: str) -> int:
         with self._tx() as c:
             cur = c.execute("INSERT INTO generation_failures (exam_id, task_id, tries, reason, created_at)"

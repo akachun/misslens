@@ -24,8 +24,9 @@ v1 범위 밖이거나 구현 중에 발견했지만 마감 전에 하지 않기
 
 ## 자료와 수집
 
-- [ ] 사이트별 본문 영역 지정: Skilljar 레슨 상단의 버튼 문구("Open in Claude", "Copy notes" 등)를 `css_selector`나 반복 줄 제거로 빼기
-- [ ] 코스 간 중복 청크 정리: Bedrock·Google Cloud 코스는 Claude API 코스와 내용이 많이 겹침. 거의 같은 청크가 검색 상위를 채우지 않도록 near-duplicate 제거나 MMR
+- [x] ~~사이트별 본문 영역 지정~~ → `sources.yaml`의 `drop_lines`·`drop_blocks`와 `collect reindex`로 처리(D48, 2026-11-05)
+- [ ] 영상 전용 레슨(36개)의 자막·스크립트 수집: 지금은 본문이 없어 색인에서 빠짐
+- [~] 코스 간 중복 청크 정리: 검색 단계에서 거의 같은 청크 제거로 처리(D46). 색인 단계에서 아예 합치거나 MMR로 다양성을 높이는 것은 남음
 - [ ] 증분 수집: `collect run`이 매번 모든 레슨을 다시 읽음. 이미 저장한 URL은 건너뛰고 `--refresh`일 때만 다시 읽기
 - [ ] 대량 태깅 속도: 레슨 수백 개를 넣을 때 태깅 호출이 순차라 느림. 호출 제한 안에서 묶음 병렬화
 - [ ] Collector 고도화: 레슨 한 단계(D38)를 넘는 링크 따라가기, AgentCore Browser 검토, 여러 사이트 동시 관리

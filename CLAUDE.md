@@ -66,6 +66,7 @@ python -m misslens.cli search "tool_choice" --task 2.3  # 검색 결과 확인
 python -m misslens.cli status      # 현황 요약
 python -m misslens.cli collect login skilljar   # 보이는 브라우저에서 직접 로그인(프로필만 저장)
 python -m misslens.cli collect run             # sources.yaml 수집 → 색인(로그인 만료 시 interrupt②, --thread로 재개)
+python -m misslens.cli collect reindex skilljar # 정리 규칙(sources.yaml) 바꾼 뒤 수집본 재정리·재색인(재수집 없음)
 python -m misslens.cli practice import         # 연습 문제 파일 → 문체 예시 은행(data/practice/)
 python -m misslens.cli eval --export           # 진단 일치율 + eval 데이터(data/eval/)
 ```

@@ -144,7 +144,7 @@ graph TD;
 
 ### Coach — tool 사용 에이전트 (ReAct)
 
-모델이 `search_material`(수집한 교안·가이드 하이브리드 검색)과 `learner_history`(이 세부 항목의 내 정답률·자주 놓친 문구)를 질문마다 최대 3번 골라 부른 뒤 해설과 출처를 냅니다. tool은 모두 읽기 전용입니다. 진단 화면에서는 저장된 기본 해설 아래에 코치 해설이 붙고, **같은 오답에 대해 코치에게 이어서 질문**할 수 있습니다. 대화는 오답마다 체크포인터 thread로 남고, 출처는 수집한 레슨 URL 링크나 `guide.pdf p.N`으로 표시됩니다.
+모델이 `search_material`(수집한 교안·가이드 하이브리드 검색)과 `learner_history`(이 세부 항목의 내 정답률·자주 놓친 문구)를 질문마다 최대 3번 골라 부른 뒤 해설과 출처를 냅니다. tool은 모두 읽기 전용입니다. 진단 화면에서는 저장된 기본 해설 아래에 코치 해설이 붙고, **코치에게 바로 질문하고 이어서 대화**할 수 있습니다(해설을 먼저 받지 않아도 되고, 맞힌 문제도 펼쳐서 질문 가능). 대화는 오답마다 체크포인터 thread로 남고, 출처는 수집한 레슨 URL 링크나 `guide.pdf p.N`으로 표시됩니다. "Skilljar 강의에서 찾아줘"처럼 물으면 `source="skilljar"`로 수집한 레슨만 검색하고, 다루지 않는 주제면 가장 가까운 레슨을 알려 줍니다.
 
 ```mermaid
 ---
@@ -290,7 +290,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 | `status` | 현황 보고서 |
 | `ingest <경로>... [--paste 이름]` | 자료 색인(붙여넣기는 표준 입력) |
 | `search "<질의>" [--task ID]` | 검색 결과 확인 |
-| `collect login\|run [site] [--thread ID] [--limit N]` | 로그인 프로필 저장 / 수집(중단한 수집은 `--thread`로 재개) |
+| `collect login\|run\|reindex [site] [--thread ID] [--limit N]` | 로그인 프로필 저장 / 수집(중단한 수집은 `--thread`로 재개) / 정리 규칙 변경 후 재정리·재색인 |
 | `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 

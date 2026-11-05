@@ -162,3 +162,24 @@ def test_near_duplicate_chunks_from_other_courses_are_skipped(index):
     sources = [h.source for h in hits]
     assert sum(s.endswith("/lesson") for s in sources) == 1
     assert len(hits) == 3                                   # the other slots go to different material
+
+
+def test_remove_keeps_other_vectors(index):
+    index.add([chunk("Hooks can block tool calls before they run.", h="hook", source="drop/me")])
+    n = len(index)
+    assert index.remove(lambda c: c.source == "drop/me") == 1
+    assert len(index) == n - 1 and all(c.source != "drop/me" for c in index.chunks)
+    assert "caching" in index.search("prompt caching cost", k=1)[0].text     # remaining vectors still line up
+
+
+def test_max_tagged_leaves_room_for_untagged_and_where_filters(index):
+    for i in range(4):
+        index.add([chunk(f"Subagent coordinator note {i} about task tools.", tags=["1.3"], h=f"g{i}", source="guide.pdf")])
+    index.add([chunk("Subagent coordinator lesson with task tools and allowed tools.", h="L",
+                     source="https://anthropic-partners.skilljar.com/claude-code-in-action/1")])
+    hits = index.search("subagent coordinator task tools", k=4, task_id="1.3")
+    assert all(h.source == "guide.pdf" for h in hits)                     # default: tagged fill every slot
+    hits = index.search("subagent coordinator task tools", k=4, task_id="1.3", max_tagged=2)
+    assert sum(h.tagged for h in hits) == 2 and any("skilljar" in h.source for h in hits)
+    hits = index.search("subagent coordinator task tools", k=4, where=lambda c: "skilljar" in c.source)
+    assert [h.source for h in hits] == ["https://anthropic-partners.skilljar.com/claude-code-in-action/1"]

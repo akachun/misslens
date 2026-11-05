@@ -33,11 +33,16 @@ from misslens.ledger import Ledger, task_accuracy, top_missed_phrases
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 3
-SEARCH_K = 4
+SEARCH_K = 5
+MAX_TAGGED = 2     # task-tagged chunks first, but never all slots: lessons must get a chance (D49)
 
-COACH_SYSTEM = """You are a study coach for a certification exam. The learner answered a practice question wrong.
+COACH_SYSTEM = """You are a study coach for a certification exam. {situation}
 Before explaining, check facts you are not certain about with search_material (the learner's own study material),
 and call learner_history once to see whether this task is a repeated weakness. At most {rounds} tool rounds.
+You cannot browse the web, but the learner's Skilljar course lessons are already in the indexed material as local
+copies (cited by their lesson URLs). When the learner asks about Skilljar, the courses, lectures or course notes,
+search them with source="skilljar" (or a course slug). If they do not cover the topic, say so plainly and name the
+closest lesson you found, instead of saying the material is missing.
 Then write the explanation in {learner}: 4-6 plain sentences, no greeting or preamble, no headings, no lists,
 no horizontal rules. Cover what the chosen option gets wrong, which phrase in the question rules it out, why the
 correct option fits, and one tip tailored to the learner's history (that history already includes this miss).
@@ -49,6 +54,12 @@ briefly (at most 6 plain sentences), checking facts with search_material when yo
 {focus}"""
 
 
+SITUATION_MISS = "The learner answered a practice question wrong."
+SITUATION_RIGHT = ("The learner answered this practice question correctly and has a question about it (for example why "
+                   "the other options are wrong). Do not treat it as a miss.")
+QUESTION_MARK = "\n\nLearner's question (answer this first, briefly): "
+
+
 @dataclass
 class CoachResult:
     text: str
@@ -57,19 +68,47 @@ class CoachResult:
     used_tools: bool = False
 
 
+def corpus_summary(index: Any | None) -> str:
+    """What is indexed, grouped like the `source` filter understands it (for the tool description)."""
+    if index is None or len(index) == 0:
+        return "Nothing is indexed yet."
+    groups: dict[str, set[str]] = {}
+    for c in index.chunks:
+        s = c.source
+        if "skilljar.com/" in s:
+            course = s.split("skilljar.com/", 1)[1].split("/", 1)[0]
+            groups.setdefault(f"skilljar course '{course}'", set()).add(s)
+        elif s.startswith("http"):
+            groups.setdefault(s.split("/")[2], set()).add(s)
+        else:
+            groups.setdefault(s, set()).add(s)
+    return "; ".join(f"{name} ({len(v)} page(s))" if name.startswith("skilljar") else name
+                     for name, v in sorted(groups.items()))
+
+
 def make_tools(pack: ExamPack, ledger: Ledger | None, index: Any | None) -> list[StructuredTool]:
-    def search_material(query: str, task_id: str | None = None) -> str:
-        """Search the learner's indexed study material (official guide, course lessons, notes) for facts about
-        a feature, flag, API parameter or pattern. Use a short English query with the exact term, e.g.
-        "tool_choice forced tool" or "claude -p non-interactive". Optionally pass the task statement id
-        (like "2.3") to prefer chunks tagged with it. Returns up to 4 excerpts with their source."""
+    def search_material(query: str, task_id: str | None = None, source: str | None = None) -> str:
         if index is None or len(index) == 0:
             return "No study material is indexed yet."
         tid = task_id if task_id in set(pack.task_ids) else None
-        hits = index.search(query, k=SEARCH_K, task_id=tid)
+        where = None
+        if source:
+            key = source.strip().lower()
+            key = "skilljar.com" if key in ("skilljar", "course", "courses", "lessons", "lecture") else key
+            key = "guide.pdf" if key in ("guide", "official guide", "exam guide") else key
+            where = lambda c, k=key: k in c.source.lower()  # noqa: E731
+        hits = index.search(query, k=SEARCH_K, task_id=tid, max_tagged=MAX_TAGGED, where=where)
         if not hits:
-            return "No matching material."
+            return f"No matching material{' in ' + source if source else ''}."
         return reference_block([Chunk(h.text[:1500], source_label(h.source, h.text)) for h in hits])
+
+    search_doc = (
+        "Search the learner's indexed study material for facts about a feature, flag, API parameter or pattern. "
+        "Use a short English query with the exact term, e.g. \"tool_choice forced tool\". Optional task_id "
+        "(like \"2.3\") prefers chunks tagged with that task statement. Optional source restricts the search: "
+        "\"skilljar\" for the collected course lessons, a course slug (e.g. \"claude-code-in-action\"), or "
+        "\"guide\" for the official exam guide. Returns up to 5 excerpts with their source (lesson URL or "
+        "file and page). Indexed material: " + corpus_summary(index))
 
     def learner_history(task_id: str) -> str:
         """The learner's record on one task statement id (like "2.3"): recent accuracy and attempts, plus the
@@ -86,7 +125,8 @@ def make_tools(pack: ExamPack, ledger: Ledger | None, index: Any | None) -> list
         lines.append("Most missed phrases: " + ("; ".join(f"{p} (x{n})" for p, n in phrases) if phrases else "none"))
         return "\n".join(lines)
 
-    return [StructuredTool.from_function(search_material), StructuredTool.from_function(learner_history)]
+    return [StructuredTool.from_function(search_material, description=search_doc),
+            StructuredTool.from_function(learner_history)]
 
 
 _PAGE = re.compile(r"\[page (\d+)\]")
@@ -180,11 +220,18 @@ def _turn_result(msgs: list) -> CoachResult | None:
     return CoachResult(text, _sources(turn), calls, used_tools=bool(calls)) if text else None
 
 
+def _system(pack: ExamPack, row: DiagnosisRow) -> str:
+    learner = LANGUAGE_NAMES.get(pack.learner_language, pack.learner_language)
+    if row.is_correct:
+        return COACH_SYSTEM.format(situation=SITUATION_RIGHT, rounds=MAX_TOOL_ROUNDS, learner=learner, focus="")
+    return COACH_SYSTEM.format(situation=SITUATION_MISS, rounds=MAX_TOOL_ROUNDS, learner=learner,
+                               focus=FOCUS.get(row.miss_type or "", ""))
+
+
 def coach_explain(llm: Any, pack: ExamPack, row: DiagnosisRow, *, ledger: Ledger | None = None,
                   index: Any | None = None, checkpointer: Any = None, thread_id: str | None = None) -> CoachResult:
     """First explanation for a miss. With checkpointer + thread_id the conversation is kept for follow-ups."""
-    learner = LANGUAGE_NAMES.get(pack.learner_language, pack.learner_language)
-    system = COACH_SYSTEM.format(rounds=MAX_TOOL_ROUNDS, learner=learner, focus=FOCUS.get(row.miss_type or "", ""))
+    system = _system(pack, row)
     try:
         graph = build_coach_graph(llm, make_tools(pack, ledger, index), checkpointer=checkpointer)
         out = graph.invoke({"messages": [SystemMessage(system), HumanMessage(_question_message(row))]},
@@ -199,11 +246,18 @@ def coach_explain(llm: Any, pack: ExamPack, row: DiagnosisRow, *, ledger: Ledger
 
 
 def coach_ask(llm: Any, pack: ExamPack, question: str, *, ledger: Ledger | None, index: Any | None,
-              checkpointer: Any, thread_id: str) -> CoachResult:
-    """A follow-up question on an existing coach thread. Never raises: a failure becomes a short notice."""
+              checkpointer: Any, thread_id: str, row: DiagnosisRow | None = None) -> CoachResult:
+    """A question on a coach thread. On a new thread (no explanation asked yet, or a question the learner got
+    right) `row` gives the question context, so the conversation can start with the learner's own question.
+    Never raises: a failure becomes a short notice."""
     try:
         graph = build_coach_graph(llm, make_tools(pack, ledger, index), checkpointer=checkpointer)
-        out = graph.invoke({"messages": [HumanMessage(question.strip())]}, _config(thread_id))
+        started = checkpointer.get_tuple({"configurable": {"thread_id": thread_id}}) is not None
+        if started or row is None:
+            first = [HumanMessage(question.strip())]
+        else:
+            first = [SystemMessage(_system(pack, row)), HumanMessage(_question_message(row) + QUESTION_MARK + question.strip())]
+        out = graph.invoke({"messages": first}, _config(thread_id))
         res = _turn_result(out["messages"])
         if res is not None:
             return res
@@ -233,7 +287,13 @@ def coach_history(checkpointer: Any, thread_id: str) -> list[CoachTurn]:
         final = next((m for m in reversed(chunk) if isinstance(m, AIMessage) and not m.tool_calls), None)
         if final is None:
             continue
-        turns.append(CoachTurn(None if n == 0 else _text(msgs[i]), _text(final), _sources(chunk), _calls(chunk)))
+        if n == 0:
+            # The first message is the question context; it carries the learner's question when they asked first.
+            q = _text(msgs[i]).split(QUESTION_MARK.strip(), 1)
+            question = q[1].strip() if len(q) == 2 else None
+        else:
+            question = _text(msgs[i])
+        turns.append(CoachTurn(question, _text(final), _sources(chunk), _calls(chunk)))
     return turns
 
 

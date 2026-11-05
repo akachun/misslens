@@ -453,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
     pr.add_argument("--exam", default="ccar-f")
     co = sub.add_parser("collect", help="로그인 세션으로 sources.yaml의 페이지 수집")
-    co.add_argument("action", choices=["login", "run"])
+    co.add_argument("action", choices=["login", "run", "reindex"])
     co.add_argument("site", nargs="?", help="sources.yaml의 사이트 이름(생략하면 전부)")
     co.add_argument("--thread", help="이어서 실행할 thread_id(로그인 대기에서 멈춘 실행)")
     co.add_argument("--limit", type=int, help="처음 N개 소스만(시험 실행용)")
@@ -599,6 +599,37 @@ def eval_command(cli: CLI, export: str | None) -> None:
         cli.console.print(f"{n}개를 저장했습니다: {path}")
 
 
+def reindex_collected(cli: CLI, pack: ExamPack, ledger: Ledger, srcs: Any, names: list[str]) -> int:
+    """Re-clean saved pages with the site's current rules and replace their chunks in the index (D48).
+    No crawling: works on data/sources/collected/<site>/. Video-only pages (no text left) leave the index."""
+    from misslens.agents.collector.graph import COLLECTED_DIR, MIN_TEXT_CHARS, clean_markdown, save_page
+    from misslens.agents.ingest import Document, Ingestor
+    from misslens.agents.ingest.loaders import load_file
+
+    index = open_index(pack.exam_id, must_exist=True)
+    docs: list[Any] = []
+    for n in names:
+        site = srcs.sites[n]
+        files = sorted((COLLECTED_DIR / n).glob("*.md"))
+        uris, empty = [], 0
+        for f in files:
+            raw = load_file(f)                          # marker stripped, source = page URL
+            body = "\n".join(l for l in raw.text.splitlines() if not l.startswith("<!-- collected"))
+            text = clean_markdown(site.strip_chrome(body))
+            uris.append(raw.source)
+            if len(text.strip()) < MIN_TEXT_CHARS:
+                empty += 1
+                continue
+            save_page(n, raw.source, text)
+            docs.append(Document(text=text, source=raw.source, source_type="collect"))
+        removed = index.remove(lambda c, u=set(uris): c.source in u)
+        index.save()
+        ledger.remove_materials(pack.exam_id, uris)
+        cli.console.print(f"{n}: 파일 {len(files)}개 · 색인에서 뺀 청크 {removed}개 · 본문 없는(영상만) 페이지 {empty}개")
+    run_ingest(Ingestor(pack, ledger, index), docs, cli.console)
+    return 0
+
+
 def collect_command(args, pack: ExamPack, ledger: Ledger, cli: CLI) -> int:
     from dataclasses import replace
 
@@ -612,6 +643,8 @@ def collect_command(args, pack: ExamPack, ledger: Ledger, cli: CLI) -> int:
     if unknown:
         cli.console.print(f"sources.yaml에 없는 사이트: {', '.join(unknown)}")
         return 1
+    if args.action == "reindex":
+        return reindex_collected(cli, pack, ledger, srcs, names)
     if args.action == "login":
         for n in names:
             path = login(n, srcs.sites[n].login_url)

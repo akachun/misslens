@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -14,6 +15,12 @@ from misslens.exam_pack import EXAMS_DIR
 MIN_DELAY_SECONDS = 2.0
 
 
+class DropBlock(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    start: str
+    end: str
+
+
 class Site(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     name: str
@@ -22,6 +29,35 @@ class Site(BaseModel):
     expired_markers: list[str] = Field(default_factory=list)
     not_enrolled_markers: list[str] = Field(default_factory=list)
     delay_seconds: float = Field(default=MIN_DELAY_SECONDS, ge=MIN_DELAY_SECONDS)
+    drop_lines: list[str] = Field(default_factory=list)       # regex, full-line match (D48)
+    drop_blocks: list[DropBlock] = Field(default_factory=list)
+
+    def strip_chrome(self, text: str) -> str:
+        """Remove the site's page chrome (menus, video player UI) from extracted text."""
+        lines = [re.compile(p) for p in self.drop_lines]
+        blocks = [(re.compile(b.start), re.compile(b.end)) for b in self.drop_blocks]
+        src = text.splitlines()
+        out: list[str] = []
+        i = 0
+        while i < len(src):
+            line = src[i].strip()
+            block = next((end for start, end in blocks if start.fullmatch(line)), None)
+            if block is not None:
+                j = i + 1
+                while j < len(src) and not block.fullmatch(src[j].strip()):
+                    j += 1
+                if j == len(src):          # no end marker: keep the text rather than drop the rest of the page
+                    out.append(src[i])
+                    i += 1
+                    continue
+                while j + 1 < len(src) and block.fullmatch(src[j + 1].strip()):
+                    j += 1
+                i = j + 1
+                continue
+            if not any(p.fullmatch(line) for p in lines):
+                out.append(src[i])
+            i += 1
+        return "\n".join(out)
 
     def allows(self, url: str) -> bool:
         u = urlparse(url)
