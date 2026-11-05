@@ -14,6 +14,30 @@
 
 기본 `pytest`는 `live`와 `realdata`를 뺀다(`pyproject.toml`의 `addopts`). 모든 테스트는 수집 폴더를 임시 폴더로 바꿔 실제 `data/`에 쓰지 않는다(`tests/conftest.py`).
 
+### 테스트 파일 지도
+
+| 파일 | 무엇을 | 관련 결정 |
+|---|---|---|
+| `test_bedrock_config.py`, `test_llm.py` | 모델 설정 로드, 엔드포인트 전환·쿨다운·폴백, `bind_tools`도 전환 | D26·D27·D29·D32·D44 |
+| `test_exam_pack.py` | 시험 팩 검증(제목 잘림 방지 포함) | D37 |
+| `test_ledger.py` | 테이블·제출/리뷰 트랜잭션·통계 규칙 | D9·D10·D28 |
+| `test_generator.py` | 세부 항목 선택, validator(따옴표 정규화 포함), 근거 검증, 재생성, 스트림 | D11·D33·D34·D40 |
+| `test_grader.py`, `test_cli_e2e.py` | 재질문 폼·판정·해설, CLI 전체 흐름(자기 판단 포함) | D14·D28·D43 |
+| `test_ingest.py`, `test_retrieval.py` | 로더·청크·태깅·중복 제거, 하이브리드 검색·RRF·태그 상한·출처 필터·중복 제거·커버리지 가중 | D36·D46·D49·D51 |
+| `test_collector.py` | `sources.yaml` 검증, 레슨 펼치기, 로그인 대기 interrupt와 재개, 화면 장식 제거, 재색인 | D38·D48 |
+| `test_practice.py` | 연습 문제 은행 파싱, 문체 예시, 베끼기 검사 | D39 |
+| `test_supervisor.py` | 라우팅, 계획 interrupt, 수집 경유 interrupt, 제출, 그래프 그림 동기화 | D41 |
+| `test_coach.py` | tool 사용 코치, 대화 이어 가기, 해설 없이 질문, 맞힌 문제 질문, 출처 | D44·D47·D49 |
+| `test_eval_feedback.py`, `test_eval_fixture.py` | 자기 판단 저장·일치율·내보내기, T1-a 픽스처 형식 | D43 |
+| `test_sandbox.py` | 샌드박스 경로, 공유 자료 쓰기 거부 | D45 |
+| `test_resume.py` | 계획 기록, 제출 전 답안, 생성 재개, 세트 기록 출처 | D52·D53 |
+| `test_vocab.py` | 단어장 추출(글자 그대로·긴 구절 필터·빠진 문제 재요청), 누적·외움 | D54 |
+| `test_ui.py` | Streamlit AppTest: 전체 흐름, 새로고침 복원, 코치 대화, 입력 폼, 이어 풀기, 지난 세트, 단어장 | D42·D47·D52~D54 |
+| `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
+| `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
+
+2026-11-05 최종 확인: 기본 302 통과, `-m realdata` 1 통과, `-m live` 9 통과.
+
 ## 2. 언제 무엇을 돌리나
 
 | 바꾼 것 | 돌릴 것 |

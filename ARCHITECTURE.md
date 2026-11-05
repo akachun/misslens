@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D51) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D54) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -395,7 +395,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 
 | 항목 | 방식 |
 |---|---|
-| 탭 | 학습(바로 풀기·풀이·리뷰 폼·진단·문제 이상) / 자료(업로드·붙여넣기·수집·로그인 대기·색인 현황) / 현황(Reporter) / 계획(interrupt① 승인) + 사이드바 자연어 요청(F10) |
+| 탭 | 학습(이어 풀기·바로 풀기·지난 세트·풀이·리뷰 폼·자기 판단·진단·코치 대화·세트 단어장·문제 이상) / 단어장(누적, D54) / 자료(업로드·붙여넣기·수집·로그인 대기·색인 현황) / 현황(Reporter) / 계획(interrupt① 승인·최근 계획) + 사이드바 자연어 요청(F10) |
 | 입력 | 사이드바 요청과 코치 질문은 여러 줄 입력 칸을 폼으로 감싸 **Ctrl+Enter(맥 ⌘+Enter)로 제출**, Enter는 줄바꿈. 사이드바 폭 380px(펼쳤을 때만, 접으면 본문이 전체 폭), 보낸 요청을 그대로 다시 보여 줌 |
 | 요청 처리 | 모든 에이전트 요청은 Supervisor 그래프로 보내고, thread_id별 **백그라운드 작업**으로 실행한다. 화면은 작업 상태를 확인해 진행 중이면 1.5초 뒤 다시 그리고, interrupt가 있으면 체크포인터에서 읽어 승인·로그인 화면을 보여 준다. 다시 그리기는 모든 탭을 그린 뒤 한 번만 한다(오래 걸리는 수집이 다른 탭을 가리지 않게) |
 | interrupt 재개 | 계획 thread_id와 진행 중인 세트 id를 `st.query_params`(`?plan=…&set=…`)에 둔다. 새로고침하면 체크포인터에서 같은 interrupt를 다시 읽고, 세트는 ledger의 `ready` 문제로 다시 구성한다 |
@@ -419,6 +419,7 @@ misslens/
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── paths.py       # 학습 기록·체크포인트 위치, 샌드박스(D45)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
+│   │                  # grader/: reask.py(재질문 폼) · review.py(판정 저장·진단) · coach.py(tool 사용 코치, D44·D47) · vocab.py(단어장, D54)
 │   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|plan|ask|status|ingest|search|collect|practice`)
 │   ├── ui/app.py   # Streamlit 화면(§10)
 │   └── graph.py    # Supervisor 그래프: route → planner/generate/report/collect_<site>/ingest/submit (D41)
