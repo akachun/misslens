@@ -20,9 +20,9 @@
 | 1 | 기반(프로젝트 구조, 시험 팩, 설정, ledger) | 11/4 저녁 | [x] |
 | 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [x] |
 | 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [x] |
-| 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [~] 구현·로그인 완료, 7개 코스 수집 진행 중(5번째) |
-| 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [x] (실서버 확인만 수집 후) |
-| 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [~] T10 스모크·T11·T12·T13·데모 문서 완료. 수집 후 확인·리허설·제출 남음 |
+| 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [x] 레슨 314개 수집·색인 완료 |
+| 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [x] |
+| 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [~] 남은 것: 화면 시연 리허설, 데모 직전 `probe_models.py`, 제출 |
 
 **절대 빼지 않는 것:** 세트 풀이 → 리뷰(미끼 포함 재질문) → 개념/해석 진단 → ledger 기록.
 
@@ -129,7 +129,9 @@
   - [x] 사내 자료 반입 승인 확인(2026-11-05). 수집 대상 URL은 `sources.yaml`에 적힌 것만
   - [x] 테스트(가짜 수집기, 메모리·SQLite 체크포인터) `tests/test_collector.py` 19개. 실제 사이트로 로그아웃 상태 → interrupt② → 중단까지 확인
   - [x] 학습자 로그인(Mac 화면 공유로 `collect login skilljar`, 2026-11-05). 코스 1(Claude Code in Action) 레슨 10개 수집, 본문 품질 확인(강의 텍스트 4~6천 자, 상단 버튼 문구 몇 줄만 섞임)
-  - [~] 7개 코스 전체 수집 + 색인 진행 중(`collect run skilljar`, thread `collect-skilljar-20261105-102235`). 끝나면 코스별 결과를 기록한다
+  - [x] 7개 코스 전체 수집 + 색인 완료(2026-11-05, thread `collect-skilljar-20261105-102235`): 코스 페이지 7개 → 레슨 **314개 저장, 본문 없음·수강 등록 필요·오류 0건**. 코스별 레슨 Claude API 85 · Google Cloud 93 · Bedrock 83 · Claude 101 14 · AI Fluency 15 · MCP 14 · Claude Code in Action 10
+  - 색인 1,674청크(가이드 115 포함), 세부 항목 30/30에 자료, 미분류 750(AI Fluency·Claude 101 등 일반 내용). 자료가 10청크 미만인 항목: 1.3, 1.7, 3.3, 3.5, 4.6, 5.2, 5.4
+  - Bedrock·Google Cloud 코스가 Claude API 코스와 많이 겹침(API 청크의 25% 이상이 Jaccard 0.9 이상 사본) → 검색 중복 제거(D46)로 처리, 기준 0.8은 실측 분포로 확인
 
 ## Phase 5 — 라우팅, 계획, 현황, UI
 
@@ -145,7 +147,7 @@
   - [x] 자료 탭: 업로드·붙여넣기 색인, 수집 시작·로그인 대기(완료/중단)·결과, 색인 현황
   - [x] interrupt 재개: thread_id를 `session_state`와 URL에 보관, `checkpoints.sqlite`, 연결 1개 + Lock
   - 완료 기준: 탭에서 세트 풀이 → 리뷰 → 현황이 동작하고, 계획 승인 화면에서 새로고침해도 이어서 진행된다 → **충족**(AppTest `tests/test_ui.py`: 새 세션에 URL의 plan 값만 주고 승인 화면 복원 → 승인 → 풀이 → 제출 → 리뷰 → 진단 → 현황)
-  - [ ] 실제 서버로 띄워 확인(`streamlit run app/main.py`): 수집이 끝난 뒤(같은 DB·색인을 쓰므로)
+  - [x] 실제 서버로 띄워 확인: 샌드박스(`MISSLENS_SANDBOX=1 streamlit run app/main.py`)로 콘솔 오류 없이 4개 탭, 수집 후 재시작해 새 색인(30/30, 미분류 750) 반영 확인
 
 ## Phase 6 — 마무리와 제출
 
@@ -157,7 +159,8 @@
 - [x] **T12** `TODOS.md` 작성(v1 이후 항목 + 구현 중 발견한 항목)
 - [x] **T13** 코치 해설을 tool 사용 에이전트로(D44, 학습자 선택 A): `agents/grader/coach.py`(ReAct: `bind_tools` + `ToolNode`, tool `search_material`·`learner_history`, 최대 3회, 단계별 대체 경로), `RoleLLM.bind_tools`(엔드포인트 전환 유지), CLI·Streamlit 진단에 근거·사용한 도구 표시. 테스트 `tests/test_coach.py` 5개 + 라우터 1개, 실호출 `tests/test_coach_live.py` 통과(실제로 두 tool 호출, 출처 표시)
 - [x] 데모 시나리오: [`docs/demo.md`](docs/demo.md) — 준비 점검표, 7단계(구조 → 자연어 → 계획 승인·새로고침 → RAG 풀이 → 리뷰·자기 판단·진단 → 현황 → 로그인 대기), 실패할 때 대체 경로
-  - [ ] 리허설 1회(수집이 끝난 뒤 실제 데이터로)
+  - [x] CLI 리허설(샌드박스, 실제 색인·모델): 계획 → 2문제 → 재질문 → 자기 판단 → 해석 실수 판정 → 코치 해설(수집한 Skilljar 레슨 인용) → 현황, 83초
+  - [ ] Streamlit 화면으로 시연 리허설(학습자, `docs/demo.md` 순서)
 - [ ] 제출
 
 ---
@@ -228,3 +231,4 @@
 | 2026-11-05 | 오답 eval 데이터 자동 수집(D43): 리뷰 뒤 '자기 판단' 단계(정답 공개 → 개념/해석/모르겠음 → 판정·해설), `miss_feedback` 테이블, `diagnosis_agreement` 통계, 현황에 일치율, CLI `eval [--export]`. 학습자가 따로 기록할 필요 없음. 테스트 247개 |
 | 2026-11-05 | T13 tool 사용 코치(D44): MCP·tool이 없다는 점을 확인하고 학습자와 A안 선택. 해설 에이전트가 색인 검색·학습 기록 tool을 골라 쓰고 출처 표시. 출제·판정·기록은 계속 코드가 결정. 테스트 253개 + 실호출 9개 |
 | 2026-11-05 | 수집 중 검토: 샌드박스 모드(D45) 추가 후 실제 모델·색인으로 CLI 전체 흐름 점검(167초, 해석 실수 판정·코치 해설까지). 발견: Sonnet 4.6 일일 할당량 초과 3곳(자동 우회, probe 기록), 1.1 생성 실패(따옴표·백틱 → validator 정규화), 코치 해설이 장황함(프롬프트 조정). Streamlit 샌드박스 서버 확인. 검색 중복 제거(D46). README에 에이전트별 그래프 4개(생성) + 순서도 3개, 구조·패턴 표. 테스트 264개 |
+| 2026-11-05 | 수집 완료(레슨 314개, 실패 0, 색인 1,674청크). 중복 제거 기준 0.8을 실측 분포로 확인. Streamlit 샌드박스 재시작(새 색인), 실제 색인으로 CLI 리허설 83초 통과(코치가 수집 레슨 인용). 참고: Sonnet 4.6 일일 할당량이 `us.` 2곳·`use1-global`에서 초과 상태 — 데모 직전 probe로 재확인 |
