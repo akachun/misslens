@@ -7,7 +7,7 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D55) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D56) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
@@ -333,6 +333,18 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 - 수집한 본문은 지시가 아니라 참고 자료로만 프롬프트에 넣습니다.
 - 예상문제 사이트는 자동으로 수집하지 않습니다. 직접 저장한 연습 문제는 문체 예시로만 쓰고, 출제 근거나 그대로 출제하는 문제로 쓰지 않습니다.
 - 검증(validator → 근거 검증)을 통과하지 못한 문제는 보여 주지도, 기록하지도 않습니다.
+
+## 평가용 전달(비공개)
+
+공개 저장소에는 `data/`와 `secrets/`가 없습니다. 직접 실행해 볼 분에게는 데이터를 포함한 zip을 **비공개로** 전달합니다. zip은 반드시 스크립트로 만듭니다(자격 증명·로그인 프로필·체크포인트를 빼고, 묶기 전에 비밀 정보를 검사).
+
+```bash
+python scripts/make_handoff_zip.py --list      # 무엇이 들어가고 빠지는지 미리 보기
+python scripts/make_handoff_zip.py             # dist/misslens-handoff-<날짜>.zip (학습 기록: 샌드박스 리허설 기록)
+python scripts/make_handoff_zip.py --record none   # 학습 기록 없이
+```
+
+zip 안의 `HANDOFF.md`에 포함 내용, 실행 방법, 자격 증명 설정, 재배포 금지 안내가 있습니다.
 
 ## 테스트
 

@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D55) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D56) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -430,6 +430,7 @@ misslens/
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── scripts/draw_graph.py     # 그래프 그림 → docs/graphs/*.mmd (README에 포함)
+├── scripts/make_handoff_zip.py   # 비공개 평가용 zip(데이터 포함, 비밀 정보 제외·검사, D56) → dist/
 ├── docs/           # demo.md(데모 시나리오), testing.md(테스트·검색 평가), graphs/(생성된 그래프 그림)
 ├── evals/<exam>/   # retrieval.yaml(정답 질의), retrieval_baseline.json(검색 점수 기준선, D50)
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
@@ -475,6 +476,7 @@ misslens/
 | D53 | 세트 기록: 계획뿐 아니라 바로 풀기·자연어 요청·CLI로 만든 세트도 `plans`(kind=quick, thread_id로 출처 구분)에 남기고, 학습 탭에 '지난 세트' 목록 | 계획만 기록(D52) | 학습자 요청: 직접 만든 세트도 다시 찾아가야 함. 출처는 thread_id 접두어로 구분해 테이블을 늘리지 않음. 기록 이전 세트는 '이전 기록'으로 표시 |
 | D54 | 리뷰 뒤 세트 단어장과 누적 '단어장' 탭: 지문의 표현만, 놓친 문구 우선, 세트당 모델 1~2회, 저장 후 재사용, 외움 표시 | 단어장 없음, 사전 API, 학습자가 직접 정리 | 해석 실수는 영어 조건 표현을 놓치는 데서 오는데 진단 뒤 그 표현을 익힐 단계가 없었음(학습자 제안). 실호출에서 Haiku가 1번 문제만 답하고 멈춰 빠진 문제 재요청과 긴 구절 필터를 둠 |
 | D55 | 로딩 표시를 상태 줄 하나로 묶고 부분 갱신(fragment), 변화가 있을 때만 전체 다시 그리기. 진단에 한국어 재질문 결과 표시, 사용법·최소 툴바 | 패널마다 1.5초 전체 다시 그리기(D42) | 리허설에서 여러 작업이 있으면 로딩 표시가 깜빡이고, 판정 근거(한국어 재질문)가 보이지 않으며, 오른쪽 위 Streamlit 메뉴의 용도를 알 수 없었음. 브라우저 측정: 요청 처리 중 전체 다시 그리기 1회 |
+| D56 | 강사 평가는 '공개 저장소(데이터 제외) + 비공개 전달 zip(색인·원본 자료·문체 예시·학습 기록 포함)'. zip은 스크립트로만 만든다: git 관리 파일과 허용한 데이터 폴더만(화이트리스트), 거부 목록(.env·secrets·체크포인트·모델 상태·업로드·WAL), SQLite 백업 API 복사, 묶기 전 자격 증명 패턴 검사(하나라도 있으면 중단), HANDOFF.md 동봉 | 데이터를 공개 저장소에 커밋, 손으로 zip | 저장소가 공개라 제3자 자료(가이드·수집 교안·연습 문제)를 올릴 수 없음(규칙 7). 손으로 묶으면 `.env`·`secrets/`(로그인 쿠키 655MB)가 섞이기 쉬움 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
