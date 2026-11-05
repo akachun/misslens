@@ -1,0 +1,56 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	route(route)
+	generate(generate)
+	report(report)
+	submit(submit)
+	ingest(ingest)
+	collect_prepare(collect_prepare)
+	ingest_collected(ingest_collected)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> route;
+	collect_prepare -.-> __end__;
+	collect_prepare -.-> collect_skilljar____start__;
+	collect_skilljar____end__ --> ingest_collected;
+	planner____end__ --> generate;
+	route -.-> __end__;
+	route -.-> collect_prepare;
+	route -.-> generate;
+	route -.-> ingest;
+	route -.-> planner__draft;
+	route -.-> report;
+	route -.-> submit;
+	generate --> __end__;
+	ingest --> __end__;
+	ingest_collected --> __end__;
+	report --> __end__;
+	submit --> __end__;
+	subgraph planner
+	planner__draft(draft)
+	planner__approve(approve ⏸ interrupt①)
+	planner____end__(<p>__end__</p>)
+	planner__approve -.-> planner____end__;
+	planner__draft --> planner__approve;
+	planner__approve -.-> planner__approve;
+	end
+	subgraph collect_skilljar
+	collect_skilljar____start__(<p>__start__</p>)
+	collect_skilljar__fetch(fetch)
+	collect_skilljar__wait_login(wait_login ⏸ interrupt②)
+	collect_skilljar____end__(<p>__end__</p>)
+	collect_skilljar____start__ --> collect_skilljar__fetch;
+	collect_skilljar__fetch -.-> collect_skilljar____end__;
+	collect_skilljar__fetch -.-> collect_skilljar__wait_login;
+	collect_skilljar__wait_login -.-> collect_skilljar____end__;
+	collect_skilljar__wait_login -.-> collect_skilljar__fetch;
+	collect_skilljar__fetch -.-> collect_skilljar__fetch;
+	end
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+

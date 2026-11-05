@@ -53,7 +53,7 @@
    bge-m3 (프로세스당 1회 로드)
 ```
 
-- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다.
+- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다. 구현된 그래프 그림은 README에 있고, `python scripts/draw_graph.py`로 컴파일된 그래프에서 다시 만든다(D41).
 - **통계는 ledger 모듈 한 곳에서만 계산한다**(D9). Generator, Planner, Reporter는 ledger의 통계 함수만 호출한다.
 - **interrupt는 두 곳에만 둔다**(D20, D21). ① Planner의 계획 승인, ② Collector의 로그인 대기. 문제 풀이와 리뷰 흐름에는 interrupt가 없다.
 

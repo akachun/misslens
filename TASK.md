@@ -149,12 +149,12 @@
 
 ## Phase 6 — 마무리와 제출
 
-- [ ] **T10** 테스트 마무리
-  - [ ] 실호출 스모크(`pytest -m live`): Sonnet 4.6 구조화 출력이 **실제 `Question` 스키마**를 통과하는지 (간단한 스키마 스모크는 Phase 1에 있음: `tests/test_llm_live.py`)
+- [~] **T10** 테스트 마무리
+  - [x] 실호출 스모크(`pytest -m live`) 8개 통과(2026-11-05): 실제 `Question` 스키마로 문제 생성(D40 순서 변경 후 재확인, `tests/test_generator_live.py`), 라우터 한국어 4문장·Planner 모델 계획(`tests/test_supervisor_live.py`), LLM 기본 2개
   - [x] E2E 2개: 세트 풀이 → 저장, 리뷰 → 진단(가짜 LLM) → `tests/test_cli_e2e.py`(Phase 2에서 작성)
   - [ ] eval: T1-a 픽스처(현재 오답 4 + 미끼 3, 10개 이상으로 늘릴 예정)로 진단 일치율과 조건 문구 번역 보존을 확인(수동 실행)
-- [ ] **T11** 문서 갱신: README(설치·실행), 구현하면서 바뀐 점을 ARCHITECTURE에 반영, LangGraph 그래프 다이어그램
-- [ ] **T12** TODOS.md 작성(아래 'v1 이후' 항목)
+- [x] **T11** 문서 갱신: `README.md`(구조·설치·처음 쓰는 순서·명령·데이터와 보안·테스트), ARCHITECTURE는 작업마다 반영(D27~D42), LangGraph 그래프 다이어그램은 컴파일된 그래프에서 생성(`scripts/draw_graph.py` → `docs/graph.mmd`, README에 포함)
+- [x] **T12** `TODOS.md` 작성(v1 이후 항목 + 구현 중 발견한 항목)
 - [ ] 데모 시나리오: 자연어 지시 → 계획 승인(interrupt①) → 세트 풀이 → 리뷰·진단 → 현황 / 로그인 대기(interrupt②)
 - [ ] 제출
 
@@ -180,15 +180,9 @@
 | 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 | [x] 여러 패턴을 쓰면 좋음. 학습자 우선순위: 멀티 에이전트 > RAG > HITL | 데모 시나리오 조정 |
 | CCA-F 공식 세부 항목 | 시험 가이드 v1.0 | [x] | T2-c(`exam.yaml` v2) |
 
-## v1 이후 (TODOS.md로 옮길 항목)
+## v1 이후
 
-- [ ] **동료 배포 준비**: 개인 AWS 자격 증명 없이 쓸 수 있는 방식(공용 계정, 사내 호스팅) 검토 → 설치 가이드
-- [ ] **시험 팩 템플릿·작성 가이드**: `exams/_template/`, 새 시험 추가 절차, 두 번째 시험으로 검증
-- [ ] Collector 고도화: 레슨 한 단계(D38)를 넘는 링크 따라가기, 사이트별 본문 영역 지정(Skilljar 버튼 문구 제거), AgentCore Browser 검토
-- [ ] 놓친 문구 드릴 모드
-- [ ] 비슷한 함정 문제 출제: 맞힌 문제의 해법을 다른 상황에 잘못 옮기는 실수(예: T1-a m03, 값이 없을 때의 nullable 해법을 값이 있는 상황에 적용)를 노리는 짝 문제
-- [ ] 복수 정답 문항(multiple-response) 출제·채점·진단(D30)
-- [ ] LLM 호출 모니터링: Langfuse 연동 검토(LangSmith는 쓰지 않음, `.env`의 LANGSMITH 항목은 주석 처리함). 시간이 남을 때
+[TODOS.md](TODOS.md)로 옮겼다(2026-11-05, T12). 구현 중 발견한 항목(코스 간 중복 청크, 증분 수집, Skilljar 버튼 문구 등)도 함께 있다.
 
 ---
 
@@ -228,3 +222,4 @@
 | 2026-11-05 | T6-b 연습 문제 은행: CertSafari 250문항 구조화(예시 사용 207), 세부 항목별 문체 예시 + 베끼기 검사(D39). A/B 실측으로 key_constraints 실패 원인을 찾아 스키마 순서 변경(첫 시도 통과 1/8 → 6/8, D40). 테스트 219개 |
 | 2026-11-05 | T8: Supervisor 그래프(6개 에이전트 라우팅, 자유 발화 라우터), Planner(interrupt①, 규칙 초안 + Haiku 조정), Reporter, ledger `domain_summary`, Generator 영역별 계획 상한, CLI `plan`/`ask`(D41). 수집 진행 중에 코드만 바꾸고 데이터 파일은 건드리지 않음. 테스트 237개 |
 | 2026-11-05 | T9 Streamlit: 탭 4개 + 사이드바 자연어, Supervisor 요청을 백그라운드 작업으로 실행·폴링, URL로 계획 승인·세트 복원(D42), `QuestionStream.poll()`, 붙여넣기 ingest 경로. AppTest로 완료 기준 확인. 테스트 242개 |
+| 2026-11-05 | 문서·진행 대조(디렉터리 지도·인계 메모 정리). T10 실호출 스모크 8개 통과(라우터·Planner 추가), T11 README·그래프 다이어그램(컴파일된 그래프에서 생성), T12 TODOS.md. 수집은 계속 진행 중 |

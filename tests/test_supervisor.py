@@ -243,3 +243,18 @@ def test_cli_plan_flow_approve_edit_solve_and_review(ledger):
     assert "오늘의 계획" in text and res["plan"]["counts"]["d2"] == 2 and res["plan"]["source"] == "learner"
     assert ledger.get_set(res["set_id"])["status"] in ("submitted", "reviewed")
     assert "제출 완료" in text
+
+
+def test_committed_graph_diagram_matches_compiled_graph():
+    """docs/graph.mmd and the README diagram are generated from the graph; regenerate with scripts/draw_graph.py."""
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    spec = importlib.util.spec_from_file_location("draw_graph", root / "scripts" / "draw_graph.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    fresh = mod.mermaid().strip()
+    assert (root / "docs" / "graph.mmd").read_text(encoding="utf-8").strip() == fresh
+    assert fresh in (root / "README.md").read_text(encoding="utf-8")
+    assert "interrupt①" in fresh and "interrupt②" in fresh
