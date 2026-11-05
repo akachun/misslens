@@ -93,3 +93,51 @@ def test_model_failure_falls_back_to_stored_explanation(ledger, index):
     llm = FakeRoleLLM([LLMCallError("explainer", []), LLMCallError("explainer", [])])
     res = coach_explain(llm, PACK, row(), ledger=ledger, index=index)
     assert res.text == draft(0)["explanation_native"]
+
+
+# --- follow-up conversation (D47) -------------------------------------------------------------
+
+
+def test_follow_up_questions_continue_the_thread(ledger, index):
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from misslens.agents.grader.coach import coach_ask, coach_history, coach_thread
+
+    cp, tid = InMemorySaver(), coach_thread("ccar-f", 1)
+    llm = FakeRoleLLM([call("search_material", {"query": "tool_choice"}, 1),
+                       call("learner_history", {"task_id": "2.3"}, 2),
+                       "첫 해설입니다.",
+                       call("search_material", {"query": "tool_choice auto vs any"}, 3),   # tools again next turn
+                       "auto는 모델이 고르고 any는 반드시 하나를 부릅니다. (출처: lesson/tool-choice)"])
+    first = coach_explain(llm, PACK, row(), ledger=ledger, index=index, checkpointer=cp, thread_id=tid)
+    assert first.text == "첫 해설입니다." and len(first.tool_calls) == 2
+    second = coach_ask(llm, PACK, "auto와 any는 어떻게 달라요?", ledger=ledger, index=index,
+                       checkpointer=cp, thread_id=tid)
+    assert second.text.startswith("auto는") and second.tool_calls == ["search_material(query='tool_choice auto vs any')"]
+    assert second.sources[0] == "lesson/tool-choice"
+    # the follow-up saw the whole conversation
+    assert any(getattr(m, "content", "") == "첫 해설입니다." for m in llm.prompts[-1])
+    turns = coach_history(cp, tid)
+    assert [t.question for t in turns] == [None, "auto와 any는 어떻게 달라요?"]
+    assert turns[1].sources[0] == "lesson/tool-choice"
+
+
+def test_follow_up_failure_is_a_notice(ledger, index):
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from misslens.agents.grader.coach import coach_ask, coach_history
+
+    cp = InMemorySaver()
+    llm = FakeRoleLLM(["첫 해설", LLMCallError("explainer", [])])
+    coach_explain(llm, PACK, row(), ledger=ledger, index=index, checkpointer=cp, thread_id="t")
+    res = coach_ask(llm, PACK, "질문", ledger=ledger, index=index, checkpointer=cp, thread_id="t")
+    assert "답하지 못했습니다" in res.text
+    assert len(coach_history(cp, "t")) == 1                    # the failed turn is not shown as answered
+
+
+def test_source_label_keeps_urls_and_adds_pdf_pages():
+    from misslens.agents.grader.coach import source_label
+
+    assert source_label("https://x.example/course/1", "[page 3]") == "https://x.example/course/1"
+    assert source_label("guide.pdf", "...\n[page 13]\nTool use...") == "guide.pdf p.13"
+    assert source_label("notes.md", "no page") == "notes.md"

@@ -161,3 +161,41 @@ def test_sidebar_free_text_without_router_is_refused(res):
     at.text_input(key="nl_text").input("뭐든 해줘")
     run(at.button(key="nl_send").click())
     assert any("요청이 비어" in i.value or "실행하지" in i.value for i in at.info)
+
+
+def test_coach_keeps_stored_explanation_and_answers_follow_ups(res):
+    """D47: the stored explanation stays; the coach answer and follow-ups appear below with source links."""
+    res.explainer = FakeRoleLLM(["코치 첫 해설", "후속 답변입니다."])
+    res.svc.index = None
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    at.number_input(key="quick_n").set_value(1)
+    run(at.button(key="quick_start").click())
+    for _ in range(20):
+        radios = [w for w in at.radio if w.key and w.key.startswith("ans_")]
+        if radios:
+            break
+        run(at)
+    q = res.ledger.set_questions(at.session_state["quiz"]["set_id"])[0]
+    radios[0].set_value((q["payload"]["answer_index"] + 1) % 4)          # wrong
+    run(at.button(key=f"next_{radios[0].key[4:]}").click())
+    run(at.button(key="submit_set").click())
+    sid = at.session_state["quiz"]["set_id"]
+    for i in range(len(at.session_state["quiz"]["items"])):
+        at.radio(key=f"re_{sid}_{i}").set_value(1)
+    run([b for b in at.button if b.label in ("리뷰 제출", "진단 보기")][0].click())
+    if at.session_state["quiz"]["phase"] == "self_check":
+        run(at.button(key=f"self_done_{sid}").click())
+    att = res.ledger.set_attempts(sid)[0]
+    run(at.button(key=f"btn_exp_{att['id']}").click())
+    texts = [m.value for m in at.markdown]
+    assert "**해설**" in texts and "**코치 해설**" in texts             # both kept
+    assert draft(0)["explanation_native"] in texts                     # stored explanation still on screen
+    assert "코치 첫 해설" in texts
+    at.text_input(key=f"q_{att['id']}").input("tool_choice는 뭐예요?")
+    run([b for b in at.button if b.label == "질문하기"][0].click())
+    assert any(c.name == "user" for c in at.chat_message) and any(c.name == "assistant" for c in at.chat_message)
+
+
+def test_source_links_render_urls_as_links():
+    out = ui.source_links(["https://anthropic-partners.skilljar.com/claude-101/123", "guide.pdf p.13"])
+    assert out == "[claude-101/123](https://anthropic-partners.skilljar.com/claude-101/123) · `guide.pdf p.13`"

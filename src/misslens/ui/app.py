@@ -23,7 +23,7 @@ import streamlit as st
 from langgraph.types import Command
 
 from misslens.agents.grader import build_reask_form, diagnosis_rows, highlight, submit_review
-from misslens.agents.grader.coach import coach_explain
+from misslens.agents.grader.coach import coach_ask, coach_explain, coach_history, coach_thread
 from misslens.bedrock import PROJECT_ROOT
 from misslens.ledger import miss_breakdown
 
@@ -45,6 +45,13 @@ class Resources:
     index_stats: Callable[[], dict] = lambda: {}
     upload_dir: Path = UPLOAD_DIR
     jobs: dict = field(default_factory=dict)   # thread_id -> {"thread", "out", "error"}
+    coach_checkpointer: Any = None             # keeps each miss's coach conversation (None: in-memory)
+
+    def __post_init__(self) -> None:
+        if self.coach_checkpointer is None:
+            from langgraph.checkpoint.memory import InMemorySaver
+
+            self.coach_checkpointer = InMemorySaver()
 
 
 def default_resources() -> Resources:
@@ -68,7 +75,8 @@ def default_resources() -> Resources:
         return idx.tag_counts() if idx is not None else {}
 
     return Resources(pack, ledger, svc, build_supervisor_graph(svc, checkpointer=sqlite_checkpointer()),
-                     explainer=get_llm("explainer"), index_stats=index_stats)
+                     explainer=get_llm("explainer"), index_stats=index_stats,
+                     coach_checkpointer=sqlite_checkpointer())
 
 
 RESOURCE_FACTORY: Callable[[], Resources] | None = None   # tests replace this
@@ -330,26 +338,72 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
             st.markdown(stem, unsafe_allow_html=True)
             if row.missed_phrase:
                 st.markdown(f"**놓친 조건:** <mark>{html.escape(row.missed_phrase)}</mark>", unsafe_allow_html=True)
-            key = f"exp_{row.attempt_id}"
-            if key in st.session_state:
-                res = st.session_state[key]
-                st.write(res.text)
-                if res.sources:
-                    st.caption("근거: " + ", ".join(res.sources))
-                if res.tool_calls:
-                    st.caption("코치가 쓴 도구: " + " → ".join(res.tool_calls))
-            else:
-                st.write(q["explanation_native"])
-                if r.explainer is not None and st.button("코치 해설(자료 검색)", key=f"btn_{key}"):
-                    with st.spinner("코치가 자료를 찾아 해설을 쓰는 중..."):
-                        st.session_state[key] = coach_explain(r.explainer, r.pack, row, ledger=r.ledger,
-                                                              index=r.svc.index)
-                    st.rerun()
+            st.markdown("**해설**")
+            st.write(q["explanation_native"])
+            coach_panel(r, row)
             if row.attempt_id not in invalid and st.button("문제 이상(통계에서 빼기)", key=f"inv_{row.attempt_id}"):
                 r.ledger.mark_invalid(row.attempt_id)
                 st.rerun()
     if st.button("새 세트", key="new_set", type="primary"):
         reset_quiz()
+
+
+def source_links(sources: list[str]) -> str:
+    """Markdown: URLs become links the learner can open (Skilljar lessons open in their logged-in browser)."""
+    parts = []
+    for s in sources:
+        if s.startswith(("http://", "https://")):
+            label = "/".join(s.rstrip("/").split("/")[-2:])
+            parts.append(f"[{label}]({s})")
+        else:
+            parts.append(f"`{s}`")
+    return " · ".join(parts)
+
+
+def show_turn_meta(sources: list[str], tool_calls: list[str]) -> None:
+    if sources:
+        st.markdown("근거: " + source_links(sources))
+    if tool_calls:
+        st.caption("코치가 쓴 도구: " + " → ".join(tool_calls))
+
+
+def coach_panel(r: Resources, row: Any) -> None:
+    """Coach explanation below the stored one, then a follow-up conversation on the same miss (D47)."""
+    if r.explainer is None:
+        return
+    tid = coach_thread(r.pack.exam_id, row.attempt_id)
+    turns = coach_history(r.coach_checkpointer, tid)
+    fallback = st.session_state.get(f"coach_fallback_{row.attempt_id}")
+    if not turns and fallback is None:
+        if st.button("코치 해설(자료 검색)", key=f"btn_exp_{row.attempt_id}"):
+            with st.spinner("코치가 자료를 찾아 해설을 쓰는 중..."):
+                res = coach_explain(r.explainer, r.pack, row, ledger=r.ledger, index=r.svc.index,
+                                    checkpointer=r.coach_checkpointer, thread_id=tid)
+            if not coach_history(r.coach_checkpointer, tid):     # coach failed: plain explanation, no thread
+                st.session_state[f"coach_fallback_{row.attempt_id}"] = res.text
+            st.rerun()
+        return
+    st.markdown("**코치 해설**")
+    if not turns:
+        st.write(fallback)
+        st.caption("코치가 자료 검색 없이 답했습니다(모델 호출 실패). 이어서 질문하려면 잠시 후 '코치 해설'을 다시 누르세요.")
+        return
+    st.write(turns[0].answer)
+    show_turn_meta(turns[0].sources, turns[0].tool_calls)
+    for t in turns[1:]:
+        with st.chat_message("user"):
+            st.write(t.question)
+        with st.chat_message("assistant"):
+            st.write(t.answer)
+            show_turn_meta(t.sources, t.tool_calls)
+    with st.form(f"ask_{row.attempt_id}", clear_on_submit=True):
+        question = st.text_input("코치에게 질문", key=f"q_{row.attempt_id}",
+                                 placeholder="예: tool_choice any와 auto는 언제 다르게 쓰나요?")
+        if st.form_submit_button("질문하기") and question.strip():
+            with st.spinner("코치가 답을 찾는 중..."):
+                coach_ask(r.explainer, r.pack, question, ledger=r.ledger, index=r.svc.index,
+                          checkpointer=r.coach_checkpointer, thread_id=tid)
+            st.rerun()
 
 
 def reset_quiz() -> None:
