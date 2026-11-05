@@ -155,6 +155,7 @@
   - [~] eval: 진단 일치율은 `python -m misslens.cli eval`(현황 탭에도 표시)로 확인. 데이터는 공부하면서 자동으로 쌓임(D43, 테스트 `tests/test_eval_feedback.py`). 조건 문구 번역 보존은 진단 화면의 놓친 문구 강조로 눈으로 확인(자동화는 TODOS)
 - [x] **T11** 문서 갱신: `README.md`(구조·설치·처음 쓰는 순서·명령·데이터와 보안·테스트), ARCHITECTURE는 작업마다 반영(D27~D42), LangGraph 그래프 다이어그램은 컴파일된 그래프에서 생성(`scripts/draw_graph.py` → `docs/graph.mmd`, README에 포함)
 - [x] **T12** `TODOS.md` 작성(v1 이후 항목 + 구현 중 발견한 항목)
+- [x] **T13** 코치 해설을 tool 사용 에이전트로(D44, 학습자 선택 A): `agents/grader/coach.py`(ReAct: `bind_tools` + `ToolNode`, tool `search_material`·`learner_history`, 최대 3회, 단계별 대체 경로), `RoleLLM.bind_tools`(엔드포인트 전환 유지), CLI·Streamlit 진단에 근거·사용한 도구 표시. 테스트 `tests/test_coach.py` 5개 + 라우터 1개, 실호출 `tests/test_coach_live.py` 통과(실제로 두 tool 호출, 출처 표시)
 - [x] 데모 시나리오: [`docs/demo.md`](docs/demo.md) — 준비 점검표, 7단계(구조 → 자연어 → 계획 승인·새로고침 → RAG 풀이 → 리뷰·자기 판단·진단 → 현황 → 로그인 대기), 실패할 때 대체 경로
   - [ ] 리허설 1회(수집이 끝난 뒤 실제 데이터로)
 - [ ] 제출
@@ -225,3 +226,4 @@
 | 2026-11-05 | T9 Streamlit: 탭 4개 + 사이드바 자연어, Supervisor 요청을 백그라운드 작업으로 실행·폴링, URL로 계획 승인·세트 복원(D42), `QuestionStream.poll()`, 붙여넣기 ingest 경로. AppTest로 완료 기준 확인. 테스트 242개 |
 | 2026-11-05 | 문서·진행 대조(디렉터리 지도·인계 메모 정리). T10 실호출 스모크 8개 통과(라우터·Planner 추가), T11 README·그래프 다이어그램(컴파일된 그래프에서 생성), T12 TODOS.md. 수집은 계속 진행 중 |
 | 2026-11-05 | 오답 eval 데이터 자동 수집(D43): 리뷰 뒤 '자기 판단' 단계(정답 공개 → 개념/해석/모르겠음 → 판정·해설), `miss_feedback` 테이블, `diagnosis_agreement` 통계, 현황에 일치율, CLI `eval [--export]`. 학습자가 따로 기록할 필요 없음. 테스트 247개 |
+| 2026-11-05 | T13 tool 사용 코치(D44): MCP·tool이 없다는 점을 확인하고 학습자와 A안 선택. 해설 에이전트가 색인 검색·학습 기록 tool을 골라 쓰고 출처 표시. 출제·판정·기록은 계속 코드가 결정. 테스트 253개 + 실호출 9개 |

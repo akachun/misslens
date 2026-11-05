@@ -66,7 +66,7 @@
 | **Ingest** | 청크 분할 → 세부 항목(task_id) 태깅(묶음 호출, 'unassigned' 허용) → 임베딩·색인 | 파일·텍스트·문서 → FAISS·BM25·materials | Haiku 4.5 (태깅) |
 | **Planner** | 남은 범위·정답률·실수 비율로 오늘의 계획 제안 → interrupt① → 승인된 계획으로 세트 생성 요청 | ledger 통계 → 계획 | Haiku 4.5 |
 | **Generator** | 세부 항목 선택 → 검색 → 이중 언어 문제 생성 → validator → 근거 검증 → 순차·스트리밍 제공 | 계획·세부 항목 → questions | Sonnet 4.6 (생성), Haiku 4.5 (검증) |
-| **Grader & Diagnostician** | 세트 제출 채점·저장 → 리뷰 시 재질문 폼(오답 + 미끼) → 판정·놓친 문구·해설 | 답안 → attempts·missed_phrases·해설 | Sonnet 4.6 (해설) |
+| **Grader & Diagnostician** | 세트 제출 채점·저장 → 리뷰 시 재질문 폼(오답 + 미끼) → 자기 판단 → 판정·놓친 문구 → **코치 해설(tool 사용 에이전트, D44)** | 답안 → attempts·missed_phrases·miss_feedback·해설 | Sonnet 4.6 (해설, `search_material`·`learner_history` tool) |
 | **Reporter** | 현황 지표 표시 | ledger 통계 → 화면 | 없음 |
 
 ## 4. 핵심 흐름
@@ -114,6 +114,7 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 - `reask_choice`는 섞기 전의 **원래 보기 순서**로 바꿔서 저장한다. `missed_phrase`는 `reading`일 때만 기록한다(`uncertain`은 기록하지 않음).
 - 리뷰에는 세트의 오답이 모두 들어 있어야 하고, 미끼는 처음에 맞힌 문제여야 한다. 어기면 저장하지 않는다. 리뷰 전에 '문제 이상'으로 표시한 오답은 재질문하지 않는다.
 - **자기 판단(D43):** 재질문 제출 뒤, 진단을 보여 주기 전에 오답마다 정답만 보여 주고 "몰랐던 내용(개념) / 조건을 놓침(해석) / 모르겠음"을 고르게 한다(건너뛰기 가능). `miss_feedback`에 저장하고 `diagnosis_agreement`로 판정과의 일치율을 낸다. 해설을 본 뒤에 고르면 해석 실수 쪽으로 치우치므로(T1-a 관찰) 이 순서를 지킨다. `eval --export`는 T1-a 픽스처와 같은 형식으로 `data/eval/`에 저장한다.
+- **코치 해설(D44):** `agents/grader/coach.py`의 ReAct 서브그래프(`bind_tools` + `ToolNode`). 읽기 전용 tool 두 개 — `search_material(query, task_id?)`(하이브리드 검색, 결과는 참고 자료 블록, 규칙 7), `learner_history(task_id)`(ledger 통계 함수만 호출, 규칙 1) — 를 최대 3회 부른 뒤 해설과 출처를 낸다. 모델 호출마다 라우터의 엔드포인트 전환이 적용된다(`RoleLLM.bind_tools`). 상한을 넘거나 실패하면 tool 없는 해설, 그것도 실패하면 저장된 해설. 기록은 하지 않는다(판정은 규칙 3의 표만).
 - 구현: 재질문 폼과 대응표는 `agents/grader/reask.py`, 저장과 진단 화면 데이터는 `agents/grader/review.py`. 오답 해설은 explainer 역할(Sonnet 4.6)이 판정 유형(해석/불확실/개념)에 맞춰 쓰고, 호출이 실패하면 문제에 저장된 해설을 보여 준다.
 
 ### 4.3 계획 승인 (interrupt①, D21)
@@ -433,6 +434,7 @@ misslens/
 | D41 | Supervisor 그래프는 Planner·Collector를 서브그래프 노드로, Generator·Reporter·Ingest·Grader(제출)는 함수 노드로 둔다. 진행 중인 문제 스트림과 수집 브라우저는 상태가 아니라 `Services`에 두고 상태에는 id만 둔다. 영역별 통계는 ledger `domain_summary`로 추가 | 모든 에이전트를 서브그래프로, 스트림을 상태에 저장 | interrupt가 있는 두 에이전트만 서브그래프여야 부모 체크포인터로 재개됨. 스레드·브라우저 객체는 체크포인트에 직렬화할 수 없음. 풀이·리뷰는 interrupt 없이 UI가 진행하고 결과만 `submit`으로 보냄(규칙 4) |
 | D42 | Streamlit은 Supervisor 요청을 thread_id별 백그라운드 작업으로 돌리고 상태를 폴링, 계획 thread_id·세트 id를 URL에 둠, 다시 그리기는 페이지 끝에서 한 번 | 요청을 스크립트 안에서 동기 실행, 탭마다 바로 `st.rerun` | 수집처럼 긴 작업이 페이지를 멈추지 않게 하고, interrupt는 체크포인터에서 읽어 새로고침에도 이어짐(T9 완료 기준). 탭 안에서 바로 다시 그리면 뒤 탭이 그려지지 않음 |
 | D43 | 진단 eval 데이터(학습자 자기 판단)를 리뷰 흐름 안에서 모은다: 정답 공개 → 자기 판단 → 판정·해설. 별도 테이블 `miss_feedback`, 일치율은 ledger 통계 | 학습자가 따로 시간을 내 오답을 기록(T1-a 원안), 판정 화면에서 동의 여부만 묻기 | 따로 기록할 시간이 없음(학습자 의견). 판정을 먼저 보여 주면 동의 쪽으로, 해설을 먼저 보여 주면 해석 쪽으로 치우침. 판정 표(규칙 3)와 섞이지 않게 테이블을 분리 |
+| D44 | 오답 해설을 tool 사용 에이전트(코치)로: 색인 검색·학습 기록 조회 tool을 모델이 골라 쓰고 근거 출처를 표시. 출제·판정·기록 흐름은 계속 코드가 결정 | Supervisor나 Generator를 tool 에이전트로, MCP 서버 공개, tool 없음 | 과정 평가에서 tool 사용을 보여 주되 규칙 1~3(통계·검증·판정)을 모델 호출 순서에 맡기지 않음. 해설은 읽기만 하므로 tool 선택을 맡겨도 기록이 틀어지지 않음. 실호출로 Converse toolUse/toolResult 동작 확인 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |

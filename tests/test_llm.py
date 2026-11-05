@@ -279,3 +279,17 @@ def test_structured_output_with_fake_chat_model():
     r = Router(CFG, list(CFG.endpoints), factory, RouterState(), FakeClock(), sleep=lambda _: None)
     out = get_llm("generator", r).with_structured_output(Pick).invoke("q")
     assert out == Pick(answer_index=2)
+
+
+def test_bind_tools_switches_endpoint_like_other_calls():
+    """D44: each agent turn of a tool-calling model goes through the router (quota mid-loop -> next endpoint)."""
+    r, s = make_router({(EP[0], SONNET): [quota()]})
+
+    def factory(endpoint, model, timeout):
+        m = Script.factory(s, endpoint, model, timeout)
+        m.bind_tools = lambda tools, **kw: m          # the bound model invokes like the plain one
+        return m
+
+    r.factory = factory
+    out = get_llm("explainer", r).bind_tools([]).invoke("hi")
+    assert out.content == f"ok:{EP[1]}:{SONNET}"

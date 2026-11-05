@@ -1,0 +1,95 @@
+"""D44: tool-using coach (ReAct subgraph) for miss explanations."""
+
+from __future__ import annotations
+
+import pytest
+from langchain_core.messages import AIMessage
+
+from fakes import FakeRoleLLM, draft
+from misslens.agents.grader.coach import MAX_TOOL_ROUNDS, coach_explain, make_tools
+from misslens.agents.grader.review import DiagnosisRow
+from misslens.exam_pack import load_exam_pack
+from misslens.ledger import Answer, Ledger
+from misslens.llm import LLMCallError
+from misslens.retrieval import ChunkIndex, IndexedChunk
+from test_retrieval import FakeEmbedder
+
+PACK = load_exam_pack("ccar-f")
+
+
+@pytest.fixture
+def ledger():
+    lg = Ledger(":memory:")
+    yield lg
+    lg.close()
+
+
+@pytest.fixture
+def index(tmp_path):
+    idx = ChunkIndex("ccar-f", FakeEmbedder(), root=tmp_path)
+    idx.add([IndexedChunk("Set tool_choice to force the model to call one specific tool.", "lesson/tool-choice",
+                          "h1", ["2.3"]),
+             IndexedChunk("Prompt caching reduces cost for repeated long prompts.", "lesson/caching", "h2", ["4.5"])])
+    return idx
+
+
+def row(miss_type="reading", phrase="must not store passwords"):
+    q = {**draft(0), "task_id": "2.3", "domain": "d2", "scenario_id": None, "grounding": "retrieved"}
+    return DiagnosisRow(seq=0, attempt_id=1, question=q, chosen_index=1, is_correct=False, is_decoy=False,
+                        miss_type=miss_type, missed_phrase=phrase, elapsed_ms=1000)
+
+
+def call(name, args, i):
+    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"c{i}"}])
+
+
+def test_coach_searches_checks_history_then_explains(ledger, index):
+    llm = FakeRoleLLM([call("search_material", {"query": "tool_choice force", "task_id": "2.3"}, 1),
+                       call("learner_history", {"task_id": "2.3"}, 2),
+                       "tool_choice로 특정 도구를 강제합니다. 지문의 조건을 놓쳤습니다. (출처: lesson/tool-choice)"])
+    res = coach_explain(llm, PACK, row(), ledger=ledger, index=index)
+    assert res.used_tools and res.text.startswith("tool_choice로")
+    assert res.tool_calls == ["search_material(query='tool_choice force', task_id='2.3')",
+                              "learner_history(task_id='2.3')"]
+    assert res.sources[0] == "lesson/tool-choice"
+    assert llm.bound_tools == ["search_material", "learner_history"]
+    # the tool results went back to the model as reference data
+    last_prompt = llm.prompts[-1]
+    tool_texts = [m.content for m in last_prompt if m.type == "tool"]
+    assert "<reference_material>" in tool_texts[0] and "Task 2.3" in tool_texts[1]
+    assert "Diagnosis: a READING miss" in last_prompt[0].content
+
+
+def test_learner_history_reads_ledger_stats(ledger):
+    sid = ledger.create_set(PACK.exam_id, 1)
+    qid = ledger.add_question(sid, seq=0, task_id="2.3", domain="d2", blueprint_version=PACK.version,
+                              payload={**draft(0), "task_id": "2.3", "domain": "d2", "scenario_id": None,
+                                       "grounding": "retrieved"})
+    ledger.start_set(sid)
+    ledger.submit_set(sid, [Answer(qid, 1, 500)])
+    tools = {t.name: t for t in make_tools(PACK, ledger, None)}
+    out = tools["learner_history"].invoke({"task_id": "2.3"})
+    assert "Recent attempts 1, correct 0" in out and "Distribute tools" in out
+    assert "Unknown task id" in tools["learner_history"].invoke({"task_id": "9.9"})
+    assert tools["search_material"].invoke({"query": "x"}) == "No study material is indexed yet."
+
+
+def test_bad_tool_args_do_not_break_the_loop(ledger, index):
+    llm = FakeRoleLLM([call("learner_history", {"wrong": 1}, 1), "해설입니다."])
+    res = coach_explain(llm, PACK, row(), ledger=ledger, index=index)
+    assert res.text == "해설입니다."
+    err = [m for m in llm.prompts[-1] if m.type == "tool"][0]
+    assert "error" in str(err.content).lower()
+
+
+def test_too_many_tool_rounds_fall_back_to_plain_explanation(ledger, index):
+    calls = [call("search_material", {"query": f"q{i}"}, i) for i in range(MAX_TOOL_ROUNDS + 1)]
+    llm = FakeRoleLLM(calls + ["일반 해설"])
+    res = coach_explain(llm, PACK, row(), ledger=ledger, index=index)
+    assert res.text == "일반 해설" and not res.used_tools
+
+
+def test_model_failure_falls_back_to_stored_explanation(ledger, index):
+    llm = FakeRoleLLM([LLMCallError("explainer", []), LLMCallError("explainer", [])])
+    res = coach_explain(llm, PACK, row(), ledger=ledger, index=index)
+    assert res.text == draft(0)["explanation_native"]

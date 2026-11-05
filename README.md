@@ -22,7 +22,7 @@ Supervisor 그래프 하나가 요청을 6개 에이전트로 보냅니다. inte
 | Supervisor | 명령은 바로 분기, 자유 발화는 의도·영역·문제 수 추출, 애매하면 실행하지 않음 | Haiku 4.5 |
 | Planner | 학습 기록 통계로 오늘의 계획 제안 → **interrupt①** 승인·수정 | Haiku 4.5 |
 | Generator | 세부 항목 선택(범위 먼저, 그다음 약점) → 검색 → 이중 언어 문제 → validator → 근거 검증 | Sonnet 4.6 / Haiku 4.5 |
-| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 판정 표, 놓친 문구, 해설 | Sonnet 4.6 |
+| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 자기 판단, 판정 표, 놓친 문구. 해설은 **tool 사용 코치**가 자료 검색(`search_material`)과 학습 기록(`learner_history`)을 직접 불러 근거와 함께 씀 | Sonnet 4.6 |
 | Reporter | 범위·정답률·실수 비율(미끼 기준선과 나란히)·놓친 문구 순위 | 없음 |
 | Collector | 학습자 로그인 프로필로 지정 교안을 읽기 전용 수집 → **interrupt②** 로그인 대기 | 없음 |
 | Ingest | 청크 분할 → 세부 항목 태깅 → bge-m3 + FAISS + BM25 색인 | Haiku 4.5 |

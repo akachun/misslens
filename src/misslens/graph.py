@@ -48,6 +48,7 @@ class Services:
     sources: SourceList | None = None
     fetchers: dict[str, Any] = field(default_factory=dict)       # site -> Fetcher
     streams: dict[int, QuestionStream] = field(default_factory=dict)
+    index: Any = None                                             # ChunkIndex for the coach's search tool
 
 
 class SupervisorState(TypedDict, total=False):

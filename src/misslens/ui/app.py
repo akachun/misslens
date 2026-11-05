@@ -22,7 +22,8 @@ from typing import Any, Callable
 import streamlit as st
 from langgraph.types import Command
 
-from misslens.agents.grader import build_reask_form, diagnosis_rows, explain_miss, highlight, submit_review
+from misslens.agents.grader import build_reask_form, diagnosis_rows, highlight, submit_review
+from misslens.agents.grader.coach import coach_explain
 from misslens.bedrock import PROJECT_ROOT
 from misslens.ledger import miss_breakdown
 
@@ -326,11 +327,18 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
                 st.markdown(f"**놓친 조건:** <mark>{html.escape(row.missed_phrase)}</mark>", unsafe_allow_html=True)
             key = f"exp_{row.attempt_id}"
             if key in st.session_state:
-                st.write(st.session_state[key])
+                res = st.session_state[key]
+                st.write(res.text)
+                if res.sources:
+                    st.caption("근거: " + ", ".join(res.sources))
+                if res.tool_calls:
+                    st.caption("코치가 쓴 도구: " + " → ".join(res.tool_calls))
             else:
                 st.write(q["explanation_native"])
-                if r.explainer is not None and st.button("코치 해설 생성", key=f"btn_{key}"):
-                    st.session_state[key] = explain_miss(r.explainer, r.pack, row)
+                if r.explainer is not None and st.button("코치 해설(자료 검색)", key=f"btn_{key}"):
+                    with st.spinner("코치가 자료를 찾아 해설을 쓰는 중..."):
+                        st.session_state[key] = coach_explain(r.explainer, r.pack, row, ledger=r.ledger,
+                                                              index=r.svc.index)
                     st.rerun()
             if row.attempt_id not in invalid and st.button("문제 이상(통계에서 빼기)", key=f"inv_{row.attempt_id}"):
                 r.ledger.mark_invalid(row.attempt_id)

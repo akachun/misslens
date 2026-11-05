@@ -33,7 +33,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from misslens.agents.generator import Generator, QuestionStream
-from misslens.agents.grader import build_reask_form, diagnosis_rows, explain_miss, highlight, submit_review
+from misslens.agents.grader import build_reask_form, diagnosis_rows, highlight, submit_review
+from misslens.agents.grader.coach import coach_explain
 from misslens.exam_pack import ExamPack, load_exam_pack
 from misslens.ledger import Answer, Ledger, miss_breakdown, set_score
 
@@ -49,6 +50,7 @@ class CLI:
         self.console = console or Console()
         self._ask = ask or (lambda prompt: self.console.input(prompt))
         self.clock = clock
+        self.index = None   # ChunkIndex for the coach's search tool (D44); None = coach searches nothing
 
     def ask_choice(self, prompt: str, *, allow_blank: bool = True) -> int | None:
         while True:
@@ -177,8 +179,15 @@ class CLI:
             chosen = "-" if r.chosen_index is None else LETTERS[r.chosen_index]
             head = f"문제 {r.seq + 1} · {labels.get(r.miss_type, r.miss_type)} · 고른 답 {chosen} → 정답 {LETTERS[q['answer_index']]}"
             stem = highlight(escape(q["stem_en"]), escape(r.missed_phrase) if r.missed_phrase else None)
-            text = explain_miss(explainer, self.pack, r) if explainer is not None else q["explanation_native"]
             extra = f"\n\n놓친 조건: [bold yellow]{escape(r.missed_phrase)}[/]" if r.missed_phrase else ""
+            if explainer is not None:
+                with c.status("코치가 자료를 찾아 해설을 쓰는 중..."):
+                    res = coach_explain(explainer, self.pack, r, ledger=self.ledger, index=self.index)
+                text = res.text
+                if res.sources:
+                    extra += "\n\n[dim]근거: " + escape(", ".join(res.sources)) + "[/]"
+            else:
+                text = q["explanation_native"]
             c.print(Panel(f"{stem}{extra}\n\n{escape(text)}", title=head))
         mb = miss_breakdown(self.ledger, self.pack.exam_id, set_id=set_id)
         base = "-" if mb.baseline is None else f"{mb.baseline:.0%} ({mb.decoys_correct}/{mb.decoys})"
@@ -325,7 +334,7 @@ def make_services(pack: ExamPack, ledger: Ledger):
         sources = load_sources(pack.exam_id)
     except FileNotFoundError:
         sources = None
-    return Services(pack=pack, ledger=ledger, make_generator=make_generator, router_llm=get_llm("router"),
+    return Services(pack=pack, ledger=ledger, make_generator=make_generator, router_llm=get_llm("router"), index=index,
                     planner_llm=get_llm("planner"),
                     make_ingestor=lambda: Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)),
                     sources=sources, fetchers={n: Crawl4AIFetcher(n) for n in (sources.sites if sources else {})})
@@ -341,6 +350,7 @@ def run_supervisor(cli: "CLI", request: dict, *, explainer: Any = None, svc: Any
     from misslens.graph import build_supervisor_graph
 
     svc = svc or make_services(cli.pack, cli.ledger)
+    cli.index = svc.index
     graph = build_supervisor_graph(svc, checkpointer=checkpointer or sqlite_checkpointer())
     cfg = run_config(new_thread_id("supervisor"))
 
@@ -522,6 +532,7 @@ def main(argv: list[str] | None = None) -> int:
                 context = None
             else:
                 context = RetrievalContext(index)
+                cli.index = index
             from misslens.practice import PracticeSamples, load_bank
 
             bank = load_bank(pack.exam_id)

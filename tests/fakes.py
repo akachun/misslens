@@ -30,6 +30,8 @@ class FakeRoleLLM:
         return item
 
     def _model(self, item) -> GenericFakeChatModel:
+        if isinstance(item, AIMessage):          # e.g. a tool call for agent loops
+            return GenericFakeChatModel(messages=iter([item]))
         if hasattr(item, "model_dump_json"):
             text = item.model_dump_json()
         elif isinstance(item, (dict, list)):
@@ -47,6 +49,16 @@ class FakeRoleLLM:
             self.prompts.append(prompt)
             msg = self._model(self._pop()).invoke(prompt)
             return schema.model_validate_json(msg.content)
+
+        return RunnableLambda(run)
+
+    def bind_tools(self, tools, **kwargs):
+        """Queued AIMessage items may carry tool_calls; plain strings become a final text answer."""
+        self.bound_tools = [getattr(t, "name", str(t)) for t in tools]
+
+        def run(prompt):
+            self.prompts.append(prompt)
+            return self._model(self._pop()).invoke(prompt)
 
         return RunnableLambda(run)
 

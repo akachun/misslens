@@ -208,7 +208,7 @@ class Router:
 
 
 class RoleLLM:
-    """What get_llm(role) returns: invoke / with_structured_output with failover."""
+    """What get_llm(role) returns: invoke / with_structured_output / bind_tools, each call with failover."""
 
     def __init__(self, router: Router, role: str):
         self.router = router
@@ -222,6 +222,15 @@ class RoleLLM:
         return RunnableLambda(
             lambda inp: router.run(role, lambda llm: llm.with_structured_output(schema, **kwargs).invoke(inp)),
             name=f"{role}_structured",
+        )
+
+    def bind_tools(self, tools: list, **kwargs: Any) -> Runnable:
+        """Tool-calling model for agent loops (coach, D44). Every turn is one router call, so a throttled or
+        over-quota endpoint mid-loop switches like any other call."""
+        role, router = self.role, self.router
+        return RunnableLambda(
+            lambda inp: router.run(role, lambda llm: llm.bind_tools(tools, **kwargs).invoke(inp)),
+            name=f"{role}_tools",
         )
 
 
