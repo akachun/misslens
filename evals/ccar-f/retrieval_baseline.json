@@ -1,0 +1,163 @@
+{
+  "exam_id": "ccar-f",
+  "golden": {
+    "items": 30,
+    "answerable": 30,
+    "unanswerable": [],
+    "modes": {
+      "plain": {
+        "hit@1": 0.8,
+        "hit@3": 0.9333,
+        "hit@5": 0.9667,
+        "hit@10": 0.9667,
+        "mrr@10": 0.875,
+        "top5_sources": 2.667,
+        "top5_dup_pairs": 0,
+        "by_domain": {
+          "course": {
+            "n": 3,
+            "hit@5": 1.0
+          },
+          "d1": {
+            "n": 5,
+            "hit@5": 1.0
+          },
+          "d2": {
+            "n": 6,
+            "hit@5": 1.0
+          },
+          "d3": {
+            "n": 6,
+            "hit@5": 0.8333
+          },
+          "d4": {
+            "n": 6,
+            "hit@5": 1.0
+          },
+          "d5": {
+            "n": 4,
+            "hit@5": 1.0
+          }
+        },
+        "misses": [
+          "d3-permission-ko"
+        ]
+      },
+      "coach": {
+        "hit@1": 0.8667,
+        "hit@3": 0.9333,
+        "hit@5": 0.9667,
+        "hit@10": 0.9667,
+        "mrr@10": 0.9083,
+        "top5_sources": 2.633,
+        "top5_dup_pairs": 0,
+        "by_domain": {
+          "course": {
+            "n": 3,
+            "hit@5": 1.0
+          },
+          "d1": {
+            "n": 5,
+            "hit@5": 1.0
+          },
+          "d2": {
+            "n": 6,
+            "hit@5": 1.0
+          },
+          "d3": {
+            "n": 6,
+            "hit@5": 0.8333
+          },
+          "d4": {
+            "n": 6,
+            "hit@5": 1.0
+          },
+          "d5": {
+            "n": 4,
+            "hit@5": 1.0
+          }
+        },
+        "misses": [
+          "d3-permission-ko"
+        ]
+      },
+      "task": {
+        "hit@1": 0.8667,
+        "hit@3": 0.9333,
+        "hit@5": 0.9333,
+        "hit@10": 0.9667,
+        "mrr@10": 0.9056,
+        "top5_sources": 2.7,
+        "top5_dup_pairs": 0,
+        "by_domain": {
+          "course": {
+            "n": 3,
+            "hit@5": 1.0
+          },
+          "d1": {
+            "n": 5,
+            "hit@5": 1.0
+          },
+          "d2": {
+            "n": 6,
+            "hit@5": 0.8333
+          },
+          "d3": {
+            "n": 6,
+            "hit@5": 0.8333
+          },
+          "d4": {
+            "n": 6,
+            "hit@5": 1.0
+          },
+          "d5": {
+            "n": 4,
+            "hit@5": 1.0
+          }
+        },
+        "misses": [
+          "d2-tool-choice",
+          "d3-permission-ko"
+        ]
+      }
+    }
+  },
+  "task_context": {
+    "tasks": 30,
+    "avg_tagged_share": 0.9611,
+    "avg_source_groups": 3.0,
+    "tasks_below_half_tagged": []
+  },
+  "health": {
+    "chunks": 1278,
+    "short_chunks": 0,
+    "junk_chunks": 0,
+    "invalid_tags": [],
+    "exact_duplicate_chunks": 16,
+    "unassigned_ratio": 0.4272,
+    "thin_tasks": [
+      "1.3",
+      "1.7"
+    ],
+    "max_vector_norm_deviation": 0.0,
+    "sources": {
+      "ai-fluency-framework-foundations": 86,
+      "ccar-f.17labs.ai": 24,
+      "claude-101": 142,
+      "claude-code-in-action": 63,
+      "claude-in-amazon-bedrock": 277,
+      "claude-with-google-vertex": 275,
+      "claude-with-the-anthropic-api": 280,
+      "guide.pdf": 91,
+      "introduction-to-model-context-protocol": 40
+    },
+    "checks": {
+      "vectors_match_chunks": true,
+      "no_junk_chunks": true,
+      "no_invalid_tags": true,
+      "no_short_chunks": true,
+      "every_task_has_material": true
+    },
+    "ok": true
+  }
+}

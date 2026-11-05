@@ -34,5 +34,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["live: calls real Amazon Bedrock (uses quota); run with -m live"]
-addopts = "-m 'not live'"
+markers = [
+    "live: calls real Amazon Bedrock (uses quota); run with -m live",
+    "realdata: evaluates the real local index in data/ against the saved baseline; run with -m realdata",
+]
+addopts = "-m 'not live and not realdata'"

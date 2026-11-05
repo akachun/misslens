@@ -1,0 +1,83 @@
+# Golden queries for retrieval evaluation (src/misslens/retrieval/evaluate.py, D50).
+#
+# A retrieved chunk counts as relevant when it contains every `text` phrase (case-insensitive) and, if given,
+# its source contains `source`. `expect` lists alternatives (any one is enough). Judging by content rather than
+# chunk ids keeps the set valid after re-chunking or cleaning.
+#
+# Every item was checked to have at least one relevant chunk in the index built on 2026-11-05 (guide PDF,
+# 17labs pages, 7 Skilljar courses). Korean queries mirror how the learner asks the coach.
+# task_id is used by the coach and task ranking modes; leave it out for questions not tied to a task statement.
+
+exam_id: ccar-f
+items:
+  # --- d1 Agentic architecture & orchestration
+  - {id: d1-loop, domain: d1, task_id: "1.1", query: "agentic loop keeps running while stop_reason is tool_use",
+     expect: [{text: [stop_reason]}]}
+  - {id: d1-coordinator-ko, domain: d1, task_id: "1.2", query: "코디네이터가 여러 서브에이전트에게 작업을 나눠 맡기는 패턴",
+     expect: [{text: [subagent, coordinator]}]}
+  - {id: d1-context, domain: d1, task_id: "1.3", query: "subagents do not inherit the coordinator's context, pass it explicitly in the prompt",
+     expect: [{text: [subagent, context]}]}
+  - {id: d1-hooks, domain: d1, task_id: "1.5", query: "hook that runs before a tool call and can block it",
+     expect: [{text: [PreToolUse]}, {text: [hook, tool call]}]}
+  - {id: d1-resume, domain: d1, task_id: "1.7", query: "resume an earlier session or fork it",
+     expect: [{text: ["--resume"]}, {text: [fork_session]}]}
+
+  # --- d2 Tool design & MCP
+  - {id: d2-tool-choice, domain: d2, task_id: "2.3", query: "force the model to call one specific tool",
+     expect: [{text: [tool_choice]}]}
+  - {id: d2-iserror, domain: d2, task_id: "2.2", query: "MCP tool returns a structured error with isError",
+     expect: [{text: [isError]}]}
+  - {id: d2-mcp-json, domain: d2, task_id: "2.4", query: "configure an MCP server for the whole team in .mcp.json",
+     expect: [{text: [.mcp.json]}]}
+  - {id: d2-schema, domain: d2, task_id: "2.1", query: "define a tool with a name, description and input_schema",
+     expect: [{text: [input_schema]}]}
+  - {id: d2-mcp-course-ko, domain: d2, query: "MCP 서버를 처음부터 만드는 방법",
+     expect: [{text: [server], source: introduction-to-model-context-protocol}]}
+  - {id: d2-builtin, domain: d2, task_id: "2.5", query: "choose between Grep, Glob and Read built-in tools",
+     expect: [{text: [Glob]}]}
+
+  # --- d3 Claude Code configuration & workflows
+  - {id: d3-claude-md, domain: d3, task_id: "3.1", query: "CLAUDE.md hierarchy at user, project and directory level",
+     expect: [{text: [CLAUDE.md]}]}
+  - {id: d3-commands, domain: d3, task_id: "3.2", query: "project custom slash commands stored in .claude/commands",
+     expect: [{text: [.claude/commands]}]}
+  - {id: d3-rules, domain: d3, task_id: "3.3", query: "path-specific rules with glob patterns in .claude/rules",
+     expect: [{text: [.claude/rules]}]}
+  - {id: d3-plan-mode-ko, domain: d3, task_id: "3.4", query: "plan mode와 바로 실행은 언제 다르게 쓰나요",
+     expect: [{text: [plan mode]}]}
+  - {id: d3-ci, domain: d3, task_id: "3.6", query: "run Claude Code non-interactively in a CI pipeline and parse json output",
+     expect: [{text: ["--output-format"]}, {text: ["-p "]}]}
+  - {id: d3-permission-ko, domain: d3, query: "Claude Code 권한 모드는 어떤 것들이 있나요",
+     expect: [{text: [permission], source: claude-code-in-action}]}
+
+  # --- d4 Prompt engineering & structured output
+  - {id: d4-few-shot, domain: d4, task_id: "4.2", query: "few-shot examples to make output format consistent",
+     expect: [{text: [few-shot]}]}
+  - {id: d4-batch, domain: d4, task_id: "4.5", query: "Message Batches API for non-urgent bulk jobs",
+     expect: [{text: [Message Batches]}]}
+  - {id: d4-xml-ko, domain: d4, query: "프롬프트를 XML 태그로 구조화하는 방법",
+     expect: [{text: [XML tags]}]}
+  - {id: d4-prefill, domain: d4, query: "prefill the start of the assistant response",
+     expect: [{text: [prefill]}]}
+  - {id: d4-caching, domain: d4, query: "prompt caching with cache_control breakpoints",
+     expect: [{text: [cache_control]}]}
+  - {id: d4-stop-seq, domain: d4, query: "stop_sequences to end generation early",
+     expect: [{text: [stop_sequences]}]}
+
+  # --- d5 Context management & reliability
+  - {id: d5-lost-middle, domain: d5, task_id: "5.1", query: "lost in the middle effect in long inputs",
+     expect: [{text: [lost in the middle]}]}
+  - {id: d5-escalation-ko, domain: d5, task_id: "5.2", query: "상담 에이전트가 사람에게 넘겨야 하는 경우",
+     expect: [{text: [escalat]}]}
+  - {id: d5-citations, domain: d5, task_id: "5.6", query: "citations so answers point to their sources",
+     expect: [{text: [citation]}]}
+  - {id: d5-thinking-ko, domain: d5, query: "extended thinking은 언제 켜야 하나요",
+     expect: [{text: [extended thinking]}]}
+
+  # --- course-only topics (not tied to a task statement)
+  - {id: c-fluency, domain: course, query: "4D AI fluency framework delegation description discernment diligence",
+     expect: [{text: [delegation, discernment]}]}
+  - {id: c-computer-use, domain: course, query: "computer use tool lets Claude control a desktop",
+     expect: [{text: [computer use]}]}
+  - {id: c-evals-ko, domain: course, query: "프롬프트를 테스트 데이터셋과 채점기로 평가하는 방법",
+     expect: [{text: [eval, grade]}, {text: [evaluation, test]}]}

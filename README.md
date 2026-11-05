@@ -291,6 +291,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 | `ingest <경로>... [--paste 이름]` | 자료 색인(붙여넣기는 표준 입력) |
 | `search "<질의>" [--task ID]` | 검색 결과 확인 |
 | `collect login\|run\|reindex [site] [--thread ID] [--limit N]` | 로그인 프로필 저장 / 수집(중단한 수집은 `--thread`로 재개) / 정리 규칙 변경 후 재정리·재색인 |
+| `retrieval-eval [--save-baseline] [--json PATH]` | 실제 색인의 검색 점수(정답 질의 30개, hit@k·MRR), 출제 근거 품질, 색인 건강 검사를 기준선과 비교 |
 | `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 
@@ -320,6 +321,16 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 ```bash
 pytest                 # 기본: 가짜 LLM(GenericFakeChatModel), 메모리 DB. 실호출 제외
 pytest -m live         # Amazon Bedrock 실호출 스모크(할당량 사용)
+pytest -m realdata     # 실제 색인(data/index)을 기준선과 비교: 청킹·정리·검색 순위를 바꾼 뒤
 ```
 
 Streamlit 화면은 `streamlit.testing`의 AppTest로 실제 앱 스크립트를 돌려 검사합니다(`tests/test_ui.py`).
+
+**검색 품질 점수(D50).** 문제 출제와 코치 답변은 모두 색인 검색에 기대므로, 실제 색인을 점수로 봅니다. 정답 질의 30개(`evals/ccar-f/retrieval.yaml`, 3분의 1은 한국어)는 청크 ID가 아니라 내용으로 정답을 판정해 다시 청킹해도 그대로 쓸 수 있습니다.
+
+| 2026-11-05 기준선 | 일반 | 코치 | 출제 |
+|---|---|---|---|
+| hit@5 | 0.97 | 0.97 | 0.93 |
+| MRR@10 | 0.875 | 0.908 | 0.906 |
+
+출제 근거: 세부 항목 30개 모두 상위 6개 중 평균 96%가 해당 항목 자료. 색인 건강 5개 검사 통과(잡음 0, 짧은 청크 0, 잘못된 태그 0). 같은 평가로 플레이어 잡음이 섞였던 이전 색인은 건강 검사 실패(잡음 555청크), hit@5 0.93이었습니다.

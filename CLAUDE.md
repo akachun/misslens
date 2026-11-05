@@ -40,6 +40,7 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 - 작업 단위를 마칠 때마다 `TASK.md`의 체크박스, 상태, '작업 로그', '마지막 갱신'을 갱신한다.
 - 설계를 바꿨다면 `ARCHITECTURE.md`의 해당 절을 고치고, §12에 결정(ID, 대안, 이유)을 추가한다.
 - 새 기능에는 테스트를 함께 작성한다. LLM은 `GenericFakeChatModel`로 대체한다.
+- 청킹·데이터 정리·태깅·검색 순위를 바꾸면 `python -m misslens.cli retrieval-eval`(또는 `pytest -m realdata`)로 기준선과 비교한다. 나아졌으면 `--save-baseline`으로 기준선을 갱신한다.
 - 마감이 위태로우면 `TASK.md`의 '빼는 순서'를 따른다. 핵심 루프(세트 풀이 → 리뷰 → 진단 → 기록)는 빼지 않는다.
 - 문서와 사용자 대상 문구는 한국어로 쓴다. 코드, 식별자, 커밋 메시지는 영어로 쓴다.
 
@@ -69,4 +70,6 @@ python -m misslens.cli collect run             # sources.yaml 수집 → 색인(
 python -m misslens.cli collect reindex skilljar # 정리 규칙(sources.yaml) 바꾼 뒤 수집본 재정리·재색인(재수집 없음)
 python -m misslens.cli practice import         # 연습 문제 파일 → 문체 예시 은행(data/practice/)
 python -m misslens.cli eval --export           # 진단 일치율 + eval 데이터(data/eval/)
+python -m misslens.cli retrieval-eval          # 검색 점수·색인 건강 vs 기준선(evals/ccar-f/)
+pytest -m realdata                 # 실제 색인 회귀 검사(기본 테스트에서는 제외)
 ```

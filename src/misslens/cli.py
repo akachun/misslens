@@ -6,6 +6,7 @@
     python -m misslens.cli search "query" [--task 2.1]   # inspect what retrieval returns
     python -m misslens.cli plan [-n 10]                  # Planner draft -> approve (interrupt①) -> solve
     python -m misslens.cli ask "도구 설계 5문제"          # free text -> Supervisor router -> agent
+    python -m misslens.cli retrieval-eval [--save-baseline]  # retrieval scores + index health vs baseline (D50)
     python -m misslens.cli eval [--export]               # diagnosis vs the learner's own labels (T10 eval)
     python -m misslens.cli practice import [DIR]         # parse learner-supplied practice sets into the style bank
     python -m misslens.cli collect login skilljar        # sign in by hand in a visible browser (profile only)
@@ -19,6 +20,7 @@ Solving and review are plain prompts, never interrupts.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -444,6 +446,11 @@ def main(argv: list[str] | None = None) -> int:
     ak.add_argument("text")
     ak.add_argument("--exam", default="ccar-f")
     ak.add_argument("--no-explain", action="store_true")
+    rv = sub.add_parser("retrieval-eval", help="검색 품질 점수·색인 건강 검사, 기준선 대비 회귀 확인(D50)")
+    rv.add_argument("--save-baseline", action="store_true", help="현재 점수를 새 기준선으로 저장")
+    rv.add_argument("--max-drop", type=float, default=0.05, help="기준선보다 이만큼 넘게 떨어지면 실패")
+    rv.add_argument("--json", metavar="PATH", help="전체 보고서를 JSON으로 저장")
+    rv.add_argument("--exam", default="ccar-f")
     ev = sub.add_parser("eval", help="진단 일치율(내 판단 vs 판정) 보기, --export로 eval 데이터 저장")
     ev.add_argument("--export", nargs="?", const="", metavar="PATH",
                     help="기본값 data/eval/misses-<날짜>.yaml (git 제외)")
@@ -507,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
             request = ({"intent": "plan_quiz", "args": {"count": args.n}} if args.cmd == "plan"
                        else {"text": args.text})
             run_supervisor(cli, request, explainer=explainer)
+        elif args.cmd == "retrieval-eval":
+            return retrieval_eval_command(cli, args)
         elif args.cmd == "eval":
             eval_command(cli, args.export)
         elif args.cmd == "practice":
@@ -555,6 +564,61 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     finally:
         ledger.close()
+    return 0
+
+
+def render_retrieval_report(console: Console, rep: dict) -> None:
+    g, tc, h = rep["golden"], rep["task_context"], rep["health"]
+    tbl = Table("모드", "hit@1", "hit@3", "hit@5", "hit@10", "MRR@10", "상위5 자료원", "상위5 중복쌍", "5위 밖",
+                title=f"정답 질의 {g['answerable']}/{g['items']}개(답할 수 있는 것만 채점)")
+    labels = {"plain": "일반(자유 질문)", "coach": "코치(태그 ≤2)", "task": "출제(태그 우선)"}
+    for mode, m in g["modes"].items():
+        tbl.add_row(labels.get(mode, mode), *(f"{m[k]:.2f}" for k in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr@10")),
+                    f"{m['top5_sources']:.1f}", str(m["top5_dup_pairs"]), ", ".join(m["misses"]) or "-")
+    console.print(tbl)
+    by = g["modes"].get("plain", {}).get("by_domain", {})
+    if by:
+        console.print("영역별 hit@5(일반): " + " · ".join(f"{d} {v['hit@5']:.2f}({v['n']})" for d, v in by.items()))
+    if g["unanswerable"]:
+        console.print(f"[yellow]색인에 정답이 없는 질의[/]: {', '.join(g['unanswerable'])}")
+    console.print(f"출제 근거(세부 항목 {tc['tasks']}개): 상위 6개 중 태그 일치 평균 {tc['avg_tagged_share']:.0%}, "
+                  f"자료원 평균 {tc['avg_source_groups']:.1f}종, 태그 일치 50% 미만: {', '.join(tc['tasks_below_half_tagged']) or '없음'}")
+    marks = " · ".join(f"{'✓' if ok else '✗'} {k}" for k, ok in h["checks"].items())
+    console.print(f"색인 건강: 청크 {h['chunks']}, 잡음 {h['junk_chunks']}, 짧은 청크 {h['short_chunks']}, "
+                  f"완전 중복 {h['exact_duplicate_chunks']}, 미분류 {h['unassigned_ratio']:.0%}, "
+                  f"자료 적은 항목 {', '.join(h['thin_tasks']) or '없음'}\n{marks}")
+
+
+def retrieval_eval_command(cli: CLI, args) -> int:
+    from misslens.agents.collector import load_sources
+    from misslens.retrieval.evaluate import evaluate, load_baseline, load_golden, save_baseline
+
+    index = open_index(cli.pack.exam_id)
+    if index is None:
+        cli.console.print("색인이 없습니다. 먼저 `ingest`로 자료를 넣으세요.")
+        return 1
+    try:
+        rules = list(load_sources(cli.pack.exam_id).sites.values())
+    except FileNotFoundError:
+        rules = []
+    baseline = load_baseline(cli.pack.exam_id)
+    rep = evaluate(index, cli.pack, load_golden(cli.pack.exam_id), rules, baseline, args.max_drop)
+    d = rep.as_dict()
+    render_retrieval_report(cli.console, d)
+    if args.json:
+        Path(args.json).write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.save_baseline:
+        if not d["health"]["ok"]:
+            cli.console.print("[red]색인 건강 검사가 실패해 기준선을 저장하지 않았습니다.[/]")
+            return 1
+        cli.console.print(f"기준선을 저장했습니다: {save_baseline(rep)}")
+        return 0
+    if baseline is None:
+        cli.console.print("[yellow]기준선이 없습니다. 결과가 괜찮으면 --save-baseline으로 저장하세요.[/]")
+    if rep.regressions:
+        cli.console.print("[red]회귀:[/] " + "; ".join(rep.regressions))
+        return 1
+    cli.console.print("[green]기준선 대비 회귀 없음[/]" if baseline else "")
     return 0
 
 
