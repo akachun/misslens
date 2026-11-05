@@ -8,6 +8,8 @@ BM25 is rebuilt in memory on load and after each add.
 
 Search with a task_id: chunks tagged with that task are ranked first; if they are fewer than k, the rest is
 filled from the unfiltered ranking, so a wrong or missing tag does not leave the generator without material.
+Near-duplicates are dropped while filling the k slots (D46): the Bedrock and Google Cloud courses repeat the Claude
+API course almost word for word, and three copies of one paragraph would crowd out other evidence.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ RRF_C = 60                 # same constant as LangChain EnsembleRetriever
 DENSE_WEIGHT = 0.5
 SPARSE_WEIGHT = 0.5
 CANDIDATES = 50            # per retriever, before fusion
+DEDUPE_JACCARD = 0.8       # a hit this close (token Jaccard) to an earlier hit is skipped (D46)
 
 
 @dataclass
@@ -158,7 +161,14 @@ class ChunkIndex:
             tagged_ids = {i for i, _ in tagged}
             rest = [(i, s) for i, s in fused if i not in tagged_ids]
             out: list[Hit] = []
-            for i, s in (tagged + rest)[:k]:
+            kept: list[set[str]] = []
+            for i, s in tagged + rest:
+                if len(out) >= k:
+                    break
                 c = self.chunks[i]
+                toks = set(tokenize(c.text))
+                if any(toks and len(toks & t) / len(toks | t) > DEDUPE_JACCARD for t in kept):
+                    continue
+                kept.append(toks)
                 out.append(Hit(i, c.text, c.source, tuple(c.task_ids), s, i in tagged_ids))
             return out

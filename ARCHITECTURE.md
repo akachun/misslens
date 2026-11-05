@@ -53,7 +53,7 @@
    bge-m3 (프로세스당 1회 로드)
 ```
 
-- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다. 구현된 그래프 그림은 README에 있고, `python scripts/draw_graph.py`로 컴파일된 그래프에서 다시 만든다(D41).
+- 서브그래프 6개와 Supervisor로 구성한다(D1). 각 서브그래프는 자기 상태를 갖는다. 구현된 그래프 그림(Supervisor·Planner·Collector·Coach)은 README에 있고, `python scripts/draw_graph.py`로 컴파일된 그래프에서 `docs/graphs/*.mmd`로 다시 만든다(그림이 코드와 어긋나면 테스트 실패, D41).
 - **통계는 ledger 모듈 한 곳에서만 계산한다**(D9). Generator, Planner, Reporter는 ledger의 통계 함수만 호출한다.
 - **interrupt는 두 곳에만 둔다**(D20, D21). ① Planner의 계획 승인, ② Collector의 로그인 대기. 문제 풀이와 리뷰 흐름에는 interrupt가 없다.
 
@@ -351,6 +351,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 - bge-m3는 프로세스당 한 번만 불러온다(`get_embedder()`, Streamlit에서는 `st.cache_resource`로 감싼다). 모델 이름은 `config/models.yaml`의 `embedding`에 둔다. 로컬 캐시를 먼저 쓰고, 없을 때만 내려받는다.
 - BM25는 공백으로만 단어를 나누면 한국어를 제대로 다루지 못한다(조사가 붙음). 그래서 한글은 글자 bigram으로, 영어는 `tool_choice`, `--allowedTools`, `.claude/settings.json` 같은 시험 용어를 한 단어로 두고 부분 단어도 함께 넣는다.
 - task_id 필터를 '태그가 있는 청크만'으로 하지 않고 '먼저 + 채움'으로 한 이유: 태그가 틀리거나 없을 때 의미·키워드 검색이 안전망이 되게 하려는 것이다(D17).
+- 상위 k를 채우면서 이미 고른 청크와 단어 Jaccard가 0.8을 넘는 청크는 건너뛴다(D46). Bedrock·Google Cloud 코스가 Claude API 코스 레슨을 거의 그대로 반복하기 때문이다.
 
 **Ingest.** `agents/ingest/`(`loaders.py`, `tagger.py`, `pipeline.py`).
 - 형식: PDF(쪽 번호 표시), MD/TXT, HTML(script·nav·header·footer 제거), 붙여넣기. 웹에서 저장한 파일 앞의 `BEGIN UNTRUSTED EXTERNAL CONTENT (source: URL)` 표시는 지우고 URL을 출처로 쓴다.
@@ -397,6 +398,7 @@ misslens/
 ├── src/misslens/
 │   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/(tokenize·embed·index)
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
+│   ├── paths.py       # 학습 기록·체크포인트 위치, 샌드박스(D45)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|plan|ask|status|ingest|search|collect|practice`)
 │   ├── ui/app.py   # Streamlit 화면(§10)
@@ -404,6 +406,8 @@ misslens/
 ├── app/            # Streamlit 진입점(main.py) → src/misslens/ui/app.py
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
+├── scripts/draw_graph.py     # 그래프 그림 → docs/graphs/*.mmd (README에 포함)
+├── docs/           # demo.md(데모 시나리오), graphs/(생성된 그래프 그림)
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
 └── secrets/        # 로그인 프로필 (git 제외)
 ```
@@ -435,6 +439,8 @@ misslens/
 | D42 | Streamlit은 Supervisor 요청을 thread_id별 백그라운드 작업으로 돌리고 상태를 폴링, 계획 thread_id·세트 id를 URL에 둠, 다시 그리기는 페이지 끝에서 한 번 | 요청을 스크립트 안에서 동기 실행, 탭마다 바로 `st.rerun` | 수집처럼 긴 작업이 페이지를 멈추지 않게 하고, interrupt는 체크포인터에서 읽어 새로고침에도 이어짐(T9 완료 기준). 탭 안에서 바로 다시 그리면 뒤 탭이 그려지지 않음 |
 | D43 | 진단 eval 데이터(학습자 자기 판단)를 리뷰 흐름 안에서 모은다: 정답 공개 → 자기 판단 → 판정·해설. 별도 테이블 `miss_feedback`, 일치율은 ledger 통계 | 학습자가 따로 시간을 내 오답을 기록(T1-a 원안), 판정 화면에서 동의 여부만 묻기 | 따로 기록할 시간이 없음(학습자 의견). 판정을 먼저 보여 주면 동의 쪽으로, 해설을 먼저 보여 주면 해석 쪽으로 치우침. 판정 표(규칙 3)와 섞이지 않게 테이블을 분리 |
 | D44 | 오답 해설을 tool 사용 에이전트(코치)로: 색인 검색·학습 기록 조회 tool을 모델이 골라 쓰고 근거 출처를 표시. 출제·판정·기록 흐름은 계속 코드가 결정 | Supervisor나 Generator를 tool 에이전트로, MCP 서버 공개, tool 없음 | 과정 평가에서 tool 사용을 보여 주되 규칙 1~3(통계·검증·판정)을 모델 호출 순서에 맡기지 않음. 해설은 읽기만 하므로 tool 선택을 맡겨도 기록이 틀어지지 않음. 실호출로 Converse toolUse/toolResult 동작 확인 |
+| D45 | 샌드박스 모드(`MISSLENS_SANDBOX=1`): 학습 기록·체크포인트를 `data/sandbox/`로, 자료 넣기·수집은 CLI·Supervisor·화면에서 모두 거부 | 실제 DB로 검토, DB 경로 인자 | 수집이 실제 DB를 쓰는 동안에도 검토·리허설을 할 수 있고, 시연용 오답이 실제 통계(정답률·진단 일치율)에 섞이지 않음. 색인·수집본은 공유하므로 쓰기 명령은 막음 |
+| D46 | 검색 결과에서 거의 같은 청크(단어 Jaccard > 0.8) 제거 | MMR, 색인 단계 중복 제거 | 코스 간 반복 문단이 상위를 채우면 근거 다양성이 떨어짐. 검색 단계 처리라 이미 만든 색인을 다시 만들 필요가 없음 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |

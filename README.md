@@ -7,25 +7,28 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D42) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D46) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
 | [CLAUDE.md](CLAUDE.md) | 코딩 에이전트용 규칙 |
 
-## 구조
+## 한눈에 보는 구조
 
-Supervisor 그래프 하나가 요청을 6개 에이전트로 보냅니다. interrupt는 두 곳(계획 승인, 로그인 대기)에만 있습니다. 아래 그림은 컴파일된 그래프에서 생성했습니다(`python scripts/draw_graph.py`).
+Supervisor 그래프 하나가 모든 요청을 7개 에이전트로 보냅니다. **흐름(무엇을 언제 기록하고 통계를 어떻게 내는지)은 코드가 정하고, 모델은 생성·분류·검증·해설 같은 판단만 맡습니다.** 사람의 개입(interrupt)은 계획 승인(①)과 로그인 대기(②) 두 곳뿐이고, 문제 풀이와 리뷰는 끊기지 않습니다.
 
-| 에이전트 | 하는 일 | 모델 |
-|---|---|---|
-| Supervisor | 명령은 바로 분기, 자유 발화는 의도·영역·문제 수 추출, 애매하면 실행하지 않음 | Haiku 4.5 |
-| Planner | 학습 기록 통계로 오늘의 계획 제안 → **interrupt①** 승인·수정 | Haiku 4.5 |
-| Generator | 세부 항목 선택(범위 먼저, 그다음 약점) → 검색 → 이중 언어 문제 → validator → 근거 검증 | Sonnet 4.6 / Haiku 4.5 |
-| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 자기 판단, 판정 표, 놓친 문구. 해설은 **tool 사용 코치**가 자료 검색(`search_material`)과 학습 기록(`learner_history`)을 직접 불러 근거와 함께 씀 | Sonnet 4.6 |
-| Reporter | 범위·정답률·실수 비율(미끼 기준선과 나란히)·놓친 문구 순위 | 없음 |
-| Collector | 학습자 로그인 프로필로 지정 교안을 읽기 전용 수집 → **interrupt②** 로그인 대기 | 없음 |
-| Ingest | 청크 분할 → 세부 항목 태깅 → bge-m3 + FAISS + BM25 색인 | Haiku 4.5 |
+| 에이전트 | 하는 일 | 형태 | 모델 |
+|---|---|---|---|
+| Supervisor | 명령은 바로 분기, 자유 발화는 의도·영역·문제 수 추출, 애매하면 실행하지 않음 | LangGraph 부모 그래프 | Haiku 4.5 (자유 발화만) |
+| Planner | 학습 기록 통계로 오늘의 계획 제안 → **interrupt①** 승인·수정·취소 | 서브그래프 | Haiku 4.5 |
+| Generator | 세부 항목 선택 → 검색 → 이중 언어 문제 → validator → 근거 검증 → 순차 스트리밍 | 코드 파이프라인 + 백그라운드 스레드 | Sonnet 4.6 생성 / Haiku 4.5 검증 |
+| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 판정 표, 자기 판단, 놓친 문구 | 코드(판정은 ledger의 순수 함수) | — |
+| Coach | 오답 해설: 자료 검색·학습 기록 tool을 스스로 골라 쓰고 출처 표시 | ReAct 서브그래프(tool 사용) | Sonnet 4.6 |
+| Reporter | 범위·정답률·실수 비율(미끼 기준선과 나란히)·놓친 문구 순위·진단 일치율 | 코드 | 없음 |
+| Collector | 학습자 로그인 프로필로 지정 교안을 읽기 전용 수집 → **interrupt②** 로그인 대기 | 서브그래프 | 없음 |
+| Ingest | 청크 분할 → 세부 항목 태깅 → bge-m3 + FAISS + BM25 색인 | 코드 | Haiku 4.5 (태깅) |
+
+### Supervisor 그래프 (Planner·Collector 서브그래프 포함)
 
 ```mermaid
 ---
@@ -84,6 +87,148 @@ graph TD;
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc
 ```
+
+## 에이전트별 그래프
+
+LangGraph 그래프 네 개(Supervisor·Planner·Collector·Coach)는 `python scripts/draw_graph.py`로 **컴파일된 그래프에서 그대로 생성**합니다(`docs/graphs/*.mmd`). 코드와 그림이 어긋나면 테스트가 실패합니다. Generator·Grader·Ingest는 모델 호출 순서를 코드가 쥐는 파이프라인이라 순서도로 그렸습니다.
+
+### Planner — 계획 승인 (interrupt①)
+
+`draft`가 규칙 초안(시험 비중 × 미출제 비율 × 오답률)을 만들고 Haiku가 문제 수를 조정하며 한국어 근거를 씁니다. `approve`에서 멈춰 사람이 승인·수정·취소하고, 잘못 고치면 이유와 함께 다시 묻습니다(`approve → approve`).
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	draft(draft)
+	approve(approve ⏸ interrupt①)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> draft;
+	approve -.-> __end__;
+	draft --> approve;
+	approve -.-> approve;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+### Collector — 로그인 대기 (interrupt②)
+
+`fetch`가 큐의 URL을 하나씩 읽습니다(코스 페이지는 레슨 링크로 펼침, 2초 이상 간격, 허용 도메인만). 로그인 화면으로 넘어가거나 로그아웃 상태가 감지되면 `wait_login`이 브라우저를 닫고 멈춥니다. 사람이 로그인하고 재개하면 **같은 URL부터** 이어갑니다.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	fetch(fetch)
+	wait_login(wait_login ⏸ interrupt②)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> fetch;
+	fetch -.-> __end__;
+	fetch -.-> wait_login;
+	wait_login -.-> __end__;
+	wait_login -.-> fetch;
+	fetch -.-> fetch;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+### Coach — tool 사용 에이전트 (ReAct)
+
+모델이 `search_material`(수집한 교안·가이드 하이브리드 검색)과 `learner_history`(이 세부 항목의 내 정답률·자주 놓친 문구)를 최대 3번 골라 부른 뒤 해설과 출처를 냅니다. tool은 모두 읽기 전용입니다.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	coach(coach)
+	tools(tools<hr/><small><em>__tools = search_material, learner_history</em></small>)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> coach;
+	coach -.-> __end__;
+	coach -.-> tools;
+	tools --> coach;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+### Generator — 생성 → 검증 → 재생성
+
+```mermaid
+flowchart TD
+    A["select_tasks<br/>미출제 항목 먼저 → 약점 가중 무작위<br/>(승인된 계획의 영역별 상한)"] --> B["RetrievalContext<br/>세부 항목 하이브리드 검색 k=6"]
+    B --> C["Sonnet 4.6 구조화 출력(QuestionDraft)<br/>+ 같은 세부 항목의 문체 예시 2개"]
+    C --> D{"validator<br/>보기 4·정답 1·조건 문구가 지문에 그대로·violates 대응"}
+    D -- 실패 --> F["재생성<br/>직전 실패 이유를 프롬프트에"]
+    D -- 통과 --> E{"베끼기 검사<br/>연습 문제와 포함률 60% 이하"}
+    E -- 실패 --> F
+    E -- 통과 --> G{"Haiku 근거 검증<br/>정답 근거·오답 근거·단일 정답·지어낸 플래그"}
+    G -- 실패 --> F
+    F -- "최대 3회" --> C
+    F -- "3회 실패" --> H["generation_failures 기록 → 다음 세부 항목<br/>(2항목 연속 실패면 중단)"]
+    G -- 통과 --> I["보기 순서 섞기 → ledger에 ready로 저장<br/>→ 백그라운드 스트림으로 화면에"]
+```
+
+### Grader & Diagnostician — 리뷰와 진단
+
+```mermaid
+flowchart TD
+    S["세트 제출<br/>(정답·해설은 숨김)"] --> R["재질문 폼<br/>오답 전체 + 미끼(맞힌 문제 약 30%, 최소 2개)<br/>한국어 지문·보기 섞기·확신/추측"]
+    R --> J["ledger 판정 표(judge.py)<br/>reading / uncertain / concept, 미끼 기준선"]
+    J --> SC["자기 판단<br/>정답만 공개 → 개념 / 해석 / 모르겠음<br/>(진단 일치율 eval용)"]
+    SC --> D["진단 화면<br/>판정·놓친 조건 문구 강조"]
+    D --> C["Coach 해설(ReAct)"]
+    D --> X["'문제 이상' → invalid<br/>모든 통계에서 제외"]
+```
+
+| 처음 답 | 한국어 재질문 | 판정 | 통계 |
+|---|---|---|---|
+| 오답 | 정답 + 확신 | 해석 실수(reading) | 놓친 문구 = 처음 고른 보기가 어긴 조건 |
+| 오답 | 정답 + 추측 | 불확실(uncertain) | 해석 비율에서 빼고 따로 집계 |
+| 오답 | 오답 | 개념 실수(concept) | |
+| 정답(미끼) | 정답/오답 | 판정 없음 | 미끼 기준선 = 재질문 정답률, 해석 비율과 나란히 표시 |
+
+### Ingest와 검색 (RAG)
+
+```mermaid
+flowchart LR
+    U["업로드·붙여넣기·수집본"] --> L["로더<br/>PDF/MD/TXT/HTML"] --> K["청크<br/>1200자, 겹침 150"] --> T["Haiku 태깅<br/>8개씩, 세부 항목 ≤3, 미분류 허용"] --> X[("FAISS(bge-m3)<br/>+ chunks.jsonl")]
+    Q["질의<br/>영역 + 세부 항목"] --> F["FAISS 의미 검색"] & B["BM25<br/>한글 bigram·시험 용어 토큰"]
+    X -.-> F & B
+    F & B --> R["RRF 0.5/0.5"] --> P["태그 일치 우선 → 전체 순위로 채움<br/>→ 거의 같은 청크 제거"] --> O["참고 자료 블록<br/>(지시가 아닌 데이터)"]
+```
+
+## 적용한 구조와 패턴
+
+| 패턴 | 어디에 | 왜 | 결정 |
+|---|---|---|---|
+| **Supervisor + 서브그래프 (멀티 에이전트)** | `graph.py`: route → Planner·Collector는 서브그래프 노드, 나머지는 함수 노드 | 요청마다 담당 에이전트를 분리하고, interrupt가 있는 에이전트만 서브그래프로 둬 부모 체크포인터로 재개 | D1, D41 |
+| **조건 분기 + LLM 라우팅** | 명령·버튼은 바로 분기, 자유 발화만 Haiku 구조화 출력 → 신뢰도 0.6 미만이면 실행 안 함 | 버튼 지연과 오분류를 없애고, 애매한 지시로 임의 실행하지 않음 | D6, D20 |
+| **Human-in-the-loop interrupt + 체크포인터** | Planner `approve`, Collector `wait_login`. `SqliteSaver`, thread_id를 URL에 보관 | 사람이 반드시 해야 하는 두 지점에서만 멈추고, 새로고침·재시작 뒤에도 같은 지점에서 재개 | D21, D42 |
+| **하이브리드 RAG** | bge-m3 의미 검색 + BM25 키워드 → 가중 RRF, 세부 항목 태그 우선·채움, 중복 제거 | 조건 문구·플래그는 키워드 검색이 강하고, 태그가 틀려도 의미 검색이 안전망 | D3, D17, D36, D46 |
+| **생성 → 검증 → 재생성 (자기 교정)** | Generator: 구조 validator → 베끼기 검사 → 다른 모델(Haiku)의 근거 검증, 실패 이유를 다음 프롬프트에 | 틀린 사실을 외우게 하는 문제를 막음. 생성과 검증 모델을 달리 해 오류 상관을 줄임 | D15, D33, D34 |
+| **구조화 출력** | Pydantic 스키마 9곳. 필드 순서를 생성 순서로 활용(지문 → 조건 문구 → 보기) | 파싱 실패 없이 검증 가능한 형태로 받음. 순서 변경으로 첫 시도 통과율 1/8 → 6/8 | D40 |
+| **ReAct tool 사용** | Coach: `bind_tools` + `ToolNode`, 읽기 전용 tool 2개, 최대 3회, 단계별 대체 경로 | 모델이 근거를 직접 찾아 해설하되, 기록·통계에는 손대지 못하게 | D44 |
+| **결정적 코어** | 통계는 ledger만, 판정 표는 순수 함수, 검증을 통과한 문제만 기록 | 화면에선 티가 안 나고 학습 기록이 조용히 틀어지는 오류를 구조로 차단 | D9, D28 |
+| **생산자-소비자 스트리밍** | 백그라운드 스레드가 문제를 순차 생성, 화면은 준비된 문제부터 풀이 | 첫 문제 대기 시간을 줄이면서 호출 제한을 지킴(동시 1) | D13, D18 |
+| **모델 라우팅과 장애 전환** | `get_llm(role)`: 엔드포인트 5곳 순차 전환, 오류 종류별 재시도·쿨다운, 모델 폴백 | 할당량 초과·호출 제한에도 학습이 멈추지 않음(실제로 오늘 Sonnet 3곳 할당량 초과를 자동 우회) | D26, D27, D29, D32 |
+| **미끼와 자기 판단으로 진단 보정** | 재질문에 맞힌 문제를 섞어 기준선 산출, 정답 공개 후·해설 전에 자기 판단 수집 | '다시 보면 맞힌다' 효과를 따로 보고, 진단이 맞는지 공부하면서 eval 데이터를 쌓음 | D14, D31, D43 |
+| **프롬프트 주입 방어** | 수집 본문·검색 결과·tool 결과를 '참고 자료(data)' 블록으로 감쌈 | 교안 안의 문장이 지시로 실행되지 않게 | §7, 규칙 7 |
+| **샌드박스** | `MISSLENS_SANDBOX=1`: 학습 기록·체크포인트를 `data/sandbox/`로 | 시연·검토가 실제 통계를 오염시키지 않음 | D45 |
 
 ## 설치
 
@@ -150,6 +295,8 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 
 모든 명령은 `python -m misslens.cli <명령>`으로 실행하고, 시험은 `--exam ccar-f`(기본값)로 고릅니다.
+
+**샌드박스:** `MISSLENS_SANDBOX=1`을 붙이면(예: `MISSLENS_SANDBOX=1 streamlit run app/main.py`) 학습 기록과 체크포인트를 `data/sandbox/`에 따로 저장합니다. 시연·검토·리허설이 실제 통계에 섞이지 않고, 색인·수집본은 읽기만 합니다(자료 넣기·수집은 막힘).
 
 ## 데이터와 보안
 

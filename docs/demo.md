@@ -10,8 +10,8 @@
 | 실호출 스모크 | `pytest -m live` | 8개 통과(문제 생성, 라우터, Planner) |
 | 색인 | `python -m misslens.cli search "tool_choice" --task 2.3` | 시험 가이드와 수집한 교안 청크가 나옴 |
 | 그래프 그림 | README의 Mermaid 그림 | Supervisor → 6개 에이전트, interrupt① ② 표시 |
-| 미리 푼 세트 | `python -m misslens.cli plan -n 3` 한 번 | 현황 탭에 숫자가 있고, 진단 일치율이 보임 |
-| 앱 | `streamlit run app/main.py` | 탭 4개가 열림. 처음 열 때 bge-m3 로드로 10초 안팎 걸림 |
+| 미리 푼 세트 | `MISSLENS_SANDBOX=1 python -m misslens.cli plan -n 3` 한 번 | 현황 탭에 숫자가 있고, 진단 일치율이 보임 |
+| 앱 | `MISSLENS_SANDBOX=1 streamlit run app/main.py` | 탭 4개와 '샌드박스 모드' 안내가 열림. 처음 열 때 bge-m3 로드로 10초 안팎 걸림. 시연 중 일부러 틀린 답이 실제 학습 기록에 섞이지 않음 |
 
 문제 하나를 만드는 데 30초~1분이 걸린다(Sonnet 생성 + Haiku 근거 검증, 실패하면 재생성). 그래서 시연 세트는 3문제로 하고, 첫 문제가 준비되면 바로 풀기 시작한다.
 
@@ -19,7 +19,7 @@
 
 ### 1. 구조 소개 (1분) — 멀티 에이전트
 
-- README의 그래프 그림을 띄운다. Supervisor 하나가 Planner·Generator·Grader·Reporter·Collector·Ingest로 요청을 보내고, interrupt는 계획 승인(①)과 로그인 대기(②) 두 곳뿐이다.
+- README의 '한눈에 보는 구조'와 '에이전트별 그래프'를 띄운다. Supervisor 하나가 Planner·Generator·Grader·Coach·Reporter·Collector·Ingest로 요청을 보내고, interrupt는 계획 승인(①)과 로그인 대기(②) 두 곳뿐이다. '적용한 구조와 패턴' 표로 멀티 에이전트·RAG·HITL·ReAct tool 사용이 어디에 있는지 짚는다.
 - 말할 것: "버튼과 명령은 모델 없이 바로 분기하고, 자유 문장만 Haiku가 의도를 분류합니다. 애매하면 실행하지 않습니다."
 
 ### 2. 자연어 지시 (1분) — 멀티 에이전트(Supervisor 라우팅)

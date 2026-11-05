@@ -423,6 +423,12 @@ def clear_plan_button() -> None:
 # --- material tab ------------------------------------------------------------------------------
 
 def tab_material(r: Resources) -> None:
+    from misslens.paths import sandbox
+
+    if sandbox():
+        st.info("샌드박스 모드에서는 자료 넣기와 수집을 할 수 없습니다(색인·수집본은 실제 데이터와 공유).")
+        material_index_stats(r)
+        return
     st.subheader("자료 넣기")
     files = st.file_uploader("PDF / MD / TXT / HTML", accept_multiple_files=True, key="uploads",
                              type=["pdf", "md", "markdown", "txt", "html", "htm"])
@@ -470,6 +476,10 @@ def tab_material(r: Resources) -> None:
             else:
                 show_job_result(r, "collect_thread", "수집하는 중... (페이지마다 2초 이상 간격)")
 
+    material_index_stats(r)
+
+
+def material_index_stats(r: Resources) -> None:
     st.subheader("색인 현황")
     counts = r.index_stats()
     if counts:
@@ -581,8 +591,12 @@ def main() -> None:
     st.set_page_config(page_title="MissLens", page_icon="🔎", layout="wide")
     r = resources()
     st.session_state["_poll"] = False
+    from misslens.paths import sandbox
+
     st.title("MissLens")
     st.caption(f"{r.pack.name} · 개념 실수와 해석 실수를 나눠 보는 학습 코치")
+    if sandbox():
+        st.warning("샌드박스 모드: 학습 기록·체크포인트는 data/sandbox/에 따로 저장되고, 자료 넣기·수집은 꺼져 있습니다.")
     sidebar_request(r)
     t_study, t_material, t_status, t_plan = st.tabs(["학습", "자료", "현황", "계획"])
     with t_plan:

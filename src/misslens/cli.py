@@ -469,9 +469,19 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
 
+    from misslens.paths import SandboxRefused, ledger_path, refuse_in_sandbox, sandbox
+
     pack = load_exam_pack(args.exam)
+    if args.cmd in ("ingest", "collect") or (args.cmd == "practice"):
+        try:
+            refuse_in_sandbox({"ingest": "자료 색인", "collect": "교안 수집", "practice": "연습 문제 은행 갱신"}[args.cmd])
+        except SandboxRefused as exc:
+            Console().print(f"[red]{exc}[/]")
+            return 2
     ledger = Ledger()
     cli = CLI(pack, ledger)
+    if sandbox():
+        cli.console.print(f"[magenta]샌드박스 모드[/]: 학습 기록·체크포인트는 {ledger_path().parent}에 따로 저장됩니다.")
     try:
         if args.cmd == "status":
             cli.status()

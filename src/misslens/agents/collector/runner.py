@@ -23,8 +23,12 @@ CHECKPOINTS_PATH = PROJECT_ROOT / "data" / "checkpoints.sqlite"
 OnLogin = Callable[[dict], str]  # interrupt payload -> "done" | "abort"
 
 
-def sqlite_checkpointer(path: Path = CHECKPOINTS_PATH) -> SqliteSaver:
-    """Checkpoints live apart from ledger.sqlite (§5, §10)."""
+def sqlite_checkpointer(path: Path | None = None) -> SqliteSaver:
+    """Checkpoints live apart from ledger.sqlite (§5, §10); data/sandbox/ in sandbox mode (D45)."""
+    if path is None:
+        from misslens.paths import checkpoints_path
+
+        path = checkpoints_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     return SqliteSaver(sqlite3.connect(str(path), check_same_thread=False))
 

@@ -19,7 +19,7 @@ from typing import Any
 from misslens.bedrock import PROJECT_ROOT
 from misslens.ledger.judge import judge, missed_phrase
 
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "ledger.sqlite"
+DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "ledger.sqlite"   # real record; misslens.paths.ledger_path() honours the sandbox
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS quiz_sets (
@@ -121,7 +121,11 @@ def _now() -> str:
 
 
 class Ledger:
-    def __init__(self, path: Path | str = DEFAULT_DB_PATH):
+    def __init__(self, path: Path | str | None = None):
+        if path is None:
+            from misslens.paths import ledger_path
+
+            path = ledger_path()
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)

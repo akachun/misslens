@@ -66,7 +66,8 @@ def highlight(stem: str, phrase: str | None, start: str = "[bold yellow]", end: 
     """Mark the missed phrase inside the stem (case-insensitive, whitespace-tolerant)."""
     if not phrase:
         return stem
-    pattern = r"\s+".join(re.escape(w) for w in phrase.split())
+    # Backticks around words may differ between the stem and the stored phrase (see generator schema _norm).
+    pattern = r"\s+".join(r"`?" + re.escape(w.strip("`")) + r"`?" for w in phrase.split())
     return re.sub(pattern, lambda m: f"{start}{m.group(0)}{end}", stem, count=1, flags=re.IGNORECASE)
 
 

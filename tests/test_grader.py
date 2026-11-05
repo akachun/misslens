@@ -119,3 +119,10 @@ def test_explain_miss_uses_llm_and_falls_back(ledger):
     assert "Korean" in system
     broken = FakeRoleLLM([RuntimeError("bedrock down")])
     assert explain_miss(broken, PACK, row) == row.question["explanation_native"]
+
+
+def test_highlight_tolerates_backticks():
+    from misslens.agents.grader import highlight
+
+    out = highlight("Loop while `stop_reason` is tool_use.", "stop_reason is tool_use", "<b>", "</b>")
+    assert out == "Loop while <b>`stop_reason` is tool_use</b>."

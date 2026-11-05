@@ -268,3 +268,14 @@ def test_key_constraints_are_generated_before_options():
     fields = list(QuestionDraft.model_fields)
     assert fields.index("key_constraints") == fields.index("stem_en") + 1
     assert fields.index("key_constraints") < fields.index("options")
+
+
+def test_backticks_and_curly_quotes_do_not_fail_verbatim_check():
+    """Seen live: stem `stop_reason` is "tool_use", key_constraint stop_reason is “tool_use”."""
+    d = draft(0)
+    d["stem_en"] = d["stem_en"].replace("must not store passwords", "must not store `passwords` when \"tool_use\"")
+    d["key_constraints"] = ["must not store passwords when “tool_use”", "within 12 hours"]
+    for o in d["options"]:
+        if o["violates"] == "must not store passwords":
+            o["violates"] = "must not store passwords when “tool_use”"
+    assert validation_errors(QuestionDraft.model_validate(d)) == []

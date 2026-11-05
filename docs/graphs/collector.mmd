@@ -1,0 +1,19 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	fetch(fetch)
+	wait_login(wait_login ⏸ interrupt②)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> fetch;
+	fetch -.-> __end__;
+	fetch -.-> wait_login;
+	wait_login -.-> __end__;
+	wait_login -.-> fetch;
+	fetch -.-> fetch;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

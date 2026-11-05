@@ -67,8 +67,13 @@ class QuestionInvalid(ValueError):
     pass
 
 
+# Curly quotes become straight and code backticks disappear before comparing: the model often writes
+# `stop_reason` is "tool_use" in the stem and stop_reason is "tool_use" in key_constraints (seen live, 2026-11-05).
+_QUOTES = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "`": None})
+
+
 def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().lower()
+    return re.sub(r"\s+", " ", text.translate(_QUOTES)).strip().lower()
 
 
 def validation_errors(d: QuestionDraft) -> list[str]:

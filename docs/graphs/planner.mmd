@@ -1,0 +1,17 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	draft(draft)
+	approve(approve ⏸ interrupt①)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> draft;
+	approve -.-> __end__;
+	draft --> approve;
+	approve -.-> approve;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

@@ -259,8 +259,8 @@ def test_cli_plan_flow_approve_edit_solve_and_review(ledger):
     assert "제출 완료" in text
 
 
-def test_committed_graph_diagram_matches_compiled_graph():
-    """docs/graph.mmd and the README diagram are generated from the graph; regenerate with scripts/draw_graph.py."""
+def test_committed_graph_diagrams_match_compiled_graphs():
+    """docs/graphs/*.mmd and the README copies come from the compiled graphs; regenerate with scripts/draw_graph.py."""
     import importlib.util
     from pathlib import Path
 
@@ -268,7 +268,11 @@ def test_committed_graph_diagram_matches_compiled_graph():
     spec = importlib.util.spec_from_file_location("draw_graph", root / "scripts" / "draw_graph.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    fresh = mod.mermaid().strip()
-    assert (root / "docs" / "graph.mmd").read_text(encoding="utf-8").strip() == fresh
-    assert fresh in (root / "README.md").read_text(encoding="utf-8")
-    assert "interrupt①" in fresh and "interrupt②" in fresh
+    fresh = mod.diagrams()
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert set(fresh) == {"supervisor", "planner", "collector", "coach"}
+    for name, text in fresh.items():
+        assert (root / "docs" / "graphs" / f"{name}.mmd").read_text(encoding="utf-8").strip() == text, name
+        assert text in readme, f"README diagram for {name} is stale"
+    assert "interrupt①" in fresh["planner"] and "interrupt②" in fresh["collector"]
+    assert "search_material, learner_history" in fresh["coach"]

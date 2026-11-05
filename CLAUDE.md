@@ -53,7 +53,8 @@ uv pip install -e ".[dev]"         # 설치(.venv에 설치됨)
 source .venv/bin/activate          # 아래 명령은 활성화된 상태 기준
 crawl4ai-setup                     # 브라우저 설치(설치 버전 문서로 확인)
 python scripts/probe_models.py     # 엔드포인트 × 모델 사용 가능 여부 확인
-python scripts/draw_graph.py > docs/graph.mmd   # Supervisor 그래프 그림 다시 만들기(README에 반영)
+python scripts/draw_graph.py       # 그래프 그림 → docs/graphs/*.mmd (README의 그림도 같이 고친다)
+MISSLENS_SANDBOX=1 streamlit run app/main.py   # 샌드박스: 학습 기록을 data/sandbox/에 따로(검토·시연용)
 pytest -m "not live"               # 기본 테스트(LLM 가짜 모델)
 pytest -m live                     # Bedrock 실호출 스모크
 streamlit run app/main.py          # UI

@@ -150,3 +150,15 @@ def test_retrieval_context_falls_back_without_material(tmp_path):
 def test_reference_block_escapes_source_attribute():
     block = reference_block([Chunk("body", 'a"b<c')])
     assert 'source="a&quot;b&lt;c"' in block
+
+
+def test_near_duplicate_chunks_from_other_courses_are_skipped(index):
+    """D46: the same lesson paragraph copied in three courses fills one slot, not three."""
+    base = "Use tool_choice any to force the model to call one of the provided tools in this request."
+    index.add([chunk(base, h="api", source="api/lesson"),
+               chunk(base + " See the Bedrock console.", h="bedrock", source="bedrock/lesson"),
+               chunk(base.replace("this request", "this request today"), h="vertex", source="vertex/lesson")])
+    hits = index.search("tool_choice any force tool", k=3)
+    sources = [h.source for h in hits]
+    assert sum(s.endswith("/lesson") for s in sources) == 1
+    assert len(hits) == 3                                   # the other slots go to different material

@@ -93,6 +93,13 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
                 return {"intent": "end", "message": msg, "args": args}
         if intent not in INTENTS:
             return {"intent": "end", "message": f"알 수 없는 요청입니다: {intent}"}
+        if intent in ("collect", "ingest"):
+            from misslens.paths import SandboxRefused, refuse_in_sandbox
+
+            try:
+                refuse_in_sandbox("교안 수집" if intent == "collect" else "자료 색인")
+            except SandboxRefused as exc:
+                return {"intent": "end", "message": str(exc)}
         update: SupervisorState = {"intent": intent, "args": args}
         if intent == "plan_quiz":
             update["total"] = int(args.get("count") or DEFAULT_COUNT)
