@@ -6,6 +6,7 @@
                     +-> collect_prepare -> collect_<site> (subgraph, interrupt②) -> ingest_collected -> END
                     +-> ingest ------------------------------------> END     files (Ingest)
                     +-> submit ------------------------------------> END     answers (Grader)
+                    +-> resume ------------------------------------> END     continue a stopped set (D52)
                     +-> END                                                   unclear free text: guide message
 
 Interrupts exist only inside the planner (plan approval) and collector (login wait) subgraphs (CLAUDE.md rule 4).
@@ -23,6 +24,7 @@ from dataclasses import dataclass, field
 from dataclasses import replace as dc_replace
 from typing import Any, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from misslens.agents.collector.graph import build_collector_graph, initial_state
@@ -105,7 +107,7 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
             update["total"] = int(args.get("count") or DEFAULT_COUNT)
         return update
 
-    def generate(state: SupervisorState) -> SupervisorState:
+    def generate(state: SupervisorState, config: RunnableConfig) -> SupervisorState:
         args = state.get("args") or {}
         if state.get("intent") == "plan_quiz":
             if state.get("plan_status") != "approved":
@@ -117,9 +119,27 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
             plan = None
         n = sum(plan.values()) if plan else int(args.get("count") or DEFAULT_COUNT)
         set_id = ledger.create_set(pack.exam_id, n)
+        approved = state.get("plan") if state.get("intent") == "plan_quiz" else None
+        ledger.record_plan(pack.exam_id, set_id=set_id, kind="plan" if approved else "quick", total=n, counts=plan,
+                           rationale=(approved or {}).get("rationale", ""), source=(approved or {}).get("source", ""),
+                           thread_id=(config.get("configurable") or {}).get("thread_id"))
         stream = QuestionStream(svc.make_generator(), set_id, n, plan=plan).start()
         svc.streams[set_id] = stream
         return {"set_id": set_id, "message": f"{n}문제 세트 #{set_id}를 만드는 중입니다."}
+
+    def resume(state: SupervisorState) -> SupervisorState:
+        """Continue a set whose generation stopped (e.g. server restart): only the missing questions (D52)."""
+        set_id = int((state.get("args") or {})["set_id"])
+        prog = ledger.set_progress(set_id)
+        if prog["status"] not in ("generating", "in_progress"):
+            return {"set_id": set_id, "message": f"세트 #{set_id}는 이미 제출됐습니다."}
+        live = svc.streams.get(set_id)
+        if (live is not None and live.running) or prog["ready"] >= prog["size"]:
+            return {"set_id": set_id, "message": f"세트 #{set_id}를 이어서 풉니다."}
+        plan = (ledger.plan_for_set(set_id) or {}).get("counts")
+        svc.streams[set_id] = QuestionStream(svc.make_generator(), set_id, prog["size"], plan=plan).start()
+        return {"set_id": set_id,
+                "message": f"세트 #{set_id}의 남은 {prog['size'] - prog['ready']}문제를 다시 만드는 중입니다."}
 
     def report(state: SupervisorState) -> SupervisorState:
         return {"report": build_report(pack, ledger).as_dict()}
@@ -177,6 +197,7 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
     g.add_node("route", route)
     g.add_node("planner", build_planner_graph(pack, ledger, svc.planner_llm))
     g.add_node("generate", generate)
+    g.add_node("resume", resume)
     g.add_node("report", report)
     g.add_node("submit", submit)
     g.add_node("ingest", ingest)
@@ -193,12 +214,12 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
     g.add_edge(START, "route")
     g.add_conditional_edges("route", lambda s: {
         "plan_quiz": "planner", "quiz": "generate", "status": "report", "collect": "collect_prepare",
-        "ingest": "ingest", "submit": "submit"}.get(s.get("intent"), END),
-        ["planner", "generate", "report", "collect_prepare", "ingest", "submit", END])
+        "ingest": "ingest", "submit": "submit", "resume": "resume"}.get(s.get("intent"), END),
+        ["planner", "generate", "report", "collect_prepare", "ingest", "submit", "resume", END])
     g.add_edge("planner", "generate")
     g.add_conditional_edges("collect_prepare",
                             lambda s: f"collect_{s['site']}" if s.get("queue") else END, collect_nodes + [END])
-    for n in ("generate", "report", "submit", "ingest", "ingest_collected"):
+    for n in ("generate", "resume", "report", "submit", "ingest", "ingest_collected"):
         g.add_edge(n, END)
     return g.compile(checkpointer=checkpointer)
 

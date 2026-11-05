@@ -141,9 +141,15 @@ def wait_rerun() -> None:
 
 # --- quiz session ------------------------------------------------------------------------------
 
-def start_quiz(set_id: int, n: int) -> None:
-    st.session_state.quiz = {"set_id": set_id, "n": n, "idx": 0, "answers": {}, "shown": {}, "phase": "solving",
-                             "notes": [], "items": None}
+def start_quiz(r: Resources, set_id: int) -> None:
+    """Open a set where it stands: answers saved as drafts come back, submitted sets go to review/diagnosis (D52)."""
+    s = r.ledger.get_set(set_id)
+    drafts = r.ledger.draft_answers(set_id)
+    st.session_state.quiz = {
+        "set_id": set_id, "n": s["size"], "shown": {}, "notes": [], "items": None,
+        "answers": {qid: {"question_id": qid, "chosen_index": d["chosen_index"], "elapsed_ms": d["elapsed_ms"]}
+                    for qid, d in drafts.items()},
+        "phase": {"submitted": "review", "reviewed": "diagnosis"}.get(s["status"], "solving")}
     st.query_params["set"] = str(set_id)
 
 
@@ -155,9 +161,7 @@ def adopt_result(values: dict, thread_id: str) -> None:
     done.add(thread_id)
     sid = values.get("set_id")
     if sid is not None and values.get("score") is None:
-        plan = values.get("plan") if values.get("plan_status") == "approved" else None
-        n = sum(plan["counts"].values()) if plan else int((values.get("args") or {}).get("count") or 10)
-        start_quiz(int(sid), n)
+        start_quiz(resources(), int(sid))
 
 
 def ready_questions(r: Resources, set_id: int) -> list[dict]:
@@ -167,11 +171,8 @@ def ready_questions(r: Resources, set_id: int) -> list[dict]:
 def tab_study(r: Resources) -> None:
     quiz = st.session_state.get("quiz")
     if quiz is None and st.query_params.get("set"):
-        sid = int(st.query_params["set"])
-        status = r.ledger.get_set(sid)["status"]
-        start_quiz(sid, len(ready_questions(r, sid)) or 1)
+        start_quiz(r, int(st.query_params["set"]))
         quiz = st.session_state.quiz
-        quiz["phase"] = {"submitted": "review", "reviewed": "diagnosis"}.get(status, "solving")
     if quiz is None:
         study_start(r)
         return
@@ -179,7 +180,35 @@ def tab_study(r: Resources) -> None:
      "diagnosis": study_diagnosis}[quiz["phase"]](r, quiz)
 
 
+def request_resume(r: Resources, set_id: int) -> None:
+    """Restart generation for a set whose stream is gone (server restart) and open it."""
+    prog = r.ledger.set_progress(set_id)
+    live = r.svc.streams.get(set_id)
+    if (prog["status"] in ("generating", "in_progress") and prog["ready"] < prog["size"]
+            and (live is None or not live.running)):
+        start_job(r, new_thread("resume"), {"intent": "resume", "args": {"set_id": set_id}})
+    start_quiz(r, set_id)
+
+
+def open_sets_panel(r: Resources) -> None:
+    sets = r.ledger.open_sets(r.pack.exam_id)
+    if not sets:
+        return
+    st.subheader("이어 풀기")
+    for p in sets:
+        live = r.svc.streams.get(p["id"])
+        gen = "생성 중" if live is not None and live.running else (
+            "생성 멈춤" if p["ready"] < p["size"] else "생성 완료")
+        c1, c2 = st.columns([4, 1])
+        c1.markdown(f"**세트 #{p['id']}** · 준비 {p['ready']}/{p['size']} ({gen}) · 푼 문제 {p['drafts']} · "
+                    f"{p['created_at'][:16].replace('T', ' ')} UTC")
+        if c2.button("이어 풀기", key=f"resume_{p['id']}"):
+            request_resume(r, p["id"])
+            st.rerun()
+
+
 def study_start(r: Resources) -> None:
+    open_sets_panel(r)
     st.subheader("바로 풀기")
     c1, c2 = st.columns(2)
     n = c1.number_input("문제 수", 1, 30, 5, key="quick_n")
@@ -217,9 +246,11 @@ def study_solve(r: Resources, quiz: dict) -> None:
                 quiz["notes"].append(ev.message)
     generating = stream is not None and stream.running
     ready = ready_questions(r, sid)
-    st.subheader(f"세트 #{sid} · {len(ready)}/{quiz['n']}문제 준비")
+    st.subheader(f"세트 #{sid} · {len(ready)}/{quiz['n']}문제 준비 · 푼 문제 {len(quiz['answers'])}")
     for note in quiz["notes"]:
         st.caption(note)
+    # The next question is the first one without an answer, so a resumed set continues where it stopped.
+    quiz["idx"] = next((i for i, q in enumerate(ready) if q["id"] not in quiz["answers"]), len(ready))
     if quiz["idx"] < len(ready):
         if not quiz.get("started"):
             # First question on screen: generating -> in_progress, as the CLI does (§4.1).
@@ -234,15 +265,23 @@ def study_solve(r: Resources, quiz: dict) -> None:
         choice = st.radio("답", list(range(4)), index=None, key=f"ans_{q['id']}",
                           format_func=lambda i, o=p["options"]: f"{LETTERS[i]}. {o[i]['text_en']}")
         if st.button("다음", key=f"next_{q['id']}", type="primary"):
-            quiz["answers"][q["id"]] = {"question_id": q["id"], "chosen_index": choice,
-                                        "elapsed_ms": int((time.monotonic() - quiz["shown"][q["id"]]) * 1000)}
-            quiz["idx"] += 1
+            ans = {"question_id": q["id"], "chosen_index": choice,
+                   "elapsed_ms": int((time.monotonic() - quiz["shown"][q["id"]]) * 1000)}
+            r.ledger.save_draft_answer(sid, q["id"], choice, ans["elapsed_ms"])   # survives a closed tab or restart
+            quiz["answers"][q["id"]] = ans
             st.rerun()
         return
     if generating:
         st.info("다음 문제를 생성하는 중...")
         wait_rerun()
         return
+    if len(ready) < quiz["n"]:
+        st.warning(f"문제 생성이 멈췄습니다({len(ready)}/{quiz['n']}). 서버가 다시 시작됐거나 생성이 연속 실패했을 수 "
+                   "있습니다. 남은 문제를 다시 만들거나, 지금까지 준비된 문제로 제출할 수 있습니다.")
+        if st.button("남은 문제 생성", key=f"regen_{sid}"):
+            start_job(r, new_thread("resume"), {"intent": "resume", "args": {"set_id": sid}})
+            wait_rerun()
+            return
     if not ready:
         st.warning("풀 문제가 없습니다. 현황 탭에서 생성 실패 항목을 확인하세요.")
         if st.button("처음으로", key="reset_empty"):
@@ -440,6 +479,7 @@ def tab_plan(r: Resources) -> None:
             st.query_params["plan"] = tid
             start_job(r, tid, {"intent": "plan_quiz", "args": {"count": int(n)}})
             st.rerun()
+        plan_history(r)
         return
     state, val = job_state(r, tid)
     if state == "running":
@@ -459,6 +499,33 @@ def tab_plan(r: Resources) -> None:
         clear_plan_button()
     else:
         clear_plan_button()
+
+
+STATUS_KO = {"generating": "생성 중", "in_progress": "푸는 중", "submitted": "리뷰 전", "reviewed": "진단 완료"}
+
+
+def plan_history(r: Resources) -> None:
+    """Approved plans, newest first, with the set each one produced (D52)."""
+    plans = r.ledger.list_plans(r.pack.exam_id)
+    if not plans:
+        return
+    st.subheader("최근 계획")
+    names = {d.id: d.name_native or d.name for d in r.pack.domains}
+    for p in plans:
+        s = p["set"] or {}
+        state = STATUS_KO.get(s.get("status"), "-")
+        title = (f"{p['created_at'][:16].replace('T', ' ')} UTC · {p['total']}문제 · 세트 #{p['set_id']} {state}"
+                 + (f" (준비 {s['ready']}/{s['size']}, 푼 문제 {s['drafts']})" if s.get("status") in
+                    ("generating", "in_progress") else ""))
+        with st.expander(title):
+            st.dataframe([{"영역": f"{d} {names.get(d, '')}", "문제 수": n}
+                          for d, n in (p["counts"] or {}).items() if n], hide_index=True)
+            if p["rationale"]:
+                st.write(p["rationale"])
+            label = "이어 풀기" if s.get("status") in ("generating", "in_progress") else "결과 보기"
+            if p["set_id"] and st.button(label, key=f"plan_go_{p['id']}"):
+                request_resume(r, p["set_id"])
+                st.success(f"'학습' 탭에서 세트 #{p['set_id']}를 이어서 보세요.")
 
 
 def plan_approval(r: Resources, tid: str, payload: dict) -> None:

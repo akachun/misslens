@@ -90,6 +90,7 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 - `elapsed_ms`는 문제가 화면에 표시된 시점부터 잰다. 생성을 기다린 시간은 넣지 않는다.
 - 백그라운드 스레드에서 예외가 나면 해당 문제를 `failed` 상태로 기록하고 화면에 표시한다. 다음 문제가 영원히 "생성 중"으로 남는 일을 막기 위해서다. `failed` 칸은 세트 크기 N에 세지 않고(준비된 문제가 N개가 될 때까지 다음 항목으로 진행), 연속 실패에는 센다. 문제 번호는 `seq`(실패 칸 포함)를 그대로 쓴다.
 - 모델이 구조화 출력 없이 답하면(tool calling에서 도구를 부르지 않음) 생성 실패 1회로 세고 다시 생성한다.
+- 생성 재개(D52): `run_set`은 세트에 이미 있는 문제를 확인해 seq를 이어 가고, 준비된 문제를 문제 수와 영역별 할당량에 넣어 세며, 이미 쓴 세부 항목은 다시 내지 않는다. 그래서 서버 재시작 등으로 생성이 멈춘 세트는 Supervisor `resume`(계획의 할당량 사용)으로 남은 문제만 만든다.
 - CLI에서 Ctrl-C를 누르면 생성을 취소하고 백그라운드 스레드가 멈춘 뒤에 ledger를 닫는다. 제출하지 않은 세트는 `generating`/`in_progress` 상태로 남고 통계에는 들어가지 않는다.
 
 ### 4.2 리뷰와 진단 (D8, D14, D20)
@@ -160,6 +161,8 @@ Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
 | `missed_phrases` | attempt_id(FK), phrase, user_corrected | 순위를 낼 때 invalid인 attempt는 조인에서 뺀다 |
 | `materials` | id, exam_id, source_type(`upload`/`paste`/`collect`), source_uri, content_hash, task_id(NULL 허용), collected_at | |
 | `generation_failures` | id, exam_id, task_id, tries, reason, created_at | 근거 검증에서 실패한 이유를 기록한다. 현황 탭에 표시 |
+| `plans` | id, exam_id, set_id, kind(`plan`/`quick`), total, counts_json, rationale, source, thread_id, created_at | 승인한 계획과 바로 풀기 세트의 영역별 문제 수(D52). 계획 탭 '최근 계획', 생성 재개 때 할당량으로 사용. 통계 아님 |
+| `draft_answers` | question_id(PK, FK), set_id, chosen_index, elapsed_ms, updated_at | 제출 전 답안(D52). 문제를 넘길 때마다 저장해 창을 닫거나 서버가 재시작돼도 이어 푼다. `submit_set`이 attempts로 옮긴 뒤 지운다. 통계 아님(규칙 1) |
 | `miss_feedback` | attempt_id(PK, FK), learner_label(`concept`/`reading`/`unsure`), stage, created_at | 리뷰 중 학습자가 남긴 자기 판단(D43). 판정(`miss_type`)은 바꾸지 않고 진단 일치율 eval에만 쓴다. 2026-11-05 추가 |
 
 - 인덱스: `attempts(question_id)`, `attempts(set_id)`, `questions(exam_id, task_id)`
@@ -394,6 +397,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 | 요청 처리 | 모든 에이전트 요청은 Supervisor 그래프로 보내고, thread_id별 **백그라운드 작업**으로 실행한다. 화면은 작업 상태를 확인해 진행 중이면 1.5초 뒤 다시 그리고, interrupt가 있으면 체크포인터에서 읽어 승인·로그인 화면을 보여 준다. 다시 그리기는 모든 탭을 그린 뒤 한 번만 한다(오래 걸리는 수집이 다른 탭을 가리지 않게) |
 | interrupt 재개 | 계획 thread_id와 진행 중인 세트 id를 `st.query_params`(`?plan=…&set=…`)에 둔다. 새로고침하면 체크포인터에서 같은 interrupt를 다시 읽고, 세트는 ledger의 `ready` 문제로 다시 구성한다 |
 | DB 연결 | `st.cache_resource`로 Ledger·Services·그래프·bge-m3를 프로세스당 하나만 만든다. Ledger는 연결 1개 + Lock, 체크포인트는 `checkpoints.sqlite`(SqliteSaver)로 학습 기록 DB와 분리 |
+| 이어 풀기(D52) | 학습 탭 첫 화면에 제출 전 세트 목록(준비 수·생성 상태·푼 문제 수)과 '이어 풀기'. 답은 문제를 넘길 때마다 `draft_answers`에 저장되고, 다음 문제는 '답이 없는 첫 문제'로 정한다. 생성이 멈췄으면 '남은 문제 생성'(Supervisor `resume`) 또는 준비된 문제로 제출. 계획 탭에는 '최근 계획'(영역별 문제 수·근거·연결된 세트 상태) |
 | 세트 스트리밍 | 백그라운드 스레드가 `questions`에 순서대로 기록하고, 화면은 ledger의 `ready` 문제와 `QuestionStream.poll()`(막히지 않는 이벤트 확인)로 다음 문제를 보여 준다. 풀이·리뷰는 일반 위젯이며 interrupt가 없다(규칙 4). 제출은 Supervisor `submit` 경로 |
 | 로그인 | 화면에서 브라우저를 띄우지 않는다. 앱이 도는 컴퓨터에서 `collect login <site>`로 로그인한 뒤 '완료'를 누르면 같은 페이지부터 이어서 수집 |
 | 구현 | `src/misslens/ui/app.py`, 진입점 `app/main.py`(`streamlit run app/main.py`). 테스트는 Streamlit AppTest + 메모리 DB·가짜 LLM(`tests/test_ui.py`) |
@@ -460,6 +464,7 @@ misslens/
 | D49 | 코치 검색 tool에 `source` 필터와 색인 구성 설명, 태그 일치 청크 상한 2개 | 프롬프트만 수정, 태그 우선 그대로 | 리허설에서 코치가 'Skilljar 자료는 색인에 없다'고 잘못 답함: tool 설명에 수집 레슨이 없다는 정보가 없었고, 태그된 가이드 청크가 검색 결과를 모두 차지함 |
 | D50 | 실제 색인을 점수로 보는 검색 평가(정답 질의 30개·세 모드·출제 근거 품질·색인 건강)와 기준선 회귀 검사 | 가짜 임베더 단위 테스트만, 눈으로 검색 확인 | 오늘 잡음 29%·코치의 'Skilljar 없음' 오답이 단위 테스트를 모두 통과한 채로 나옴. 청킹·정리·랭킹을 바꿀 때 숫자로 비교해야 함. 내용 기준 판정이라 다시 청킹해도 정답 세트가 유지됨 |
 | D51 | RRF에서 BM25 가중치를 질의 커버리지(idf 기준)에 비례하게 | 질의 번역(Haiku), 한영 용어집, 단어 개수 비율 | 한국어 질의 'Claude Code 권한 모드…'에서 BM25가 흔한 단어 claude·code만 보고 정답을 41위로 밀어냄(의미 검색은 2위). 번역은 검색마다 모델 호출, 용어집은 관리 부담. 단어 개수 비율(0.2)로는 부족해 idf로(0.04). 결과: hit@5 일반·코치 0.97→1.00, 출제 0.93→0.97, 회귀 없음 |
+| D52 | 계획을 `plans`에, 제출 전 답을 `draft_answers`에 저장하고, 생성이 멈춘 세트를 이어 만들기(`resume`) | 세션에만 보관(기존), 체크포인터에서 계획 읽기 | 리허설 중 서버 재시작으로 세트가 6/10에서 멈추고 풀던 답이 사라졌으며, 승인한 계획을 다시 볼 방법이 없었음. 계획·답안은 통계가 아니므로 규칙 1과 무관하고, 제출 트랜잭션은 그대로 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |

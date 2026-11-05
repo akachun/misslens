@@ -256,3 +256,43 @@ def test_sidebar_width_applies_only_while_expanded():
     Layout itself was checked in a browser: collapsed -> main area starts at 0 and spans the window."""
     assert "[data-collapsed='false']" in ui.SIDEBAR_CSS
     assert "width:380px" not in ui.SIDEBAR_CSS.replace("min-width:380px", "")
+
+
+def test_draft_answers_survive_a_new_session_and_open_sets_offer_resume(res):
+    """D52: answer one question, 'restart' (a new AppTest session), the set is offered and continues at question 2."""
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    at.number_input(key="quick_n").set_value(2)
+    run(at.button(key="quick_start").click())
+    for _ in range(20):
+        radios = [w for w in at.radio if w.key and w.key.startswith("ans_")]
+        if radios:
+            break
+        run(at)
+    first_qid = int(radios[0].key[4:])
+    radios[0].set_value(1)
+    run(at.button(key=f"next_{first_qid}").click())
+    sid = at.session_state["quiz"]["set_id"]
+    assert res.ledger.draft_answers(sid)[first_qid]["chosen_index"] == 1
+    res.svc.streams[sid].join(timeout=10)
+
+    at2 = run(AppTest.from_file(APP, default_timeout=30))            # no URL: the study tab lists open sets
+    assert at2.button(key=f"resume_{sid}")
+    run(at2.button(key=f"resume_{sid}").click())
+    radios = [w for w in at2.radio if w.key and w.key.startswith("ans_")]
+    assert radios and int(radios[0].key[4:]) != first_qid          # continues at the unanswered question
+    assert at2.session_state["quiz"]["answers"][first_qid]["chosen_index"] == 1
+
+
+def test_plan_history_lists_approved_plan_with_its_set(res):
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    at.number_input(key="plan_n").set_value(2)
+    run(at.button(key="plan_make").click())
+    tid = at.session_state["plan_thread"]
+    run(at.button(key=f"approve_{tid}").click())
+    sid = at.session_state["quiz"]["set_id"]
+    res.svc.streams[sid].join(timeout=10)
+    run(at.button(key="plan_reset").click())
+    (p,) = res.ledger.list_plans(PACK.exam_id)
+    assert p["set_id"] == sid and p["thread_id"] == tid
+    assert any(f"세트 #{sid}" in e.label for e in at.expander)
+    assert at.button(key=f"plan_go_{p['id']}")

@@ -7,6 +7,7 @@ graph TD;
 	__start__([<p>__start__</p>]):::first
 	route(route)
 	generate(generate)
+	resume(resume)
 	report(report)
 	submit(submit)
 	ingest(ingest)
@@ -24,11 +25,13 @@ graph TD;
 	route -.-> ingest;
 	route -.-> planner__draft;
 	route -.-> report;
+	route -.-> resume;
 	route -.-> submit;
 	generate --> __end__;
 	ingest --> __end__;
 	ingest_collected --> __end__;
 	report --> __end__;
+	resume --> __end__;
 	submit --> __end__;
 	subgraph planner
 	planner__draft(draft)

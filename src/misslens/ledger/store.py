@@ -86,6 +86,25 @@ CREATE TABLE IF NOT EXISTS miss_feedback (
     stage          TEXT NOT NULL DEFAULT 'before_explanation',
     created_at     TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS plans (
+    id            INTEGER PRIMARY KEY,
+    exam_id       TEXT NOT NULL,
+    set_id        INTEGER REFERENCES quiz_sets(id),
+    kind          TEXT NOT NULL CHECK (kind IN ('plan','quick')),
+    total         INTEGER NOT NULL,
+    counts_json   TEXT,
+    rationale     TEXT,
+    source        TEXT,
+    thread_id     TEXT,
+    created_at    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS draft_answers (
+    question_id   INTEGER PRIMARY KEY REFERENCES questions(id),
+    set_id        INTEGER NOT NULL REFERENCES quiz_sets(id),
+    chosen_index  INTEGER,
+    elapsed_ms    INTEGER,
+    updated_at    TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ix_attempts_question ON attempts(question_id);
 CREATE INDEX IF NOT EXISTS ix_attempts_set ON attempts(set_id);
 CREATE INDEX IF NOT EXISTS ix_questions_exam_task ON questions(exam_id, task_id);
@@ -230,6 +249,7 @@ class Ledger:
             if unanswered:
                 raise LedgerError(f"set {set_id}: ready questions {unanswered} have no answer "
                                   "(pass chosen_index=None for unanswered)")
+            c.execute("DELETE FROM draft_answers WHERE set_id=?", (set_id,))
             return ids
 
     def record_review(self, set_id: int, reasks: list[ReaskAnswer], *, reask_skipped: bool = False) -> None:
@@ -353,6 +373,66 @@ class Ledger:
             cur = c.execute(f"DELETE FROM materials WHERE exam_id=? AND source_uri IN ({marks})",
                             (exam_id, *source_uris))
             return cur.rowcount
+
+    # --- plans, drafts, open sets (D52) ------------------------------------------------------
+    # Not statistics: a plan is what the learner approved, a draft is an answer not yet submitted. Neither feeds
+    # any number until submit_set turns drafts into attempts (rule 1).
+
+    def record_plan(self, exam_id: str, *, set_id: int | None, kind: str, total: int, counts: dict | None,
+                    rationale: str = "", source: str = "", thread_id: str | None = None) -> int:
+        with self._tx() as c:
+            cur = c.execute("INSERT INTO plans (exam_id, set_id, kind, total, counts_json, rationale, source, thread_id,"
+                            " created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                            (exam_id, set_id, kind, total, json.dumps(counts) if counts else None, rationale, source,
+                             thread_id, _now()))
+            return int(cur.lastrowid)
+
+    def plan_for_set(self, set_id: int) -> dict[str, Any] | None:
+        rows = self._query("SELECT * FROM plans WHERE set_id=? ORDER BY id DESC LIMIT 1", (set_id,))
+        return self._plan_row(rows[0]) if rows else None
+
+    def list_plans(self, exam_id: str, *, kind: str = "plan", limit: int = 20) -> list[dict[str, Any]]:
+        """Newest first, with the linked set's status and progress."""
+        rows = self._query("SELECT * FROM plans WHERE exam_id=? AND kind=? ORDER BY id DESC LIMIT ?",
+                           (exam_id, kind, limit))
+        return [self._plan_row(r) for r in rows]
+
+    def _plan_row(self, r: sqlite3.Row) -> dict[str, Any]:
+        d = dict(r)
+        d["counts"] = json.loads(d.pop("counts_json")) if d["counts_json"] else None
+        d["set"] = self.set_progress(d["set_id"]) if d["set_id"] else None
+        return d
+
+    def set_progress(self, set_id: int) -> dict[str, Any]:
+        s = self.get_set(set_id)
+        n = lambda sql: self._query(sql, (set_id,))[0][0]  # noqa: E731
+        return {"id": set_id, "status": s["status"], "size": s["size"], "created_at": s["created_at"],
+                "ready": n("SELECT count(*) FROM questions WHERE set_id=? AND status='ready'"),
+                "failed": n("SELECT count(*) FROM questions WHERE set_id=? AND status='failed'"),
+                "drafts": n("SELECT count(*) FROM draft_answers WHERE set_id=?")}
+
+    def open_sets(self, exam_id: str) -> list[dict[str, Any]]:
+        """Sets not submitted yet (generating / in_progress), newest first, with progress."""
+        rows = self._query("SELECT id FROM quiz_sets WHERE exam_id=? AND status IN ('generating','in_progress')"
+                           " ORDER BY id DESC", (exam_id,))
+        return [self.set_progress(r["id"]) for r in rows]
+
+    def save_draft_answer(self, set_id: int, question_id: int, chosen_index: int | None,
+                          elapsed_ms: int | None) -> None:
+        with self._tx() as c:
+            if self._set_status(c, set_id) not in ("generating", "in_progress"):
+                raise SetStateError(f"set {set_id} is already submitted")
+            row = c.execute("SELECT set_id FROM questions WHERE id=? AND status='ready'", (question_id,)).fetchone()
+            if row is None or row["set_id"] != set_id:
+                raise LedgerError(f"question {question_id} is not a ready question of set {set_id}")
+            c.execute("INSERT INTO draft_answers (question_id, set_id, chosen_index, elapsed_ms, updated_at)"
+                      " VALUES (?,?,?,?,?) ON CONFLICT(question_id) DO UPDATE SET chosen_index=excluded.chosen_index,"
+                      " elapsed_ms=excluded.elapsed_ms, updated_at=excluded.updated_at",
+                      (question_id, set_id, chosen_index, elapsed_ms, _now()))
+
+    def draft_answers(self, set_id: int) -> dict[int, dict[str, Any]]:
+        return {r["question_id"]: dict(r) for r in self._query(
+            "SELECT question_id, chosen_index, elapsed_ms FROM draft_answers WHERE set_id=?", (set_id,))}
 
     def record_generation_failure(self, exam_id: str, task_id: str, tries: int, reason: str) -> int:
         with self._tx() as c:

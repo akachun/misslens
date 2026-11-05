@@ -18,7 +18,7 @@ from misslens.llm import LLMCallError
 
 logger = logging.getLogger(__name__)
 
-INTENTS = ("plan_quiz", "quiz", "status", "collect", "ingest", "submit")
+INTENTS = ("plan_quiz", "quiz", "status", "collect", "ingest", "submit", "resume")   # resume: buttons only
 MIN_CONFIDENCE = 0.6
 DEFAULT_COUNT = 10
 

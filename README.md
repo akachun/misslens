@@ -41,6 +41,7 @@ graph TD;
 	__start__([<p>__start__</p>]):::first
 	route(route)
 	generate(generate)
+	resume(resume)
 	report(report)
 	submit(submit)
 	ingest(ingest)
@@ -58,11 +59,13 @@ graph TD;
 	route -.-> ingest;
 	route -.-> planner__draft;
 	route -.-> report;
+	route -.-> resume;
 	route -.-> submit;
 	generate --> __end__;
 	ingest --> __end__;
 	ingest_collected --> __end__;
 	report --> __end__;
+	resume --> __end__;
 	submit --> __end__;
 	subgraph planner
 	planner__draft(draft)
@@ -306,7 +309,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 |---|---|---|
 | `exams/<exam_id>/exam.yaml` | 시험 팩(영역·비중·세부 항목·언어·형식, version) | 포함 |
 | `exams/<exam_id>/sources.yaml` | 수집 대상 URL과 사이트 규칙 | 포함 |
-| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패) | 제외 |
+| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패), 계획 기록, 제출 전 답안 | 제외 |
 | `data/checkpoints.sqlite` | LangGraph 체크포인트(interrupt 재개) | 제외 |
 | `data/index/<exam_id>/` | FAISS 색인과 청크 | 제외 |
 | `data/sources/` | 넣은 자료, 수집본, 연습 문제 원본 | 제외 |

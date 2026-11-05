@@ -157,11 +157,19 @@ class Generator:
         `plan` (domain id -> count, from the approved Planner plan, §4.3) caps how many ready questions each
         domain gets; the task order inside a domain still follows select_tasks (coverage first, then weakness).
         """
-        seq = 0
-        ready = 0
+        # Resume-safe (D52): a set that already has questions (generation stopped by a restart) continues after
+        # them: seq goes on, ready ones count toward n and the plan quotas, their tasks are not asked again.
+        existing = self.ledger.set_questions(set_id)
+        seq = max((q["seq"] for q in existing), default=-1) + 1
+        ready = sum(1 for q in existing if q["status"] == "ready")
         consecutive_failures = 0
         per_domain: dict[str, int] = {}
-        candidates = select_tasks(self.pack, self.ledger, exclude=self.failed_tasks, rng=self.rng)
+        for q in existing:
+            if q["status"] == "ready":
+                per_domain[q["domain"]] = per_domain.get(q["domain"], 0) + 1
+        used = {q["task_id"] for q in existing}
+        candidates = [t for t in select_tasks(self.pack, self.ledger, exclude=self.failed_tasks, rng=self.rng)
+                      if t not in used]
         for task_id in candidates:
             if ready >= n:
                 break
