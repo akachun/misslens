@@ -231,5 +231,18 @@ class QuestionStream:
     def next(self, timeout: float | None = None) -> Event:
         return self._q.get(timeout=timeout)
 
+    def poll(self) -> list[Event]:
+        """Events available now, without waiting (UI reruns call this; it never blocks the page)."""
+        out: list[Event] = []
+        while True:
+            try:
+                out.append(self._q.get_nowait())
+            except queue.Empty:
+                return out
+
+    @property
+    def running(self) -> bool:
+        return self._thread.is_alive()
+
     def join(self, timeout: float | None = None) -> None:
         self._thread.join(timeout)

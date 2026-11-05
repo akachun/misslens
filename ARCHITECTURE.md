@@ -370,14 +370,17 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 | 대체 경로 | 추출이 실패하거나 본문이 없는 레슨은 페이지를 PDF/HTML로 저장해 `ingest`로 업로드 |
 | 구현 | `agents/collector/`(`sources.py` 설정 검증, `browser.py` 로그인·수집기, `graph.py` 서브그래프, `runner.py` interrupt 처리·재개). CLI `collect login|run [site] [--thread] [--limit] [--no-ingest]` |
 
-## 10. Streamlit 연동
+## 10. Streamlit 연동 (D42)
 
 | 항목 | 방식 |
 |---|---|
-| 탭 | 학습(세트 풀이·리뷰 폼) / 자료(업로드·붙여넣기·수집·세션 만료 표시) / 현황 / 계획(interrupt① 승인) |
-| interrupt 재개 | 퀴즈 1회 = thread_id 1개. thread_id를 `st.session_state`와 URL(`st.query_params`)에 보관해서, 새로고침해도 URL로 같은 지점에서 이어간다 |
-| DB 연결 | `st.cache_resource`로 연결을 하나만 만들고 `check_same_thread=False`와 `threading.Lock`으로 보호. 학습 기록 DB와 체크포인트 DB는 따로 둔다 |
-| 세트 스트리밍 | 백그라운드 스레드가 `questions`에 순서대로 기록하고, 화면은 `seq`와 `status`를 보고 다음 문제를 보여 준다 |
+| 탭 | 학습(바로 풀기·풀이·리뷰 폼·진단·문제 이상) / 자료(업로드·붙여넣기·수집·로그인 대기·색인 현황) / 현황(Reporter) / 계획(interrupt① 승인) + 사이드바 자연어 요청(F10) |
+| 요청 처리 | 모든 에이전트 요청은 Supervisor 그래프로 보내고, thread_id별 **백그라운드 작업**으로 실행한다. 화면은 작업 상태를 확인해 진행 중이면 1.5초 뒤 다시 그리고, interrupt가 있으면 체크포인터에서 읽어 승인·로그인 화면을 보여 준다. 다시 그리기는 모든 탭을 그린 뒤 한 번만 한다(오래 걸리는 수집이 다른 탭을 가리지 않게) |
+| interrupt 재개 | 계획 thread_id와 진행 중인 세트 id를 `st.query_params`(`?plan=…&set=…`)에 둔다. 새로고침하면 체크포인터에서 같은 interrupt를 다시 읽고, 세트는 ledger의 `ready` 문제로 다시 구성한다 |
+| DB 연결 | `st.cache_resource`로 Ledger·Services·그래프·bge-m3를 프로세스당 하나만 만든다. Ledger는 연결 1개 + Lock, 체크포인트는 `checkpoints.sqlite`(SqliteSaver)로 학습 기록 DB와 분리 |
+| 세트 스트리밍 | 백그라운드 스레드가 `questions`에 순서대로 기록하고, 화면은 ledger의 `ready` 문제와 `QuestionStream.poll()`(막히지 않는 이벤트 확인)로 다음 문제를 보여 준다. 풀이·리뷰는 일반 위젯이며 interrupt가 없다(규칙 4). 제출은 Supervisor `submit` 경로 |
+| 로그인 | 화면에서 브라우저를 띄우지 않는다. 앱이 도는 컴퓨터에서 `collect login <site>`로 로그인한 뒤 '완료'를 누르면 같은 페이지부터 이어서 수집 |
+| 구현 | `src/misslens/ui/app.py`, 진입점 `app/main.py`(`streamlit run app/main.py`). 테스트는 Streamlit AppTest + 메모리 DB·가짜 LLM(`tests/test_ui.py`) |
 
 ## 11. 디렉토리 구조 (예정)
 
@@ -394,7 +397,7 @@ misslens/
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status|ingest|search`)
 │   └── graph.py    # Supervisor 그래프: route → planner/generate/report/collect_<site>/ingest/submit (D41)
-├── app/            # Streamlit
+├── app/            # Streamlit 진입점(main.py) → src/misslens/ui/app.py
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
@@ -425,6 +428,7 @@ misslens/
 | D39 | 학습자가 브라우저에서 직접 저장한 제3자 연습 문제(CertSafari 250문항, 자동 수집 아님: 규칙 7)를 구조화해 문체 예시와 베끼기 검사에만 사용 | 검색 색인에 추가, 변환해 바로 출제, 사용 안 함 | 형식·세부 항목 태그가 정확해 문체 예시로 좋음. 정답이 사이트 것이라 근거로 쓰면 검증이 순환하고, 그대로 출제하면 규칙 2(검증 통과 문제만)를 우회함. 실측에서 예시를 넣어도 validator 통과율은 떨어지지 않음(3/4 대 3/4) |
 | D40 | `QuestionDraft` 필드 순서를 `stem_en → key_constraints → … → options`로 바꿈, 리스트 필드가 JSON 문자열로 오면 풀어서 받음 | 기존 순서(보기 다음에 key_constraints) | 근거 자료를 붙인 뒤 첫 시도 validator 통과율이 1/8로 떨어짐(모델이 가이드 문장을 key_constraints로 씀). 순서를 바꾸자 6/8. tool calling이 리스트를 문자열로 보내 실패하는 경우를 실측으로 확인 |
 | D41 | Supervisor 그래프는 Planner·Collector를 서브그래프 노드로, Generator·Reporter·Ingest·Grader(제출)는 함수 노드로 둔다. 진행 중인 문제 스트림과 수집 브라우저는 상태가 아니라 `Services`에 두고 상태에는 id만 둔다. 영역별 통계는 ledger `domain_summary`로 추가 | 모든 에이전트를 서브그래프로, 스트림을 상태에 저장 | interrupt가 있는 두 에이전트만 서브그래프여야 부모 체크포인터로 재개됨. 스레드·브라우저 객체는 체크포인트에 직렬화할 수 없음. 풀이·리뷰는 interrupt 없이 UI가 진행하고 결과만 `submit`으로 보냄(규칙 4) |
+| D42 | Streamlit은 Supervisor 요청을 thread_id별 백그라운드 작업으로 돌리고 상태를 폴링, 계획 thread_id·세트 id를 URL에 둠, 다시 그리기는 페이지 끝에서 한 번 | 요청을 스크립트 안에서 동기 실행, 탭마다 바로 `st.rerun` | 수집처럼 긴 작업이 페이지를 멈추지 않게 하고, interrupt는 체크포인터에서 읽어 새로고침에도 이어짐(T9 완료 기준). 탭 안에서 바로 다시 그리면 뒤 탭이 그려지지 않음 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |

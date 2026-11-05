@@ -128,7 +128,12 @@ def build_supervisor_graph(svc: Services, *, checkpointer: Any = None):
 
         if svc.make_ingestor is None:
             return {"message": "자료 색인을 쓸 수 없습니다."}
+        from misslens.agents.ingest import from_paste
+
         ing, out = svc.make_ingestor(), []
+        for item in (state.get("args") or {}).get("paste", []):
+            r = ing.ingest(from_paste(item["text"], item.get("label") or "paste"))
+            out.append({"source": r.source, "status": r.status, "chunks": r.chunks})
         for p in (state.get("args") or {}).get("paths", []):
             try:
                 r = ing.ingest(load_file(p))

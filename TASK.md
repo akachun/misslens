@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 5 — T9 Streamlit** (Phase 3·T8 완료, Phase 4는 7개 코스 수집 진행 중. CLI로 계획 승인 → 풀이 → 리뷰 → 현황 전체 루프 동작) |
+| 현재 단계 | **Phase 6 — 마무리** (Phase 3·5 완료, Phase 4는 7개 코스 수집 진행 중. CLI와 Streamlit 모두 계획 승인 → 풀이 → 리뷰 → 현황 전체 루프 동작) |
 | 마지막 갱신 | 2026-11-05 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -21,7 +21,7 @@
 | 2 | 핵심 루프(Generator, Grader & Diagnostician, CLI) | 11/4 저녁 | [x] |
 | 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [x] |
 | 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [~] 구현 완료, 실제 로그인 수집 대기 |
-| 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [~] T8 완료, T9 Streamlit 남음 |
+| 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [x] (실서버 확인만 수집 후) |
 | 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [ ] |
 
 **절대 빼지 않는 것:** 세트 풀이 → 리뷰(미끼 포함 재질문) → 개념/해석 진단 → ledger 기록.
@@ -139,11 +139,13 @@
   - [x] Reporter(`agents/reporter/`): F9 현황을 한 보고서로, CLI `status`와 Supervisor가 같은 렌더러 사용
   - [x] Collector·Ingest·Grader(제출)도 Supervisor에서 라우팅. interrupt②가 부모 그래프로 올라오고 재개됨
   - [x] CLI `plan [-n]`, `ask "<문장>"`. 테스트 `tests/test_supervisor.py` 18개(라우터 분기, 계획 interrupt, 취소, 수집 경유, 제출, CLI 흐름)
-- [ ] **T9** Streamlit(`app/`)
-  - [ ] 탭 4개(학습·자료·현황·계획)
-  - [ ] 학습 탭: 스트리밍 풀이, 타이머, 제출, 리뷰 폼, 결과·해설, '문제 이상'
-  - [ ] interrupt 재개: thread_id를 `session_state`와 URL에 보관, `checkpoints.sqlite`, 연결 1개 + Lock
-  - 완료 기준: 탭에서 세트 풀이 → 리뷰 → 현황이 동작하고, 계획 승인 화면에서 새로고침해도 이어서 진행된다
+- [x] **T9** Streamlit(`app/main.py` → `src/misslens/ui/app.py`) — ARCHITECTURE §10, D42
+  - [x] 탭 4개(학습·자료·현황·계획) + 사이드바 자연어 요청
+  - [x] 학습 탭: 바로 풀기(문제 수·영역), 생성 중 폴링, 문제별 시간, 제출(Supervisor `submit`), 리뷰 폼(재질문·확신), 진단(놓친 문구 강조, 코치 해설 버튼), '문제 이상'
+  - [x] 자료 탭: 업로드·붙여넣기 색인, 수집 시작·로그인 대기(완료/중단)·결과, 색인 현황
+  - [x] interrupt 재개: thread_id를 `session_state`와 URL에 보관, `checkpoints.sqlite`, 연결 1개 + Lock
+  - 완료 기준: 탭에서 세트 풀이 → 리뷰 → 현황이 동작하고, 계획 승인 화면에서 새로고침해도 이어서 진행된다 → **충족**(AppTest `tests/test_ui.py`: 새 세션에 URL의 plan 값만 주고 승인 화면 복원 → 승인 → 풀이 → 제출 → 리뷰 → 진단 → 현황)
+  - [ ] 실제 서버로 띄워 확인(`streamlit run app/main.py`): 수집이 끝난 뒤(같은 DB·색인을 쓰므로)
 
 ## Phase 6 — 마무리와 제출
 
@@ -224,3 +226,4 @@
 | 2026-11-05 | T7 Collector: Skilljar 대비 코스 7개 `sources.yaml`, 로그인 프로필, LangGraph 서브그래프(fetch ⟲, wait_login의 interrupt②, SqliteSaver 재개), 코스→레슨 한 단계 펼치기(D38), CLI `collect login|run`. 실측으로 `networkidle` 대기 → `domcontentloaded`로 변경, 로그아웃 상태 코스 페이지 감지 추가. 테스트 211개 |
 | 2026-11-05 | T6-b 연습 문제 은행: CertSafari 250문항 구조화(예시 사용 207), 세부 항목별 문체 예시 + 베끼기 검사(D39). A/B 실측으로 key_constraints 실패 원인을 찾아 스키마 순서 변경(첫 시도 통과 1/8 → 6/8, D40). 테스트 219개 |
 | 2026-11-05 | T8: Supervisor 그래프(6개 에이전트 라우팅, 자유 발화 라우터), Planner(interrupt①, 규칙 초안 + Haiku 조정), Reporter, ledger `domain_summary`, Generator 영역별 계획 상한, CLI `plan`/`ask`(D41). 수집 진행 중에 코드만 바꾸고 데이터 파일은 건드리지 않음. 테스트 237개 |
+| 2026-11-05 | T9 Streamlit: 탭 4개 + 사이드바 자연어, Supervisor 요청을 백그라운드 작업으로 실행·폴링, URL로 계획 승인·세트 복원(D42), `QuestionStream.poll()`, 붙여넣기 ingest 경로. AppTest로 완료 기준 확인. 테스트 242개 |
