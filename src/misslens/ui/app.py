@@ -12,6 +12,7 @@ ledger (status 'ready' only: they passed the validator and grounding check, rule
 from __future__ import annotations
 
 import html
+import json
 import threading
 import time
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from langgraph.types import Command
 
 from misslens.agents.grader import build_reask_form, diagnosis_rows, highlight, submit_review
 from misslens.agents.grader.coach import coach_ask, coach_explain, coach_history, coach_thread
+from misslens.agents.grader.vocab import KINDS, context_sentence, extract_vocab
 from misslens.bedrock import PROJECT_ROOT
 from misslens.ledger import miss_breakdown, set_score
 
@@ -51,6 +53,7 @@ class Resources:
     upload_dir: Path = UPLOAD_DIR
     jobs: dict = field(default_factory=dict)   # thread_id -> {"thread", "out", "error"}
     coach_checkpointer: Any = None             # keeps each miss's coach conversation (None: in-memory)
+    vocab_llm: Any = None                      # vocab role (D54); None hides the word list generation
 
     def __post_init__(self) -> None:
         if self.coach_checkpointer is None:
@@ -81,7 +84,7 @@ def default_resources() -> Resources:
 
     return Resources(pack, ledger, svc, build_supervisor_graph(svc, checkpointer=sqlite_checkpointer()),
                      explainer=get_llm("explainer"), index_stats=index_stats,
-                     coach_checkpointer=sqlite_checkpointer())
+                     coach_checkpointer=sqlite_checkpointer(), vocab_llm=get_llm("vocab"))
 
 
 RESOURCE_FACTORY: Callable[[], Resources] | None = None   # tests replace this
@@ -422,8 +425,97 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
             if row.attempt_id not in invalid and st.button("문제 이상(통계에서 빼기)", key=f"inv_{row.attempt_id}"):
                 r.ledger.mark_invalid(row.attempt_id)
                 st.rerun()
+    set_vocab_panel(r, sid)
     if st.button("세트 목록으로", key="new_set", type="primary"):
         reset_quiz()
+
+
+KIND_KO = {"condition": "조건 표현", "technical": "기술 용어", "general": "일반 어휘"}
+VOCAB_NOTE = "AI가 지문에서 고른 표현과 뜻입니다(AI 생성). 헷갈리면 해당 문제에서 코치에게 물어보세요."
+
+
+def _toggle_known(term_key: str, widget_key: str) -> None:
+    r = resources()
+    r.ledger.mark_known(r.pack.exam_id, term_key, bool(st.session_state.get(widget_key)))
+
+
+def vocab_row(item: dict, key: str, stem: str | None = None, extra: str = "") -> None:
+    c1, c2 = st.columns([6, 1])
+    badge = " · 🔸 놓친 문제" if item.get("from_miss") else ""
+    c1.markdown(f"**{html.escape(item['term'])}** · {KIND_KO.get(item['kind'], item['kind'])} · "
+                f"{html.escape(item['meaning'])}{badge}{extra}", unsafe_allow_html=True)
+    if item.get("role"):
+        c1.caption(item["role"])
+    sentence = context_sentence(stem, item["term"]) if stem else None
+    if sentence:
+        c1.markdown("> " + highlight(html.escape(sentence), html.escape(item["term"]), "<mark>", "</mark>"),
+                    unsafe_allow_html=True)
+    c2.checkbox("외웠어요", value=bool(item.get("known")), key=key, on_change=_toggle_known,
+                args=(item["term_key"], key))
+
+
+def set_vocab_panel(r: Resources, sid: int) -> None:
+    """'이번 세트 단어장' under the diagnosis: built once in the background, then read from the ledger (D54)."""
+    st.subheader("이번 세트 단어장")
+    items = r.ledger.set_vocab(sid)
+    job_key = f"vocab-{sid}"
+    job = r.jobs.get(job_key)
+    if not items:
+        if r.vocab_llm is None:
+            st.caption("단어장 모델이 설정되지 않았습니다.")
+            return
+        if job is None:
+            job = {"thread": None, "out": None, "error": None}
+
+            def work() -> None:
+                try:
+                    extract_vocab(r.vocab_llm, r.pack, r.ledger, sid)
+                except Exception as exc:  # noqa: BLE001 - shown with a retry button
+                    job["error"] = f"{type(exc).__name__}: {exc}"[:300]
+
+            job["thread"] = threading.Thread(target=work, name=job_key, daemon=True)
+            r.jobs[job_key] = job
+            job["thread"].start()
+        if job["thread"].is_alive():
+            st.info("이번 세트에서 정리할 영어 표현을 고르는 중...")
+            wait_rerun()
+        elif job["error"]:
+            st.error(f"단어장을 만들지 못했습니다: {job['error']}")
+            if st.button("단어장 다시 만들기", key=f"vocab_retry_{sid}"):
+                r.jobs.pop(job_key, None)
+                st.rerun()
+        else:
+            st.caption("정리할 표현을 찾지 못했습니다.")
+        return
+    st.caption(VOCAB_NOTE)
+    for kind in KINDS:
+        group = [it for it in items if it["kind"] == kind]
+        if not group:
+            continue
+        st.markdown(f"**{KIND_KO[kind]}** ({len(group)})")
+        for it in group:
+            stem = json.loads(it["payload_json"])["stem_en"]
+            vocab_row(it, f"vk_{sid}_{it['term_key']}", stem, f" · 문제 {it['seq'] + 1}")
+
+
+def tab_vocab(r: Resources) -> None:
+    """The cumulative word book across sets (D54)."""
+    book = r.ledger.vocab_book(r.pack.exam_id)
+    if not book:
+        st.info("아직 단어장이 없습니다. 세트를 풀고 진단 화면까지 가면 그 세트의 단어장이 만들어집니다.")
+        return
+    c1, c2, c3 = st.columns([2, 2, 3])
+    kinds = c1.multiselect("종류", list(KINDS), default=list(KINDS), format_func=KIND_KO.get, key="vb_kinds")
+    hide = c2.checkbox("외운 단어 숨기기", value=True, key="vb_hide")
+    q = c3.text_input("찾기", key="vb_q", placeholder="영어 표현이나 뜻")
+    rows = [b for b in book if b["kind"] in kinds and not (hide and b["known"])
+            and (not q or q.lower() in b["term"].lower() or q in b["meaning"])]
+    known = sum(1 for b in book if b["known"])
+    st.caption(f"전체 {len(book)}개 · 외움 {known}개 · 표시 {len(rows)}개 · 놓친 문제에서 나온 표현 먼저, 그다음 자주 나온 순. "
+               + VOCAB_NOTE)
+    for b in rows:
+        vocab_row(b, f"vb_{b['term_key']}", b["uses"][0]["stem_en"] if b["uses"] else None,
+                  f" · {b['seen']}회(세트 {b['sets']}개)")
 
 
 def source_links(sources: list[str]) -> str:
@@ -773,9 +865,11 @@ def main() -> None:
     if sandbox():
         st.warning("샌드박스 모드: 학습 기록·체크포인트는 data/sandbox/에 따로 저장되고, 자료 넣기·수집은 꺼져 있습니다.")
     sidebar_request(r)
-    t_study, t_material, t_status, t_plan = st.tabs(["학습", "자료", "현황", "계획"])
+    t_study, t_vocab, t_material, t_status, t_plan = st.tabs(["학습", "단어장", "자료", "현황", "계획"])
     with t_plan:
         tab_plan(r)
+    with t_vocab:
+        tab_vocab(r)
     with t_material:
         tab_material(r)
     with t_status:

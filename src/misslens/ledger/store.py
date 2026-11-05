@@ -105,6 +105,26 @@ CREATE TABLE IF NOT EXISTS draft_answers (
     elapsed_ms    INTEGER,
     updated_at    TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS vocab (
+    id            INTEGER PRIMARY KEY,
+    exam_id       TEXT NOT NULL,
+    set_id        INTEGER NOT NULL REFERENCES quiz_sets(id),
+    question_id   INTEGER NOT NULL REFERENCES questions(id),
+    term          TEXT NOT NULL,
+    term_key      TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('condition','technical','general')),
+    meaning       TEXT NOT NULL,
+    role          TEXT,
+    from_miss     INTEGER NOT NULL DEFAULT 0 CHECK (from_miss IN (0,1)),
+    created_at    TEXT NOT NULL,
+    UNIQUE (set_id, term_key)
+);
+CREATE TABLE IF NOT EXISTS vocab_known (
+    exam_id   TEXT NOT NULL,
+    term_key  TEXT NOT NULL,
+    known_at  TEXT NOT NULL,
+    PRIMARY KEY (exam_id, term_key)
+);
 CREATE INDEX IF NOT EXISTS ix_attempts_question ON attempts(question_id);
 CREATE INDEX IF NOT EXISTS ix_attempts_set ON attempts(set_id);
 CREATE INDEX IF NOT EXISTS ix_questions_exam_task ON questions(exam_id, task_id);
@@ -455,6 +475,52 @@ class Ledger:
     def draft_answers(self, set_id: int) -> dict[int, dict[str, Any]]:
         return {r["question_id"]: dict(r) for r in self._query(
             "SELECT question_id, chosen_index, elapsed_ms FROM draft_answers WHERE set_id=?", (set_id,))}
+
+    # --- vocabulary (D54) ---------------------------------------------------------------------
+
+    def save_vocab(self, exam_id: str, set_id: int, items: list[dict[str, Any]]) -> None:
+        """Replace the set's word list (items from agents.grader.vocab.clean_items)."""
+        with self._tx() as c:
+            c.execute("DELETE FROM vocab WHERE set_id=?", (set_id,))
+            for it in items:
+                c.execute("INSERT INTO vocab (exam_id, set_id, question_id, term, term_key, kind, meaning, role, from_miss,"
+                          " created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                          (exam_id, set_id, it["question_id"], it["term"], it["term_key"], it["kind"], it["meaning"],
+                           it.get("role"), int(bool(it.get("from_miss"))), _now()))
+
+    def set_vocab(self, set_id: int) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._query(
+            "SELECT v.*, q.seq, q.payload_json, (k.term_key IS NOT NULL) AS known FROM vocab v"
+            " JOIN questions q ON q.id = v.question_id"
+            " LEFT JOIN vocab_known k ON k.exam_id = v.exam_id AND k.term_key = v.term_key"
+            " WHERE v.set_id=? ORDER BY v.from_miss DESC, q.seq, v.id", (set_id,))]
+
+    def vocab_book(self, exam_id: str) -> list[dict[str, Any]]:
+        """Every expression across sets: latest meaning, how often it came up, whether it came from a missed
+        question, known mark. Missed first, then most frequent (counts are computed here, rule 1)."""
+        rows = self._query(
+            "SELECT v.term_key, count(*) AS seen, count(DISTINCT v.set_id) AS sets, max(v.from_miss) AS from_miss,"
+            " max(v.id) AS last_id, (k.term_key IS NOT NULL) AS known FROM vocab v"
+            " LEFT JOIN vocab_known k ON k.exam_id = v.exam_id AND k.term_key = v.term_key"
+            " WHERE v.exam_id=? GROUP BY v.term_key ORDER BY from_miss DESC, seen DESC, last_id DESC", (exam_id,))
+        out = []
+        for r in rows:
+            last = self._query("SELECT term, kind, meaning, role FROM vocab WHERE id=?", (r["last_id"],))[0]
+            uses = self._query("SELECT v.set_id, q.seq, q.payload_json FROM vocab v JOIN questions q ON q.id=v.question_id"
+                               " WHERE v.exam_id=? AND v.term_key=? ORDER BY v.id DESC LIMIT 3", (exam_id, r["term_key"]))
+            out.append({**dict(last), "term_key": r["term_key"], "seen": r["seen"], "sets": r["sets"],
+                        "from_miss": bool(r["from_miss"]), "known": bool(r["known"]),
+                        "uses": [{"set_id": u["set_id"], "seq": u["seq"], "stem_en": json.loads(u["payload_json"])["stem_en"]}
+                                 for u in uses]})
+        return out
+
+    def mark_known(self, exam_id: str, term_key: str, known: bool = True) -> None:
+        with self._tx() as c:
+            if known:
+                c.execute("INSERT OR IGNORE INTO vocab_known (exam_id, term_key, known_at) VALUES (?,?,?)",
+                          (exam_id, term_key, _now()))
+            else:
+                c.execute("DELETE FROM vocab_known WHERE exam_id=? AND term_key=?", (exam_id, term_key))
 
     def record_generation_failure(self, exam_id: str, task_id: str, tries: int, reason: str) -> int:
         with self._tx() as c:

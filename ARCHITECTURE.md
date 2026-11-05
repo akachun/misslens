@@ -118,6 +118,7 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 - **코치 해설(D44):** `agents/grader/coach.py`의 ReAct 서브그래프(`bind_tools` + `ToolNode`). 읽기 전용 tool 두 개 — `search_material(query, task_id?)`(하이브리드 검색, 결과는 참고 자료 블록, 규칙 7), `learner_history(task_id)`(ledger 통계 함수만 호출, 규칙 1) — 를 최대 3회 부른 뒤 해설과 출처를 낸다. 모델 호출마다 라우터의 엔드포인트 전환이 적용된다(`RoleLLM.bind_tools`). 상한을 넘거나 실패하면 tool 없는 해설, 그것도 실패하면 저장된 해설. 기록은 하지 않는다(판정은 규칙 3의 표만).
 - **코치 검색(D49):** `search_material(query, task_id?, source?)`. tool 설명에 색인 구성(가이드, 17labs, Skilljar 코스별 레슨 수)을 넣어 모델이 수집 레슨의 존재를 알게 하고, `source`(`skilljar`, 코스 이름, `guide`)로 범위를 좁힐 수 있다. 태그 일치 청크는 앞에 최대 2개(`max_tagged`). 시스템 프롬프트에 '웹은 못 보지만 Skilljar 레슨은 로컬 사본으로 있다, 다루지 않으면 가장 가까운 레슨을 알려라'를 둔다.
 - **코치와 대화(D47):** 오답마다 코치 thread(`coach-<exam>-<attempt_id>`)를 체크포인터에 두고, 학습자가 이어서 질문하면 같은 그래프에 메시지를 더해 답한다(tool 상한은 질문마다 3회). 화면은 저장된 기본 해설을 그대로 두고 그 아래에 코치 해설과 대화를 붙인다. 질문 칸은 처음부터 보이며, 해설을 받지 않고 바로 질문해도 첫 메시지에 문제 정보가 함께 들어가 대화가 시작된다. 맞힌 문제도 펼쳐서 질문할 수 있고, 이때 코치는 '틀린 문제' 전제 없이 답한다. 출처는 URL(수집 레슨, 로그인한 브라우저에서 열림)은 링크로, PDF는 `guide.pdf p.N`으로 표시한다. 대화는 통계가 아니므로 ledger에 넣지 않는다.
+- **세트 단어장(D54):** 진단 화면에 들어가면 `agents/grader/vocab.py`가 세트 전체를 한 번(vocab 역할, Haiku) 보내 문제당 3~6개 표현(놓친 문구 → 조건·제약 표현 → 기술 용어·어휘)과 한국어 뜻·이 문제에서의 역할을 받는다. 지문·보기에 글자 그대로 있는 표현만, 8단어 넘는 구절은 놓친 문구나 틀린 문제의 조건 문구일 때만 남긴다. 모델이 일부 문제를 건너뛰면 그 문제만 한 번 더 요청한다. 결과는 `vocab`에 저장해 다시 볼 때는 모델을 부르지 않는다. '단어장' 탭은 세트를 넘나드는 누적 목록(놓친 문제 표현 먼저, 그다음 등장 횟수, 외운 표현 숨기기, 원문 문장 강조). 판정·통계·문제 검증과 무관하며 뜻은 'AI 생성'으로 표시한다.
 - 구현: 재질문 폼과 대응표는 `agents/grader/reask.py`, 저장과 진단 화면 데이터는 `agents/grader/review.py`. 오답 해설은 explainer 역할(Sonnet 4.6)이 판정 유형(해석/불확실/개념)에 맞춰 쓰고, 호출이 실패하면 문제에 저장된 해설을 보여 준다.
 
 ### 4.3 계획 승인 (interrupt①, D21)
@@ -163,6 +164,8 @@ Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
 | `generation_failures` | id, exam_id, task_id, tries, reason, created_at | 근거 검증에서 실패한 이유를 기록한다. 현황 탭에 표시 |
 | `plans` | id, exam_id, set_id, kind(`plan`/`quick`), total, counts_json, rationale, source, thread_id, created_at | 승인한 계획과 바로 풀기 세트의 영역별 문제 수(D52). 계획 탭 '최근 계획', 생성 재개 때 할당량으로 사용. 통계 아님 |
 | `draft_answers` | question_id(PK, FK), set_id, chosen_index, elapsed_ms, updated_at | 제출 전 답안(D52). 문제를 넘길 때마다 저장해 창을 닫거나 서버가 재시작돼도 이어 푼다. `submit_set`이 attempts로 옮긴 뒤 지운다. 통계 아님(규칙 1) |
+| `vocab` | id, exam_id, set_id, question_id, term, term_key, kind(`condition`/`technical`/`general`), meaning, role, from_miss, created_at | 세트별 단어장(D54). 지문·보기에 글자 그대로 있는 표현만. 누적 단어장은 ledger `vocab_book`이 집계 |
+| `vocab_known` | exam_id, term_key(PK), known_at | 학습자가 '외웠어요'로 표시한 표현 |
 | `miss_feedback` | attempt_id(PK, FK), learner_label(`concept`/`reading`/`unsure`), stage, created_at | 리뷰 중 학습자가 남긴 자기 판단(D43). 판정(`miss_type`)은 바꾸지 않고 진단 일치율 eval에만 쓴다. 2026-11-05 추가 |
 
 - 인덱스: `attempts(question_id)`, `attempts(set_id)`, `questions(exam_id, task_id)`
@@ -182,7 +185,7 @@ Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
 | 역할 | 기본 모델 | 타임아웃 | 모델 폴백(모든 엔드포인트를 시도한 뒤에만) |
 |---|---|---|---|
 | 출제(Generator), 오답 해설(Diagnostician) | `anthropic.claude-sonnet-4-6` | 180초 | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
-| 근거 검증, Ingest 태깅, Planner, Supervisor(자유 발화) | `anthropic.claude-haiku-4-5-20251001-v1:0` | 60초 | 태깅과 Planner만 `amazon.nova-2-lite-v1:0` |
+| 근거 검증, Ingest 태깅, Planner, Supervisor(자유 발화), 단어장(vocab, 90초) | `anthropic.claude-haiku-4-5-20251001-v1:0` | 60초 | 태깅·Planner·단어장만 `amazon.nova-2-lite-v1:0` |
 | Reporter, Collector | (LLM 없음) | — | — |
 
 - 출제와 근거 검증처럼 구조화 출력의 정확성이 중요한 역할에는 Nova를 폴백으로 쓰지 않는다.
@@ -466,6 +469,7 @@ misslens/
 | D51 | RRF에서 BM25 가중치를 질의 커버리지(idf 기준)에 비례하게 | 질의 번역(Haiku), 한영 용어집, 단어 개수 비율 | 한국어 질의 'Claude Code 권한 모드…'에서 BM25가 흔한 단어 claude·code만 보고 정답을 41위로 밀어냄(의미 검색은 2위). 번역은 검색마다 모델 호출, 용어집은 관리 부담. 단어 개수 비율(0.2)로는 부족해 idf로(0.04). 결과: hit@5 일반·코치 0.97→1.00, 출제 0.93→0.97, 회귀 없음 |
 | D52 | 계획을 `plans`에, 제출 전 답을 `draft_answers`에 저장하고, 생성이 멈춘 세트를 이어 만들기(`resume`) | 세션에만 보관(기존), 체크포인터에서 계획 읽기 | 리허설 중 서버 재시작으로 세트가 6/10에서 멈추고 풀던 답이 사라졌으며, 승인한 계획을 다시 볼 방법이 없었음. 계획·답안은 통계가 아니므로 규칙 1과 무관하고, 제출 트랜잭션은 그대로 |
 | D53 | 세트 기록: 계획뿐 아니라 바로 풀기·자연어 요청·CLI로 만든 세트도 `plans`(kind=quick, thread_id로 출처 구분)에 남기고, 학습 탭에 '지난 세트' 목록 | 계획만 기록(D52) | 학습자 요청: 직접 만든 세트도 다시 찾아가야 함. 출처는 thread_id 접두어로 구분해 테이블을 늘리지 않음. 기록 이전 세트는 '이전 기록'으로 표시 |
+| D54 | 리뷰 뒤 세트 단어장과 누적 '단어장' 탭: 지문의 표현만, 놓친 문구 우선, 세트당 모델 1~2회, 저장 후 재사용, 외움 표시 | 단어장 없음, 사전 API, 학습자가 직접 정리 | 해석 실수는 영어 조건 표현을 놓치는 데서 오는데 진단 뒤 그 표현을 익힐 단계가 없었음(학습자 제안). 실호출에서 Haiku가 1번 문제만 답하고 멈춰 빠진 문제 재요청과 긴 구절 필터를 둠 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |

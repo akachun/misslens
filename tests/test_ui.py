@@ -309,3 +309,24 @@ def test_past_sets_panel_reopens_a_quick_set(res):
     assert any(f"세트 #{sid}" in m.value and "바로 풀기" in m.value for m in at.markdown)
     run(at.button(key=f"past_{sid}").click())
     assert at.session_state["quiz"]["set_id"] == sid and at.session_state["quiz"]["phase"] == "diagnosis"
+
+
+def test_vocab_panel_and_word_book(res):
+    """D54: the diagnosis builds the set's word list in the background; the 단어장 tab lists and hides known words."""
+    res.vocab_llm = FakeRoleLLM([{"items": [{"q": 1, "term": "must not store passwords", "kind": "condition",
+                                             "meaning": "비밀번호를 저장하면 안 된다", "role": "정답을 가른 조건"}]}])
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    _diagnosis(at, res, wrong=True)
+    sid = at.session_state["quiz"]["set_id"]
+    for _ in range(20):                                              # background job, then rerun
+        if res.ledger.set_vocab(sid):
+            break
+        run(at)
+    run(at)
+    assert any("must not store passwords" in m.value for m in at.markdown)
+    key = f"vk_{sid}_must not store passwords"
+    run(at.checkbox(key=key).check())
+    assert res.ledger.vocab_book(PACK.exam_id)[0]["known"]
+    assert not any("must not store passwords" in m.value and "회(세트" in m.value for m in at.markdown)  # hidden in book
+    run(at.checkbox(key="vb_hide").uncheck())
+    assert any("must not store passwords" in m.value and "1회(세트 1개)" in m.value for m in at.markdown)
