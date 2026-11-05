@@ -1,0 +1,1251 @@
+{
+ "round": 1,
+ "metrics": {
+  "judge_version": 2,
+  "questions": 20,
+  "judged": 20,
+  "judge_ok_rate": 0.25,
+  "blind_agreement": 1.0,
+  "answer_correct_rate": 1.0,
+  "single_answer_rate": 0.9,
+  "violates_valid_rate": 0.5,
+  "facts_ok_rate": 0.5,
+  "facts_wrong": 6,
+  "translation_ok_rate": 1.0,
+  "exam_fit_rate": 0.65,
+  "issue_counts": {
+   "violates": 10,
+   "multiple": 2,
+   "fact": 6,
+   "translation": 0,
+   "fit": 7,
+   "stem": 2
+  },
+  "calibration": {
+   "compared": 20,
+   "ok_vs_not_ok_agreement": 0.8,
+   "external_ok_rate": 0.05,
+   "issue_recall": {
+    "violates": {
+     "external": 14,
+     "judge_found": 9
+    },
+    "multiple": {
+     "external": 4,
+     "judge_found": 1
+    },
+    "fact": {
+     "external": 2,
+     "judge_found": 1
+    },
+    "translation": {
+     "external": 3,
+     "judge_found": 0
+    },
+    "fit": {
+     "external": 5,
+     "judge_found": 3
+    },
+    "stem": {
+     "external": 2,
+     "judge_found": 0
+    }
+   }
+  }
+ },
+ "results": [
+  {
+   "key": "r1-q1",
+   "task_id": "1.2",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and directly tests the hub-and-spoke principle from the reference material. The correct answer (B) aligns precisely with the documented guidance to route all subagent communication through the coordinator for observability and controlled error handling, and each wrong option fails for a clear, distinct reason tied to the stated requirements.",
+    "verdict": "ok",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Allowing direct subagent-to-subagent communication violates both requirements: the coordinator cannot observe inter-subagent communication in real time, and it cannot receive structured error context before the pipeline continues if a subagent fails.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Although outputs are routed back to the coordinator, when a subagent fails the coordinator skips it and lets the next subagent proceed without receiving structured error context, violating requirement (2). Also, 'whatever partial context it already received directly' implies some direct passing occurred, inconsistent with full routing.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Direct subagent-to-subagent passing means the coordinator cannot observe communication as it happens; reading a log file at the end of the pipeline is not real-time observability and does not satisfy receiving structured error context before the pipeline continues.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The question is well-constructed and directly tests the hub-and-spoke principle from the reference material. The correct answer (B) aligns precisely with the documented guidance to route all subagent communication through the coordinator for observability and controlled error handling, and each wrong option fails for a clear, distinct reason tied to the stated requirements."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q2",
+   "task_id": "3.1",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "Option C's `violates` phrase is incorrectly attributed: it quotes a background fact ('stored them in ~/.claude/CLAUDE.md on their local machine') rather than the actual requirement that C breaks ('without anyone having to copy instructions manually' / 'available to all CI runs and teammates'). Everything else—correct answer, translation, and factual accuracy—is solid.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "User-level ~/.claude/CLAUDE.md is not shared via version control, so teammates and CI runners won't receive it automatically; it requires manual copying which the requirement explicitly forbids",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "absent",
+       "real_reason": "Storing standards in a wiki and referencing them in every prompt requires manual effort per-prompt, violating the 'without anyone having to copy instructions manually' requirement; the violates phrase given ('stored them in ~/.claude/CLAUDE.md on their local machine') is a background fact about the current situation, not a requirement being broken",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Placing standards in ~/.claude/CLAUDE.md on the CI runner only helps the pipeline but not team members on their own machines, so not all teammates automatically receive them",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "Option C's `violates` phrase is incorrectly attributed: it quotes a background fact ('stored them in ~/.claude/CLAUDE.md on their local machine') rather than the actual requirement that C breaks ('without anyone having to copy instructions manually' / 'available to all CI runs and teammates'). Everything else—correct answer, translation, and factual accuracy—is solid."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "fit"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q3",
+   "task_id": "4.1",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": true,
+    "reason": "The correct answer (B) and its justification align well with the reference material's emphasis on explicit categorical criteria over confidence-based filtering. However, the 'violates' labels for options A and D are technically incorrect: A's label points to an observation rather than a requirement it breaks, and D's label implies 'only report high-confidence findings' is a goal to preserve, when in fact it describes the current failing approach. Additionally, A and D share the same misconception (confidence-based / vague filtering can fix false positives), flagging shared_misconception as true.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "observation",
+       "real_reason": "General vague instructions like 'be conservative' or 'limit to what developers are most likely to act on' are exactly what the reference material identifies as failing to improve precision compared to specific categorical criteria",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Disabling comment-accuracy checks entirely eliminates a whole category rather than reducing false positives; this weakens coverage rather than improving the prompt, and is overly drastic",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "This restates the existing 'only report high-confidence findings' instruction, which the reference material explicitly calls out as a general confidence-based filter that fails to improve precision",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": true,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option A's violates phrase ('Developers are dismissing most of the comment-accuracy findings as noise') is an observation/symptom from the stem, not a requirement the option breaks. The actual reason A is wrong is that vague instructions like 'be conservative' fail to improve precision per the reference material — making the violates label misleading to learners.",
+      "Option D's violates phrase ('only report high-confidence findings') is a description of the existing (broken) instruction in the stem, not a requirement the solution must satisfy. D is wrong because it merely restates the failing instruction; labeling its violation as a key constraint implies confidence-based filtering is a goal, which contradicts the reference material."
+     ],
+     "uncertain_facts": [],
+     "reason": "The correct answer (B) and its justification align well with the reference material's emphasis on explicit categorical criteria over confidence-based filtering. However, the 'violates' labels for options A and D are technically incorrect: A's label points to an observation rather than a requirement it breaks, and D's label implies 'only report high-confidence findings' is a goal to preserve, when in fact it describes the current failing approach. Additionally, A and D share the same misconception (confidence-based / vague filtering can fix false positives), flagging shared_misconception as true."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "multiple",
+     "violates",
+     "translation"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q4",
+   "task_id": "1.1",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "uncertain",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": true,
+    "reason": "The correct answer (D) directly mirrors the stem's two requirements word-for-word, making it trivially identifiable by matching language rather than by applying understanding. This is the main quality concern; the factual content and wrong-option distractors are otherwise sound and well-grounded in the reference material.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Discards the tool result and sends a plain-text summary instead of appending the tool_result block to conversation history, so Claude cannot reason from the structured result",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Continues iterating on 'end_turn' and uses natural-language signal ('resolved') for termination, which is an explicit anti-pattern per the reference material",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Terminates immediately on 'tool_use' without executing the requested tool, which is the opposite of the required control flow",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": true,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [
+      "The question references a 'Claude Agent SDK' — the reference material does not mention a product by that exact name; the material refers to the API and agentic loop patterns generally. This may be a fictional SDK name used for context flavor."
+     ],
+     "reason": "The correct answer (D) directly mirrors the stem's two requirements word-for-word, making it trivially identifiable by matching language rather than by applying understanding. This is the main quality concern; the factual content and wrong-option distractors are otherwise sound and well-grounded in the reference material."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "fit",
+     "stem"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q5",
+   "task_id": "2.1",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "Option B's `violates` phrase (\"distinct inputs, outputs, and usage boundaries\") is inaccurate: renaming `analyze_document` to `analyze_content` does not violate that requirement — the tools would still remain separate with distinct boundaries. The real reason B is wrong is that the guide explicitly states tool descriptions are the primary mechanism LLMs use for tool selection, and identical descriptions cause misrouting regardless of tool names; the violates phrase should reference the near-identical descriptions constraint instead.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Merging the tools into one violates the explicit requirement that tools must remain separate",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Renaming alone keeps descriptions identical, so the LLM still cannot distinguish them via descriptions — the primary selection mechanism; name changes do not fix misrouting caused by near-identical descriptions",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "observation",
+       "real_reason": "Adding a system prompt forcing sequential calls does not fix the root cause (near-identical descriptions causing misrouting); it also artificially forces analyze_document after every search regardless of need",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option B's violates phrase says 'distinct inputs, outputs, and usage boundaries', but the actual reason B is wrong is that tool names alone are insufficient for LLM tool selection — descriptions are the primary mechanism. The violates phrase points to an unrelated requirement rather than the real flaw."
+     ],
+     "uncertain_facts": [],
+     "reason": "Option B's `violates` phrase (\"distinct inputs, outputs, and usage boundaries\") is inaccurate: renaming `analyze_document` to `analyze_content` does not violate that requirement — the tools would still remain separate with distinct boundaries. The real reason B is wrong is that the guide explicitly states tool descriptions are the primary mechanism LLMs use for tool selection, and identical descriptions cause misrouting regardless of tool names; the violates phrase should reference the near-identical descriptions constraint instead."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q6",
+   "task_id": "1.3",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": true,
+    "reason": "The correct answer (A) is directly stated in the stem itself — the last sentence of the scenario literally says 'the coordinator's allowedTools is set to [\"Read\", \"Grep\", \"Glob\"]' with no \"Task\", which is the exact answer. This is a textbook answer-copies-stem problem: a careful reader can identify the correct option purely by pattern-matching the stem wording without applying any domain knowledge.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "B",
+       "violates_kind": "background",
+       "real_reason": "There is no mechanism by which removing Read/Grep/Glob causes Task to become available automatically; allowedTools is an explicit list and Task must be added directly",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "background",
+       "real_reason": "The reference material explicitly states that parallel subagent spawning is achieved by emitting multiple Task tool calls in a single coordinator response, so sequential-per-turn is incorrect",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "absent",
+       "real_reason": "The requirement for 'Task' in allowedTools applies to the coordinator (to spawn subagents), not to the subagents themselves; subagents lack 'Task' only if they also need to spawn further subagents",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": true,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option B claims that removing Read/Grep/Glob from allowedTools causes Task to become available automatically. There is no such automatic promotion mechanism described in the reference material or standard Claude documentation."
+     ],
+     "uncertain_facts": [],
+     "reason": "The correct answer (A) is directly stated in the stem itself — the last sentence of the scenario literally says 'the coordinator's allowedTools is set to [\"Read\", \"Grep\", \"Glob\"]' with no \"Task\", which is the exact answer. This is a textbook answer-copies-stem problem: a careful reader can identify the correct option purely by pattern-matching the stem wording without applying any domain knowledge."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "stem",
+     "translation",
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q7",
+   "task_id": "1.4",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and accurately grounded in the reference material's distinction between prompt-based guidance (non-zero failure rate) and programmatic prerequisite gates (deterministic enforcement). All wrong options are clearly wrong for the reasons stated in their violates phrases, and the correct answer D is unambiguously supported.",
+    "verdict": "ok",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Prompt-based instructions have a non-zero failure rate and cannot guarantee deterministic compliance; the reference material explicitly states that when deterministic compliance is required, prompt instructions alone are insufficient.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Prompt-based guidance cannot deterministically ensure that no Edit is ever attempted on a file not returned by the Grep phase; Claude's inference-time behavior is probabilistic, not guaranteed.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "A properly implemented programmatic prerequisite gate that blocks all Edit calls until the Grep phase has fully returned its result set simultaneously enforces both constraints; there is no need for a separate system-prompt instruction to enforce the 'fully finish before any Edit begins' requirement.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The question is well-constructed and accurately grounded in the reference material's distinction between prompt-based guidance (non-zero failure rate) and programmatic prerequisite gates (deterministic enforcement). All wrong options are clearly wrong for the reasons stated in their violates phrases, and the correct answer D is unambiguously supported."
+    }
+   },
+   "external": {
+    "verdict": "drop",
+    "issues": [
+     "fit",
+     "fact"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q8",
+   "task_id": "1.5",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The correct answer and distractors are logically sound and well-differentiated, but the reference material never mentions 'updatedToolOutput' as a PostToolUse return mechanism—only 'updatedInput' is explicitly named—so option A's key technical detail is unverified by the provided sources.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "SessionStart injects a prompt instruction, which is probabilistic ('usually listens') not deterministic; this violates the guarantee requirement and the 'model reasons over one consistent format' requirement since the model still does the conversion",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Adding a date_format parameter to tool_input tries to alter the behavior expected from the MCP tools themselves (the tools would need to accept and honor this parameter), which violates the constraint against altering the MCP tools",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Adding additionalContext with a conversion note still leaves the actual conversion to the model (probabilistic), rather than deterministically normalizing the data before the model sees it; the model 'can' translate but is not guaranteed to",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option A uses 'updatedToolOutput' as the mechanism to return the transformed result. The reference material mentions 'updatedInput' for PreToolUse rewrites, but does not explicitly name 'updatedToolOutput' as the PostToolUse return field. This term may be invented or inaccurate relative to the actual SDK API."
+     ],
+     "uncertain_facts": [
+      "The exact field name 'updatedToolOutput' for PostToolUse hook return values is not confirmed in the reference material; the material only mentions 'updatedInput' for rewriting tool call inputs in a PreToolUse context."
+     ],
+     "reason": "The correct answer and distractors are logically sound and well-differentiated, but the reference material never mentions 'updatedToolOutput' as a PostToolUse return mechanism—only 'updatedInput' is explicitly named—so option A's key technical detail is unverified by the provided sources."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q9",
+   "task_id": "1.6",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": true,
+    "reason": "The correct answer is accurate and well-supported by the reference material, but option A copies the stem's wording almost verbatim (\"generates its next subtask based on what it discovers at each step rather than a predetermined plan\"), making it identifiable by matching language alone without applying the underlying concept. Additionally, options B and C both describe the same fundamental mistake (fixed pre-determined sequencing), which constitutes a shared misconception across two distractors.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "A fixed sequential chain executes the same steps in the same order for every dispute, ignoring what is discovered at each step — directly contradicting the stated requirement for adaptive decomposition.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Pre-mapping all four tool calls in a fixed order before the first tool is invoked and allowing no runtime deviation is the definition of a fixed sequential pipeline, not adaptive decomposition.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Running get_customer, lookup_order, and process_refund simultaneously is unsafe here because each decision depends entirely on what the previous tool call reveals — e.g., process_refund should not run before knowing whether a refund is even warranted.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": true,
+     "shared_misconception": true,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The correct answer is accurate and well-supported by the reference material, but option A copies the stem's wording almost verbatim (\"generates its next subtask based on what it discovers at each step rather than a predetermined plan\"), making it identifiable by matching language alone without applying the underlying concept. Additionally, options B and C both describe the same fundamental mistake (fixed pre-determined sequencing), which constitutes a shared misconception across two distractors."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "fit"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q10",
+   "task_id": "1.7",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "uncertain",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and the correct answer (C) is directly supported by the reference material's description of fork_session for creating parallel independent branches from a shared baseline. The wrong options each clearly violate a stated requirement, and the Korean translation faithfully preserves all conditions from the English stem.",
+    "verdict": "ok",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Running a single resumed session and handling both strategies sequentially does not create independent branches; they share state and cannot be truly independent explorations",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Starting fresh sessions with an injected summary does not start from the shared analysis baseline (the named session); it substitutes a summary for the actual prior session context, losing fidelity to the original baseline",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Resuming the same named session for two subagents causes them to share and mutate the same session, so they interfere with each other and with the original session",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [
+      "Whether fork_session can be called on a named session by name (vs. a session ID), and whether it can be called twice on the same session to produce two independent branches — the reference material describes fork_session for creating independent branches from a shared baseline but does not explicitly detail the mechanics of calling it twice on the same named session."
+     ],
+     "reason": "The question is well-constructed and the correct answer (C) is directly supported by the reference material's description of fork_session for creating parallel independent branches from a shared baseline. The wrong options each clearly violate a stated requirement, and the Korean translation faithfully preserves all conditions from the English stem."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q11",
+   "task_id": "3.2",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "uncertain",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and correctly identifies context: fork as the right answer per the reference material. The distractors test plausible but incorrect alternatives, and the Korean translation faithfully preserves all conditions and constraints from the English stem.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "observation",
+       "real_reason": "argument-hint is a frontmatter field for providing a hint about what arguments the skill accepts, not a flag to suppress output; it has no effect on whether diagnostic output enters the main conversation",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "allowed-tools restricts which tools the skill may invoke, but it does not isolate the skill's output from the main conversation context; verbose output would still accumulate in the main session",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "moving the file to ~/.claude/skills/ on each runner makes it a user-scoped skill requiring manual setup on every runner, breaking the requirement that it be defined in the project repository for automatic availability",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [
+      "argument-hint is described in the reference material as a frontmatter option but its exact behavior (whether it can suppress output) is not fully detailed; the claim that it suppresses diagnostic lines appears to be a fabricated distractor behavior not supported by the reference."
+     ],
+     "reason": "The question is well-constructed and correctly identifies context: fork as the right answer per the reference material. The distractors test plausible but incorrect alternatives, and the Korean translation faithfully preserves all conditions and constraints from the English stem."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q12",
+   "task_id": "3.3",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The correct answer (A) is well-grounded in the reference material. However, options B and D contain factual errors not supported by the reference: B falsely claims subdirectory CLAUDE.md cannot be version-controlled (contradicted by the material), and D invents a behavioral claim about session-wide loading that the material does not support.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "The claim that subdirectory CLAUDE.md files cannot be committed to version control is factually wrong. The reference material states that the project directory is shared through version control; subdirectory CLAUDE.md files are project-level files and can be committed just like any other project file.",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "observation",
+       "real_reason": "While directory-level CLAUDE.md files don't support YAML frontmatter path scoping, this framing misidentifies the core problem. The actual problem with src/tests/ CLAUDE.md is that integration test files are spread throughout the codebase and live *outside* src/tests/, so the CLAUDE.md in src/tests/ simply won't cover them — the real failure is geographic/scope coverage, not the absence of YAML frontmatter. Option A already captures the actual failure. Option C's reasoning (lack of YAML frontmatter) is also confusing because it conflates two different mechanisms.",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "The claim that directory-level CLAUDE.md files always load for the entire session regardless of which files are being edited is not supported by the reference material. The reference says path-scoped rules (in .claude/rules/) load only when editing matching files, but does not state that subdirectory CLAUDE.md files load for the entire session regardless of context — this is a fabricated distinction used to make D seem wrong for the wrong reason.",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option B claims subdirectory CLAUDE.md files are personal configuration scoped to the local machine and cannot be committed to version control. The reference material explicitly states that the project directory is shared through version control; this claim is false.",
+      "Option D claims directory-level CLAUDE.md files always load for the entire session regardless of which files are being edited. The reference material does not state this; it only says path-scoped .claude/rules/ files load conditionally. The behavior of subdirectory CLAUDE.md relative to session scope is not described this way in the material."
+     ],
+     "uncertain_facts": [],
+     "reason": "The correct answer (A) is well-grounded in the reference material. However, options B and D contain factual errors not supported by the reference: B falsely claims subdirectory CLAUDE.md cannot be version-controlled (contradicted by the material), and D invents a behavioral claim about session-wide loading that the material does not support."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "multiple"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q13",
+   "task_id": "4.2",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "wrong",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "Option B's assigned violates phrase is inaccurate: adding a JSON schema to a prompt is not the same as adding longer instructions, so the stated reason learners are shown for why B is wrong is misleading. The actual reason B fails is that it solves neither severity inconsistency nor false positives. Everything else in the question is sound.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "B",
+       "violates_kind": "observation",
+       "real_reason": "A JSON schema enforces output format/fields but does not address inconsistent severity classification or false positives on null-check patterns; it also doesn't fall under 'longer instructions' so the violates phrase is slightly imprecise, but the core issue is it doesn't solve the stated problems",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Disabling the null-check category removes the review entirely rather than reducing false positives while preserving true positives; it does not fix the severity inconsistency problem either",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "observation",
+       "real_reason": "Adding written definitions with code-smell lists is a form of longer/more detailed instructions, which the stem says have already been tried without improvement",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [
+      "Option B's violates phrase is 'Longer instructions have already been tried without improvement', but a JSON schema added to a prompt is not the same as longer written instructions — it is a structured schema constraint. The correct reason B is wrong is that it addresses output format, not severity consistency or false positives, so the violates phrase is misattributed."
+     ],
+     "uncertain_facts": [],
+     "reason": "Option B's assigned violates phrase is inaccurate: adding a JSON schema to a prompt is not the same as adding longer instructions, so the stated reason learners are shown for why B is wrong is misleading. The actual reason B fails is that it solves neither severity inconsistency nor false positives. Everything else in the question is sound."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "fact"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q14",
+   "task_id": "4.3",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": false,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "Option A is technically defensible: because only one tool is registered, tool_choice 'any' in practice always resolves to code_review, making it nearly as effective as the forced tool setting. However, the reference material explicitly distinguishes 'any' (choose among all registered tools) from forced tool selection (must call a specific named tool), so the marked answer D is the most precise and correct choice. All other options are clearly wrong per the reference material.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "tool_choice 'any' forces a tool call but allows the model to pick any registered tool, not necessarily code_review; since only one tool is registered this is arguably fine in practice, but conceptually it does not guarantee code_review specifically",
+       "wrong_because_of_violates": true,
+       "defensible": true
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "tool_choice 'auto' allows the model to return plain text instead of calling a tool, which is exactly the problem the team is trying to solve",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Keeping tool_choice 'auto' and relying on a system prompt instruction still does not guarantee tool calls; the model can still return plain text, as the reference material makes clear that 'auto' means the model may return text instead of calling a tool",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "Option A is technically defensible: because only one tool is registered, tool_choice 'any' in practice always resolves to code_review, making it nearly as effective as the forced tool setting. However, the reference material explicitly distinguishes 'any' (choose among all registered tools) from forced tool selection (must call a specific named tool), so the marked answer D is the most precise and correct choice. All other options are clearly wrong per the reference material."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "multiple",
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q15",
+   "task_id": "2.2",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and all four options are clearly differentiated. The correct answer (C) precisely matches the reference material's distinction between transient errors (isRetryable: true) and validation errors (isRetryable: false), and each wrong option fails for a distinct, unambiguous reason tied to a stated requirement.",
+    "verdict": "ok",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Sets isRetryable: true for the bad path (validation error), which would cause the agent to retry a request that cannot succeed without fixing the input, contradicting the requirement to escalate on bad path arguments",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Swaps the error categories — labels the 503 (a service availability issue) as 'validation' and the bad path (an input problem) as 'transient', so the metadata does not correctly signal which case is which",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Sets isRetryable: false for the 503 transient failure, preventing the automatic retry the team requires for service-unavailability errors",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The question is well-constructed and all four options are clearly differentiated. The correct answer (C) precisely matches the reference material's distinction between transient errors (isRetryable: true) and validation errors (isRetryable: false), and each wrong option fails for a distinct, unambiguous reason tied to a stated requirement."
+    }
+   },
+   "external": {
+    "verdict": "ok",
+    "issues": []
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q16",
+   "task_id": "2.3",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and accurate. The correct answer (B) precisely matches the reference material's guidance: synthesis-core tools (summarize_text, generate_citation) plus a single scoped cross-role tool (verify_fact) for the stated spot-checking need, with all retrieval/document tools removed.",
+    "verdict": "ok",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Retains all seven original tools, including web-retrieval and document-fetching tools outside the synthesis agent's specialization, directly violating scoped tool access",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "Omits verify_fact, leaving the synthesis agent with no way to spot-check a single claim as stated in the requirements",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Includes web_search and fetch_url, which are retrieval tools belonging to other agents' specializations and not needed by the synthesis agent",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The question is well-constructed and accurate. The correct answer (B) precisely matches the reference material's guidance: synthesis-core tools (summarize_text, generate_citation) plus a single scoped cross-role tool (verify_fact) for the stated spot-checking need, with all retrieval/document tools removed."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "multiple"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q17",
+   "task_id": "3.4",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": false,
+    "reason": "The correct answer and all wrong-option discriminators are well-grounded in the reference material. However, the scenario is somewhat unrealistic: plan mode inside an unattended CI/CD pipeline would produce a plan with no human to review and iterate on it before execution, which defeats its stated purpose per the reference (\"get it to lay out a plan… actually read it\").",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "background",
+       "real_reason": "Style violations are simple, well-scoped single-file checks that match the direct execution profile; the integration architecture decision spans 30+ files with multiple valid approaches, which matches plan mode—so the modes are reversed",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Applying plan mode to simple single-file style checks adds unnecessary overhead and extra review cycles, violating the requirement to minimize unnecessary review cycles",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "background",
+       "real_reason": "The integration decision involves multiple valid approaches, architectural trade-offs, and analysis across 30+ files—exactly the conditions where direct execution risks costly rework and plan mode is required",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": true,
+     "stem_contradiction": "null",
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The correct answer and all wrong-option discriminators are well-grounded in the reference material. However, the scenario is somewhat unrealistic: plan mode inside an unattended CI/CD pipeline would produce a plan with no human to review and iterate on it before execution, which defeats its stated purpose per the reference (\"get it to lay out a plan… actually read it\")."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "fit"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q18",
+   "task_id": "3.5",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": false,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": false,
+    "reason": "Option A's assigned 'violates' phrase is incorrect: the interview pattern is also performed *before* implementation, so it does not violate \"before asking Claude to write any implementation code.\" The real reason A is wrong is that the team already has concrete representative records, making direct examples more effective than asking Claude to elicit requirements it already has. Additionally, the correct answer (B) closely mirrors the stem's own wording (\"Two or three representative records illustrate each edge case clearly\"), making it somewhat copy-the-stem guessable.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "The interview pattern is a valid technique, but the stem already states the team HAS representative records (2-3) that clearly illustrate each edge case—so the interview pattern is less optimal than providing concrete examples directly. However, the violates phrase 'before asking Claude to write any implementation code' is incorrectly assigned: the interview pattern is also done before implementation, so this option does NOT actually violate that phrase.",
+       "wrong_because_of_violates": false,
+       "defensible": true
+      },
+      {
+       "option": "C",
+       "violates_kind": "observation",
+       "real_reason": "The stem explicitly states that prose descriptions produce inconsistent results, so writing a detailed prose specification would perpetuate the same problem the team is trying to solve.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Asking for immediate implementation without providing examples or guidance first does not minimize correction cycles; it maximizes them by skipping upfront clarification.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": true,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": "null",
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "Option A's assigned 'violates' phrase is incorrect: the interview pattern is also performed *before* implementation, so it does not violate \"before asking Claude to write any implementation code.\" The real reason A is wrong is that the team already has concrete representative records, making direct examples more effective than asking Claude to elicit requirements it already has. Additionally, the correct answer (B) closely mirrors the stem's own wording (\"Two or three representative records illustrate each edge case clearly\"), making it somewhat copy-the-stem guessable."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q19",
+   "task_id": "3.6",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "uncertain",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "reason": "The question is well-constructed and the correct answer (B) is clearly supported by the reference material. The one minor uncertainty is whether --output-format json alone fully satisfies the machine-parseable requirement without --json-schema, but the reference treats them as a pair for stricter enforcement rather than requiring both in all cases.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "--batch is not a documented Claude Code flag; the reference material explicitly calls it non-existent, making this command invalid",
+       "wrong_because_of_violates": false,
+       "defensible": false
+      },
+      {
+       "option": "C",
+       "violates_kind": "requirement",
+       "real_reason": "-p prevents hanging but produces free-form text output, which the downstream parsing script cannot reliably consume",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "Without -p, Claude Code still waits for interactive input and the job will hang",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": false,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [
+      "Whether --output-format json alone (without --json-schema) is sufficient to guarantee machine-parseable structured output, or whether --json-schema is also required for reliable downstream parsing"
+     ],
+     "reason": "The question is well-constructed and the correct answer (B) is clearly supported by the reference material. The one minor uncertainty is whether --output-format json alone fully satisfies the machine-parseable requirement without --json-schema, but the reference treats them as a pair for stricter enforcement rather than requiring both in all cases."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ]
+   },
+   "error": null
+  },
+  {
+   "key": "r1-q20",
+   "task_id": "4.4",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": false,
+    "stem_consistent": true,
+    "reason": "The correct answer (C) is accurate and well-supported by the reference material. However, the correct option wording nearly copies the stem verbatim (\"original PR diff, the failed extraction output, and the specific validation errors\"), making it trivially identifiable by pattern-matching rather than understanding.",
+    "verdict": "fix",
+    "detail": {
+     "wrong_options": [
+      {
+       "option": "A",
+       "violates_kind": "requirement",
+       "real_reason": "Sending only validation errors without the original document or failed extraction leaves Claude without the context needed to correct the output — this is effectively a round-trip that cannot produce new information, and the reference material explicitly requires including the original document and failed extraction alongside the errors.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "B",
+       "violates_kind": "requirement",
+       "real_reason": "Resending the original diff alone with no additional context is exactly what the junior engineer proposes and what the reference material identifies as ineffective — a retry without specific validation errors is 'just a re-roll' and cannot guarantee correction of format mismatches.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      },
+      {
+       "option": "D",
+       "violates_kind": "requirement",
+       "real_reason": "The stem explicitly states the pipeline must resolve format mismatches rather than discard findings; discarding findings with missing fields directly violates this requirement.",
+       "wrong_because_of_violates": true,
+       "defensible": false
+      }
+     ],
+     "answer_correct": true,
+     "answer_copies_stem": true,
+     "shared_misconception": false,
+     "unrealistic": false,
+     "stem_contradiction": null,
+     "translation_issues": [],
+     "fact_issues": [],
+     "uncertain_facts": [],
+     "reason": "The correct answer (C) is accurate and well-supported by the reference material. However, the correct option wording nearly copies the stem verbatim (\"original PR diff, the failed extraction output, and the specific validation errors\"), making it trivially identifiable by pattern-matching rather than understanding."
+    }
+   },
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "translation"
+    ]
+   },
+   "error": null
+  }
+ ]
+}

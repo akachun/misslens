@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D58) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D59) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -184,7 +184,7 @@ Collector 그래프: START → fetch ⟲ (queue[0] 수집) → END
 
 | 역할 | 기본 모델 | 타임아웃 | 모델 폴백(모든 엔드포인트를 시도한 뒤에만) |
 |---|---|---|---|
-| 출제(Generator), 오답 해설(Diagnostician) | `anthropic.claude-sonnet-4-6` | 180초 | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| 출제(Generator), 오답 해설(Diagnostician), 문제 품질 판정기(judge, `question-eval` 전용, D59) | `anthropic.claude-sonnet-4-6` | 180초 | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
 | 근거 검증, Ingest 태깅, Planner, Supervisor(자유 발화), 단어장(vocab, 90초) | `anthropic.claude-haiku-4-5-20251001-v1:0` | 60초 | 태깅·Planner·단어장만 `amazon.nova-2-lite-v1:0` |
 | Reporter, Collector | (LLM 없음) | — | — |
 
@@ -421,6 +421,7 @@ misslens/
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── paths.py       # 학습 기록·체크포인트 위치, 샌드박스(D45)
 │   ├── review_export.py  # 상위 모델 검토용 문제 내보내기(D58)
+│   ├── question_eval.py  # 문제 생성 품질 라운드 평가: 인-아웃 세트·LLM-as-Judge·리포트(D59)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   │                  # grader/: reask.py(재질문 폼) · review.py(판정 저장·진단) · coach.py(tool 사용 코치, D44·D47) · vocab.py(단어장, D54)
 │   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|plan|ask|status|ingest|search|collect|practice`)
@@ -433,7 +434,8 @@ misslens/
 ├── scripts/draw_graph.py     # 그래프 그림 → docs/graphs/*.mmd (README에 포함)
 ├── scripts/make_handoff_zip.py   # 비공개 평가용 zip(데이터 포함, 비밀 정보 제외·검사, D56) → dist/
 ├── docs/           # demo.md(데모 시나리오), testing.md(테스트·검색 평가), graphs/(생성된 그래프 그림)
-├── evals/<exam>/   # retrieval.yaml(정답 질의), retrieval_baseline.json(검색 점수 기준선, D50)
+├── evals/<exam>/   # retrieval.yaml(정답 질의), retrieval_baseline.json(검색 점수 기준선, D50), question_set.yaml(문제 품질 인-아웃 세트, D59)
+├── evaluation/     # 라운드별 리포트 round<N>_report.md·round<N>.json, README(방법·요약·판정기 보정, D59)
 ├── data/           # ledger.sqlite, checkpoints.sqlite, index/<exam>/, sources/{exam_guide,collected,practice_problems}/, practice/<exam>/bank.jsonl  (git 제외)
 └── secrets/        # 로그인 프로필 (git 제외)
 ```
@@ -480,6 +482,7 @@ misslens/
 | D56 | 강사 평가는 '공개 저장소(데이터 제외) + 비공개 전달 zip(색인·원본 자료·문체 예시·학습 기록 포함)'. zip은 스크립트로만 만든다: git 관리 파일과 허용한 데이터 폴더만(화이트리스트), 거부 목록(.env·secrets·체크포인트·모델 상태·업로드·WAL), SQLite 백업 API 복사, 묶기 전 자격 증명 패턴 검사(하나라도 있으면 중단), HANDOFF.md 동봉 | 데이터를 공개 저장소에 커밋, 손으로 zip | 저장소가 공개라 제3자 자료(가이드·수집 교안·연습 문제)를 올릴 수 없음(규칙 7). 손으로 묶으면 `.env`·`secrets/`(로그인 쿠키 655MB)가 섞이기 쉬움 |
 | D57 | 코드 주석과 docstring은 한국어로 쓴다(학습자가 직접 읽고 고칠 수 있게). 단, 모델에 전달되는 글(프롬프트, `Field(description=)`, 구조화 출력용 Pydantic 클래스 docstring인 `QuestionDraft`·`PlanDraft`, 도구 설명이 되는 `learner_history` docstring)은 영어로 유지하고 테스트로 고정 | 주석도 영어로 유지, 모든 docstring 한국어화 | 출제·진단 품질은 영어 프롬프트 기준으로 검증됨. 클래스·도구 docstring을 한국어로 바꾸면 모델 입력이 조용히 바뀌어 화면에 티가 나지 않음 |
 | D58 | 생성 문제의 상위 모델 검토는 앱 밖에서: `export-questions`가 제출한 세트의 문제(정답·violates·key constraints·해설)와 세부 항목별 근거 발췌를 검토 지시문과 함께 Markdown으로 저장하고, 학습자가 Claude Opus·GPT에 붙여 넣는다. 모델 호출·통계 기록 없음. 풀지 않은 세트는 정답이 드러나므로 제외 | 앱 안에 Opus 검토 단계 추가, 출제마다 자동 검토 | 마감 전이라 비용·지연·실패 경로를 늘리지 않음. Bedrock 할당량과 무관하게 학습자 구독으로 검토 가능. 같은 계열 착각을 피하려 다른 회사 모델도 쓸 수 있음. 자동화는 TODOS |
+| D59 | 문제 생성 품질은 라운드로 잰다: 고정 인-아웃 세트(세부 항목 20개 + 1라운드 외부 검토 판정) → 같은 입력으로 새로 생성(별도 DB) → `judge` 역할(Sonnet 4.6)이 정답을 숨긴 직접 풀기 + 오답 보기별 분해 판정, 요약은 코드가 계산 → `evaluation/round<N>_report.md`. 판정기는 외부 검토와의 일치로 보정(v1 OK 일치 25% → v2 80%). 같은 라운드에서 출제·근거 확인 지시문에 '요구사항만 key constraint' 등 보강 | 판정기 없이 외부 검토만, RAGAS 라이브러리 도입, 판정기 v1(항목별 참/거짓) 유지 | 외부 검토는 사람이 붙여 넣어야 해서 반복이 느림. RAGAS는 근거 기반 답변 평가용이라 '오답 근거가 요구사항인가' 같은 출제 기준을 재지 못하고 의존성이 큼(검색 지표는 이미 hit@k·MRR로 잼). v1은 생성기와 같은 계열이라 관대했음 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |

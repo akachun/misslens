@@ -59,9 +59,10 @@ class ExportResult:
     tasks: list[str] = field(default_factory=list)
 
 
-def collect_questions(ledger: Ledger, exam_id: str, set_ids: list[int] | None = None) -> list[dict[str, Any]]:
-    """제출한 세트의 검증 통과 문제를 세트·순서대로 돌려준다."""
-    sets = ledger.list_sets(exam_id, statuses=SET_STATUSES, limit=10_000)
+def collect_questions(ledger: Ledger, exam_id: str, set_ids: list[int] | None = None,
+                      statuses: tuple[str, ...] = SET_STATUSES) -> list[dict[str, Any]]:
+    """제출한 세트(평가용 DB는 `statuses`로 다른 상태도)의 검증 통과 문제를 세트·순서대로 돌려준다."""
+    sets = ledger.list_sets(exam_id, statuses=statuses, limit=10_000)
     wanted = {s["id"] for s in sets} if set_ids is None else {s["id"] for s in sets} & set(set_ids)
     out = []
     for sid in sorted(wanted):
@@ -115,11 +116,12 @@ def _evidence_md(pack: ExamPack, task_ids: list[str], context: Callable[[ExamPac
 
 def build_review_markdown(pack: ExamPack, ledger: Ledger, *, set_ids: list[int] | None = None,
                           evidence: str = "full",
-                          context: Callable[[ExamPack, str], list] | None = None) -> ExportResult:
+                          context: Callable[[ExamPack, str], list] | None = None,
+                          statuses: tuple[str, ...] = SET_STATUSES) -> ExportResult:
     """검토 지시문 + 문제 + 근거 부록. `context`는 RetrievalContext 같은 (pack, task_id) -> chunk 목록."""
     if evidence not in EVIDENCE_MODES:
         raise ValueError(f"evidence must be one of {EVIDENCE_MODES}")
-    questions = collect_questions(ledger, pack.exam_id, set_ids)
+    questions = collect_questions(ledger, pack.exam_id, set_ids, statuses)
     tasks = sorted({q["task_id"] for q in questions}, key=lambda t: [int(x) for x in t.split(".") if x.isdigit()])
     body = [REVIEW_PROMPT.format(exam_name=pack.name),
             f"총 {len(questions)}문제. 문제 번호(Q숫자)는 학습 기록의 문제 ID입니다.", ""]

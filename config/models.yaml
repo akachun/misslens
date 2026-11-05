@@ -26,6 +26,7 @@ roles:
   planner:    {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60, fallback_model: amazon.nova-2-lite-v1:0}
   router:     {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 60}
   vocab:      {model: anthropic.claude-haiku-4-5-20251001-v1:0, timeout: 90, fallback_model: amazon.nova-2-lite-v1:0}
+  judge:      {model: anthropic.claude-sonnet-4-6, timeout: 180, fallback_model: anthropic.claude-sonnet-4-5-20250929-v1:0}   # question-eval 판정기(D59)
 
 # Local embedding model for retrieval (ARCHITECTURE §8, D17). Not a Bedrock model; loaded once per process.
 embedding: {model: BAAI/bge-m3, dim: 1024, batch_size: 16}

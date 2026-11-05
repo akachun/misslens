@@ -1,0 +1,378 @@
+{
+ "round": 2,
+ "metrics": {
+  "questions": 18,
+  "judged": 18,
+  "judge_ok_rate": 0.722,
+  "blind_agreement": 1.0,
+  "answer_correct_rate": 1.0,
+  "single_answer_rate": 0.944,
+  "violates_valid_rate": 0.833,
+  "facts_ok_rate": 0.944,
+  "facts_wrong": 0,
+  "translation_ok_rate": 0.944,
+  "exam_fit_rate": 1.0,
+  "issue_counts": {
+   "violates": 3,
+   "multiple": 1,
+   "fact": 0,
+   "translation": 1,
+   "fit": 0,
+   "stem": 0
+  },
+  "generation": {
+   "planned": 20,
+   "generated": 18,
+   "first_try_rate": 0.833,
+   "mean_tries": 1.4,
+   "rejections": {
+    "validator": 7,
+    "generation_error": 3
+   }
+  }
+ },
+ "results": [
+  {
+   "key": "r2-q1",
+   "task_id": "1.2",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "fix",
+    "reason": "Option B's `violates` phrase (\"coordinator agent decomposes an incoming research query into subtopics\") is not a requirement or limit stated in the stem that B actually breaks — decomposing the query further is not prohibited by that phrase; rather, B is wrong because it misrepresents what hub-and-spoke requires (it proposes unnecessary over-decomposition as the solution, not routing through the coordinator). The violates tag for B should reference the hub-and-spoke routing requirement, not the decomposition description. All other options and their violates phrases are sound."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q2",
+   "task_id": "3.1",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": false,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "fix",
+    "reason": "The learner-language stem options are shuffled differently from the English options: English A→Korean B, English B→Korean C, English C→Korean B (correct answer), English D→Korean A. The correct answer label shifts from C in English to C in Korean (option C in Korean is the @import option), so the correct answer letter is preserved — but the distractor option letters A, B, D map to different content between the two languages, which is inconsistent and potentially confusing. Specifically, what English labels as option A (monolithic) appears as Korean option D, and English option D (developer ~/.claude) appears as Korean option C — wait, let me re-examine: Korean A = monolithic (English D), Korean B = CI runner ~/.claude (English A), Korean C = @import correct (English C), Korean D = developer ~/.claude (English D)... The shuffling between English and Korean versions means the letter labels for wrong options differ, which is a translation/formatting issue that needs fixing for consistency."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q4",
+   "task_id": "1.1",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The correct answer (A) precisely matches the reference material's guidance on using stop_reason \"end_turn\" to terminate and \"tool_use\" to continue; all distractors are clearly wrong for distinct reasons and their violates phrases accurately identify the stem constraint each option breaks."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q5",
+   "task_id": "2.1",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The question is well-constructed: the correct answer (C) directly applies the reference material's guidance on writing differentiated tool descriptions with purpose, inputs, boundary conditions, and when-to-use guidance. Each wrong option's violates phrase accurately identifies the specific stem constraint it breaks, and no two wrong options share the same misconception. The Korean translation faithfully preserves all conditions and negations."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q6",
+   "task_id": "1.3",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": false,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "fix",
+    "reason": "Option B is technically valid on its own merits — emitting both Task calls in a single response and passing findings in the report-synthesizer's prompt both satisfy the stated requirements. Adding \"Task\" to the report-synthesizer's allowedTools is an extra step that doesn't violate any stem constraint; it merely adds optional capability. The `violates` phrase for B (\"coordinator's AgentDefinition already lists 'Task' in allowedTools\") is a background fact, not a requirement or limit that B actually breaks — having Task in the coordinator's allowedTools doesn't preclude also adding it to the report-synthesizer's allowedTools. Thus B cannot be ruled out as wrong, meaning A is not the single correct answer, and `single_answer` is false and `violates_valid` is false."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q7",
+   "task_id": "1.4",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "All four options are clearly differentiated, the correct answer matches the reference material's guidance on programmatic prerequisite gates for deterministic compliance, and each wrong option's violates phrase accurately identifies the stem condition it breaks."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q8",
+   "task_id": "1.5",
+   "blind": "A",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "uncertain",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "fix",
+    "reason": "Option A uses `updatedToolOutput` as the field name for rewriting tool results in a PostToolUse hook, but the reference material only documents `updatedInput` (for PreToolUse call rewriting) and does not mention `updatedToolOutput` — making this field name uncertain/unverified. Additionally, option D's violates phrase (\"must ensure that by the time Claude processes results from either tool\") is a goal/outcome statement rather than a crisp requirement the option breaks; the real reason D is wrong is that PreToolUse rewrites outgoing inputs and cannot guarantee what the external tool returns. These are minor fixable issues rather than fatal flaws."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q9",
+   "task_id": "1.6",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The question cleanly tests the distinction between fixed sequential pipelines and dynamic adaptive decomposition (Task Statement 1.6), the correct answer is clearly supported by the reference material, and every wrong option's violates phrase is a genuine stem constraint that explains why the option fails."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q10",
+   "task_id": "1.7",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "All four options are clearly differentiated, the correct answer (fork_session from the current session) is well-supported by the reference material, and each wrong option's violates phrase accurately names a stem requirement that the option breaks."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q11",
+   "task_id": "3.2",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "Both requirements (project-scoped via .claude/skills/ for version-control sharing, and context: fork to isolate verbose output) are clearly supported by the reference material, and each distractor correctly targets exactly one violated constraint."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q13",
+   "task_id": "4.2",
+   "blind": "D",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "All four options are clearly distinguished, the correct answer aligns precisely with the reference material's guidance on few-shot examples for severity classification and false-positive reduction, and each wrong option's violates phrase accurately names a real stem constraint that the option breaks."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q14",
+   "task_id": "4.3",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "All four options are clearly distinct, the correct answer (B) is well-supported by the reference material stating tool_choice \"any\" forces a tool call while allowing the model to choose which one, and each wrong option's violates phrase accurately reflects the stem constraint it breaks."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q15",
+   "task_id": "2.2",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The question accurately tests knowledge of structured MCP error responses using isError, errorCategory (transient/validation/permission), isRetryable, and human-readable descriptions, all of which are directly referenced in the guide. The correct answer (C) is the only option satisfying all three stated requirements, each wrong option clearly violates exactly one constraint from the stem, and the Korean translation faithfully preserves all conditions."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q16",
+   "task_id": "2.3",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "All conditions are correctly reflected in the stem, the correct answer aligns with the reference material's guidance on scoped cross-role tools (e.g., verify_fact) and routing complex cases through the coordinator, each wrong option's violates phrase is a genuine stem constraint, and the Korean translation faithfully preserves every condition and negation."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q17",
+   "task_id": "3.4",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The correct answer aligns precisely with the reference material: direct execution for simple, well-scoped single-file fixes and plan mode for large-scale multi-file architectural migrations. All wrong options have valid violates phrases drawn from the stem, and no two wrong options share the same misconception. The Korean translation faithfully preserves all conditions and negations."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q18",
+   "task_id": "3.5",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The correct answer (C) directly maps to the reference material's guidance on using concrete input/output examples when prose descriptions are interpreted inconsistently. All distractors are well-differentiated: A describes test-driven iteration (a different technique), B misapplies the \"interacting problems\" concept while violating the examples requirement, and D correctly fails on the no-interactive-steps constraint. The Korean translation faithfully preserves all conditions and negations."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q19",
+   "task_id": "3.6",
+   "blind": "C",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": false,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "fix",
+    "reason": "Option A's `violates` phrase (\"re-runs and floods the PR with duplicate comments\") is a description of the problem being solved (an observation/symptom in the stem), not a requirement or constraint imposed by the stem. The real reason A is wrong is the reference material's note that the same session that generated code is less effective at reviewing its own changes, and that CI sessions are stateless so persistent memory across pipeline runs is not supported. Option D's `violates` phrase (\"must prevent duplicate comments on resolved issues\") is a valid stem constraint and correctly identifies why D fails. The violates phrases for A and B should be revised."
+   },
+   "external": null,
+   "error": null
+  },
+  {
+   "key": "r2-q20",
+   "task_id": "4.4",
+   "blind": "B",
+   "blind_agrees": true,
+   "judgement": {
+    "answer_correct": true,
+    "single_answer": true,
+    "violates_valid": true,
+    "facts": "ok",
+    "translation_ok": true,
+    "exam_fit": true,
+    "stem_consistent": true,
+    "verdict": "ok",
+    "reason": "The correct answer aligns directly with the reference material's guidance on retry-with-error-feedback (appending specific validation errors plus the original document and failed extraction). All wrong options clearly violate stated stem constraints, and the violates phrases are accurate stem conditions."
+   },
+   "external": null,
+   "error": null
+  }
+ ]
+}

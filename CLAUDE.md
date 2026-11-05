@@ -14,6 +14,7 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 | `SERVICE.md` | 기능 범위나 우선순위를 판단할 때 |
 | `docs/testing.md` | 테스트를 추가·실행하거나 검색 품질 점수(`retrieval-eval`)를 다룰 때 |
 | `docs/demo.md` | 시연을 준비하거나 리허설할 때 |
+| `evaluation/README.md` | 출제·근거 확인·판정기 지시문을 바꾸거나 문제 품질 라운드를 돌릴 때 |
 
 ## 깨면 안 되는 규칙
 
@@ -45,6 +46,7 @@ MissLens는 자격증 시험 대비 학습 코치 에이전트다. 학습자가 
 - 새 기능에는 테스트를 함께 작성한다. LLM은 `GenericFakeChatModel`로 대체한다.
 - 학습자가 쓰고 있는 Streamlit 서버를 재시작하기 전에 제출 전 세트(`quiz_sets`가 generating/in_progress)가 있는지 보고 학습자에게 묻는다. 재시작하면 백그라운드 문제 생성이 멈춘다('이어 풀기'로 재개 가능).
 - 청킹·데이터 정리·태깅·검색 순위를 바꾸면 `python -m misslens.cli retrieval-eval`(또는 `pytest -m realdata`)로 기준선과 비교한다. 나아졌으면 `--save-baseline`으로 기준선을 갱신한다.
+- 출제 지시문, 근거 확인, 판정기를 바꾸면 `question-eval`로 새 라운드를 돌려 `evaluation/`에 리포트를 남긴다(실호출이라 할당량 확인). 판정기를 바꿨으면 앞 라운드도 다시 채점한다.
 - 마감이 위태로우면 `TASK.md`의 '빼는 순서'를 따른다. 핵심 루프(세트 풀이 → 리뷰 → 진단 → 기록)는 빼지 않는다.
 - 문서, 사용자 대상 문구, 코드 주석과 docstring은 한국어로 쓴다. 코드, 식별자, 커밋 메시지는 영어로 쓴다. 모델에 보내는 문자열(프롬프트, `Field(description=)`, 구조화 출력 모델의 클래스 docstring, 도구 설명이 되는 함수 docstring)은 영어로 둔다(D57, `tests/test_model_facing_text.py`).
 
@@ -75,6 +77,7 @@ python -m misslens.cli collect reindex skilljar # 정리 규칙(sources.yaml) �
 python -m misslens.cli practice import         # 연습 문제 파일 → 문체 예시 은행(data/practice/)
 python -m misslens.cli eval --export           # 진단 일치율 + eval 데이터(data/eval/)
 python -m misslens.cli export-questions        # 제출한 세트의 문제 → 상위 모델(Opus·GPT) 검토용 Markdown(data/review/)
+python -m misslens.cli question-eval --round N --notes "바꾼 것"   # 문제 품질 라운드 평가 → evaluation/roundN_report.md(실호출)
 python -m misslens.cli retrieval-eval          # 검색 점수·색인 건강 vs 기준선(evals/ccar-f/)
 pytest -m realdata                 # 실제 색인 회귀 검사(기본 테스트에서는 제외)
 python scripts/make_handoff_zip.py --list   # 비공개 평가용 zip 미리 보기(만들 때는 --list 없이). 손으로 묶지 않는다

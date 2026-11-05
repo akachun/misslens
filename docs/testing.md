@@ -34,13 +34,14 @@
 | `test_vocab.py` | 단어장 추출(글자 그대로·긴 구절 필터·빠진 문제 재요청), 누적·외움 | D54 |
 | `test_handoff.py` | 평가용 zip: 거부 목록, 자격 증명 검사, SQLite 복사, 포함 목록(git 체크아웃에서만) | D56 |
 | `test_portability.py` | Windows 대비: 텍스트 파일 읽기·쓰기에 `encoding='utf-8'` 명시(한국어 Windows 기본 cp949) | D56 |
+| `test_question_eval.py` | 문제 품질 라운드 평가: 인-아웃 세트 파일, 직접 풀기(정답 숨김)·분해 판정·요약 계산, 생성 통계, 리포트·앞 라운드 비교, CLI(1라운드·다시 채점) | D59 |
 | `test_review_export.py` | 상위 모델 검토용 내보내기: 제출한 세트만, 정답·violates·근거 부록, 근거 모드, 자료 속 Markdown을 코드 블록으로 | D58 |
 | `test_model_facing_text.py` | 모델에 보내는 구조화 출력 스키마(`QuestionDraft`·`PlanDraft`)와 코치 도구 설명이 영어로 남아 있는지(주석은 한국어) | D57 |
 | `test_ui.py` | Streamlit AppTest: 전체 흐름, 새로고침 복원, 코치 대화, 입력 폼, 이어 풀기, 지난 세트, 단어장 | D42·D47·D52~D54 |
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-05 최종 확인: 기본 316 통과(T24 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
+2026-11-05 최종 확인: 기본 325 통과(T25 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
 
 **Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
 
@@ -156,7 +157,21 @@ python -m misslens.cli export-questions --set 4 --evidence sources   # 한 세�
 
 주의: 근거 발췌에는 수집한 강의 자료가 들어 있다. 개인 대화에 원문을 넣고 싶지 않으면 `--evidence sources`나 `none`을 쓴다. 근거는 출제 때와 같은 질의로 다시 검색한 것이라 출제 뒤 색인이 바뀌었으면 다를 수 있다.
 
-## 6. 실행 환경 메모
+## 6. 문제 생성 품질 라운드 평가 (D59)
+
+외부 검토는 정확하지만 사람이 붙여 넣어야 해서 반복이 느리다. 그래서 같은 기준의 판정기를 저장소에 두고, 외부 검토로 판정기를 보정한 뒤 라운드를 반복한다. 방법·라운드 요약·판정기 보정·발견은 [evaluation/README.md](../evaluation/README.md).
+
+```bash
+python -m misslens.cli question-eval --round 1 --existing --notes "기준선"          # 1라운드 문제(샌드박스)를 판정
+python -m misslens.cli question-eval --round 3 --notes "바꾼 것"                    # 같은 세부 항목 20개로 새로 생성 → 판정
+python -m misslens.cli question-eval --round 3 --from-set 2 --notes "판정기 수정"    # 이미 만든 라운드 세트를 다시 채점
+```
+
+- 실호출이다(생성 Sonnet 약 25회 + 근거 확인 Haiku + 판정 Sonnet 40회). 할당량을 확인하고 실행한다.
+- 출제 지시문, 근거 확인, 판정기를 바꾸면 새 라운드를 돌리고 리포트의 '앞 라운드' 열로 비교한다. 판정기를 바꿨으면 앞 라운드도 같은 판정기로 다시 채점해야 비교가 공정하다.
+- 라운드가 만든 `data/eval/round<N>_questions.md`를 외부 검토(§5)에 넣어 판정기 점수를 확인한다.
+
+## 7. 실행 환경 메모
 
 - **샌드박스**(`MISSLENS_SANDBOX=1`): 학습 기록·체크포인트를 `data/sandbox/`에 따로 둔다. 화면 검토와 리허설은 여기서 한다. 색인은 공유(읽기 전용)라 검색 평가 결과는 같다.
 - **`/verify`**: 커밋 전에 실행한다. 테스트가 `tests/`에 따로 있어 매핑이 `~/.gstack/projects/misslens/pregate.json`에 있다. 새 소스 폴더를 만들면 거기에 테스트 매핑을 추가한다. 녹색일 때만 커밋한다.

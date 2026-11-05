@@ -466,6 +466,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="근거 부록: full=발췌 포함(기본), sources=출처 이름만, none=넣지 않음")
     xq.add_argument("-o", "--output", metavar="PATH", help="기본값 data/review/questions-<날짜>.md (샌드박스는 data/sandbox/review/)")
     xq.add_argument("--exam", default="ccar-f")
+    qe = sub.add_parser("question-eval", help="문제 생성 품질 라운드 평가: 인-아웃 세트 생성 → LLM 판정 → 리포트(D59)")
+    qe.add_argument("--round", type=int, required=True, dest="round_no", help="라운드 번호(리포트 파일 이름)")
+    qe.add_argument("--existing", action="store_true",
+                    help="새로 만들지 않고 세트 파일의 1라운드 문제(round1_source)를 판정한다")
+    qe.add_argument("--from-set", type=int, metavar="ID",
+                    help="새로 만들지 않고 평가용 DB의 이 세트를 다시 판정한다(판정기를 바꾼 뒤 재채점)")
+    qe.add_argument("--limit", type=int, help="앞에서 N개 세부 항목만(시험 실행용)")
+    qe.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
+    qe.add_argument("--exam", default="ccar-f")
     pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
     pr.add_argument("action", choices=["import"])
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
@@ -531,6 +540,8 @@ def main(argv: list[str] | None = None) -> int:
             eval_command(cli, args.export)
         elif args.cmd == "export-questions":
             return export_questions_command(cli, args)
+        elif args.cmd == "question-eval":
+            return question_eval_command(cli, args)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 
@@ -696,6 +707,68 @@ def export_questions_command(cli: CLI, args: argparse.Namespace) -> int:
     cli.console.print(f"{out.questions}문제(세트 {', '.join(map(str, out.sets))}, 세부 항목 {len(out.tasks)}개)를 "
                       f"저장했습니다: {path}\n파일을 Claude Opus나 GPT 대화에 첨부하거나 붙여 넣으세요. "
                       "검토 지시문이 파일 맨 위에 있습니다.")
+    return 0
+
+
+def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
+    """인-아웃 세트로 문제를 만들고(또는 1라운드 문제를 읽고) 판정기로 채점해 라운드 리포트를 저장한다(D59)."""
+    from misslens.agents.generator.context import RetrievalContext
+    from misslens.bedrock import PROJECT_ROOT, load_model_config
+    from misslens.llm import get_llm
+    from misslens.practice import PracticeSamples, load_bank
+    from misslens.question_eval import (ROUNDS_DB, SetItem, generate_round, judge_all, load_question_set,
+                                        load_round_metrics, metrics, render_report, save_round)
+    from misslens.review_export import build_review_markdown
+
+    pack = cli.pack
+    items, meta = load_question_set(pack.exam_id)
+    items = items[:args.limit] if args.limit else items
+    index = open_index(pack.exam_id)
+    context = RetrievalContext(index) if index is not None and len(index) else None
+    say = lambda m: cli.console.print(escape(m))  # noqa: E731
+    gen_stats = None
+    if args.existing:
+        src = Ledger(PROJECT_ROOT / meta["round1_source"])
+        by_id = {q["id"]: q for s in src.list_sets(pack.exam_id, limit=10_000) for q in src.set_questions(s["id"])}
+        questions = [(f"r{args.round_no}-q{it.round1_qid}", it, by_id[it.round1_qid]["payload"])
+                     for it in items if it.round1_qid in by_id]
+    elif args.from_set is not None:
+        rounds = Ledger(ROUNDS_DB)
+        made = {q["task_id"]: q for q in rounds.set_questions(args.from_set) if q["status"] == "ready"}
+        questions = [(f"r{args.round_no}-q{n + 1}", SetItem(it.task_id), made[it.task_id]["payload"])
+                     for n, it in enumerate(items) if it.task_id in made]
+        set_id = args.from_set
+    else:
+        ROUNDS_DB.parent.mkdir(parents=True, exist_ok=True)
+        rounds = Ledger(ROUNDS_DB)
+        bank = load_bank(pack.exam_id)
+        samples = PracticeSamples(bank) if bank else None
+        gen = Generator(pack, rounds, context=context, samples=samples,
+                        copy_guard=samples.copy_reason if samples else None)
+        say(f"{len(items)}개 세부 항목으로 문제 생성 중(평가용 DB: {ROUNDS_DB})")
+        set_id, gen_stats = generate_round(gen, rounds, pack, [SetItem(i.task_id) for i in items], progress=say)
+        made = {q["task_id"]: q for q in rounds.set_questions(set_id) if q["status"] == "ready"}
+        questions = [(f"r{args.round_no}-q{n + 1}", SetItem(it.task_id), made[it.task_id]["payload"])
+                     for n, it in enumerate(items) if it.task_id in made]
+        md = build_review_markdown(pack, rounds, set_ids=[set_id], context=context, statuses=("generating",))
+        export = ROUNDS_DB.parent / f"round{args.round_no}_questions.md"
+        export.write_text(md.markdown, encoding="utf-8")
+        say(f"외부 검토용 파일: {export}")
+    judge_model = load_model_config().roles["judge"]["model"]
+    say(f"판정 중: {len(questions)}문제 · {judge_model}")
+    results = judge_all(get_llm("judge"), pack, questions, context, progress=say)
+    m = metrics(results, gen_stats)
+    if not args.existing:
+        m["rounds_db_set"] = set_id
+    if args.from_set is not None:          # 다시 채점: 같은 라운드의 생성 통계는 이전 기록에서 이어받는다
+        before = load_round_metrics(args.round_no) or {}
+        if before.get("generation"):
+            m["generation"] = before["generation"]
+    report = render_report(args.round_no, m, results, previous=load_round_metrics(args.round_no - 1),
+                           notes=args.notes or "-", judge_model=judge_model)
+    path = save_round(args.round_no, m, results, report)
+    cli.console.print(f"판정기 OK {m['judge_ok_rate']} · violates 유효 {m['violates_valid_rate']} · "
+                      f"정답 하나 {m['single_answer_rate']} → {path}")
     return 0
 
 

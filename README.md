@@ -7,11 +7,12 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D58) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D59) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
 | [docs/testing.md](docs/testing.md) | 테스트 계층, 실행 시점, 검색 품질 평가(지표·정답 질의·기준선) |
+| [evaluation/README.md](evaluation/README.md) | 문제 생성 품질 라운드 평가: 방법, 라운드 요약, 판정기 보정, 발견 |
 | [CLAUDE.md](CLAUDE.md) | 코딩 에이전트용 규칙 |
 
 ## 한눈에 보는 구조
@@ -326,6 +327,7 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 | `retrieval-eval [--save-baseline] [--json PATH]` | 실제 색인의 검색 점수(정답 질의 30개, hit@k·MRR), 출제 근거 품질, 색인 건강 검사를 기준선과 비교 |
 | `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
+| `question-eval --round N [--existing\|--from-set ID] [--notes 문장]` | 문제 생성 품질 라운드 평가: 인-아웃 세트로 생성 → LLM-as-Judge → `evaluation/round<N>_report.md`(D59, 실호출) |
 | `export-questions [--set ID] [--evidence full\|sources\|none] [-o PATH]` | 제출한 세트의 문제(정답·오답 근거·해설)와 근거 발췌를 검토 지시문과 함께 Markdown으로 저장(기본 `data/review/`). Claude Opus나 GPT 대화에 붙여 넣어 사후 검토한다(모델 호출 없음, D58) |
 
 모든 명령은 `python -m misslens.cli <명령>`으로 실행하고, 시험은 `--exam ccar-f`(기본값)로 고릅니다.
