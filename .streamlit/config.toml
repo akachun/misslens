@@ -7,3 +7,8 @@ toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false
+
+[server]
+# No first-run "Email:" prompt from Streamlit (it only asks when not headless). The browser is not opened
+# automatically: open the URL printed in the terminal (http://localhost:8501).
+headless = true

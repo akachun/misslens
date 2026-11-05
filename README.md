@@ -236,7 +236,7 @@ flowchart LR
 
 ## 화면
 
-`streamlit run app/main.py`(시연·검토는 `MISSLENS_SANDBOX=1`을 붙여 실제 기록과 분리).
+`streamlit run app/main.py`(시연·검토는 `MISSLENS_SANDBOX=1`을 붙여 실제 기록과 분리). 실행하면 터미널에 나오는 주소(기본 http://localhost:8501)를 브라우저에서 엽니다. `.streamlit/config.toml`이 헤드리스 모드라 브라우저가 자동으로 열리지 않고, Streamlit의 첫 실행 이메일 질문도 나오지 않습니다.
 
 | 탭 | 하는 일 |
 |---|---|

@@ -122,6 +122,8 @@ python -m misslens.cli retrieval-eval   # 검색 품질 점수(기준선과 비�
 환경변수를 붙여 실행할 때(예: 샌드박스 모드) macOS·Linux는 `MISSLENS_SANDBOX=1 streamlit run app/main.py`,
 Windows PowerShell은 `$env:MISSLENS_SANDBOX="1"; streamlit run app/main.py`입니다. 교안 수집(`collect`)은 평가에 필요 없습니다.
 
+`streamlit run` 뒤 터미널에 나오는 주소(기본 http://localhost:8501)를 브라우저에서 엽니다(자동으로 열리지 않음,
+Streamlit의 첫 실행 이메일 질문도 나오지 않게 설정돼 있음. 다른 설정으로 질문이 나오면 Enter로 건너뜀).
 처음 검색할 때 임베딩 모델 bge-m3(약 2GB)를 내려받습니다. 시연 순서는 `docs/demo.md`, 테스트 안내는 `docs/testing.md`에 있습니다.
 """
 
