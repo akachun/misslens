@@ -244,3 +244,4 @@
 | 2026-11-05 | T17: 한국어 질의 약점을 질의 커버리지 가중 RRF로 개선(D51), 기준선 갱신. `docs/testing.md` 작성, CLAUDE.md 문서 지도·README에 연결 |
 | 2026-11-05 | 데모 피드백: 자연어 요청 칸이 한 줄이라 잘리고 Enter로 제출되지 않던 문제 → 여러 줄 입력 + 폼(Ctrl/⌘+Enter 제출, Enter 줄바꿈), 사이드바 380px, 보낸 요청 표시. 코치 질문 칸도 같게. 실제 브라우저로 Enter·Ctrl+Enter·비우기 확인 |
 | 2026-11-05 | 문서 전체 대조: TASK 머리말·인계 메모 갱신, ARCHITECTURE 결정 범위(D51)·§2 서브그래프 구성·§11(docs/testing·evals·evaluate)·결정 표에 빠져 있던 D2·D7(대체됨)·D24·D25(TODO) 추가, README 결정 범위, SERVICE 흐름에 자기 판단·코치 질문, CLAUDE.md 문서 지도에 demo.md |
+| 2026-11-05 | 데모 피드백: 사이드바를 접어도 380px 자리가 남아 풀이 화면이 넓어지지 않던 문제 → 폭 고정 CSS를 펼친 상태(`data-collapsed='false'`)에만 적용. 브라우저로 펼침 380px / 접힘 시 본문 0~1400px 전체 / 다시 펼침 확인 |

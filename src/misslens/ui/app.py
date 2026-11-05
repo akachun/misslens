@@ -32,8 +32,10 @@ POLL_SECONDS = 1.5
 UPLOAD_DIR = PROJECT_ROOT / "data" / "sources" / "uploads"
 LABELS = {"reading": "해석 실수", "uncertain": "불확실", "concept": "개념 실수"}
 SUBMIT_HINT = "Ctrl+Enter(macOS는 ⌘+Enter)로 보내기 · Enter는 줄바꿈"
-# Wider sidebar so a long request stays readable (users can still drag the edge).
-SIDEBAR_CSS = "<style>section[data-testid='stSidebar']{min-width:380px;width:380px}</style>"
+# Wider sidebar so a long request stays readable (users can still drag it wider). Only while expanded: Streamlit
+# hides a collapsed sidebar by shifting it by its own width, so a fixed width there left an empty 380px strip and
+# the main area did not grow (demo feedback).
+SIDEBAR_CSS = "<style>section[data-testid='stSidebar'][data-collapsed='false']{min-width:380px}</style>"
 
 
 # --- resources (one per process) -------------------------------------------------------------

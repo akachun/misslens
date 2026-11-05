@@ -249,3 +249,10 @@ def test_sidebar_request_is_multiline_form_and_shows_what_was_sent(res):
     assert any(long in m.value for m in at.sidebar.markdown)
     # clear_on_submit and Ctrl/⌘+Enter are browser behaviour that AppTest does not replay; checked in a real browser.
     assert any("Ctrl+Enter" in c.value for c in at.sidebar.caption)
+
+
+def test_sidebar_width_applies_only_while_expanded():
+    """A fixed width on the collapsed sidebar left an empty strip and kept the main area narrow (demo feedback).
+    Layout itself was checked in a browser: collapsed -> main area starts at 0 and spans the window."""
+    assert "[data-collapsed='false']" in ui.SIDEBAR_CSS
+    assert "width:380px" not in ui.SIDEBAR_CSS.replace("min-width:380px", "")
