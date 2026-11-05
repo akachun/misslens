@@ -74,7 +74,7 @@ def test_content_hash_ignores_whitespace_changes():
 def test_expand_paths_walks_folders(tmp_path):
     (tmp_path / "sub").mkdir()
     for name in ("a.md", "sub/b.pdf", "c.png"):
-        (tmp_path / name).write_text("x")
+        (tmp_path / name).write_text("x", encoding="utf-8")
     assert [p.name for p in expand_paths([str(tmp_path)])] == ["a.md", "b.pdf"]
 
 

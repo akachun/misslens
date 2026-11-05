@@ -25,9 +25,9 @@ def test_deny_list_blocks_secrets_and_local_state():
 
 def test_secret_scan_finds_planted_credentials(tmp_path):
     clean = tmp_path / "ok.md"
-    clean.write_text("AWS_ACCESS_KEY_ID=\nsee README for credentials\n")
+    clean.write_text("AWS_ACCESS_KEY_ID=\nsee README for credentials\n", encoding="utf-8")
     leaked = tmp_path / "leak.yaml"
-    leaked.write_text("aws_secret_access_key: " + "a" * 40 + "\nkey: AKIA" + "B" * 16 + "\n")
+    leaked.write_text("aws_secret_access_key: " + "a" * 40 + "\nkey: AKIA" + "B" * 16 + "\n", encoding="utf-8")
     hits = mh.scan_secrets([clean, leaked], tmp_path)
     assert hits and all(h.startswith("leak.yaml") for h in hits) and len(hits) == 2
 
@@ -48,6 +48,10 @@ def test_sqlite_copy_is_a_consistent_single_file(tmp_path):
     assert not (tmp_path / "out" / "copy.sqlite-wal").exists()
 
 
+import pytest
+
+
+@pytest.mark.skipif(not mh.is_git_checkout(), reason="needs the git checkout (an unpacked hand-off zip has no .git)")
 def test_plan_never_includes_denied_paths():
     included, _, _ = mh.plan("none")
     assert included and not any(mh.denied(p) for p in included)

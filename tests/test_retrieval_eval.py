@@ -69,7 +69,7 @@ def test_baseline_regression_is_reported(index, tmp_path):
                 "expect": [{"text": ["tool_choice"]}]})
     rep = evaluate(index, PACK, g)
     path = save_baseline(rep, root=tmp_path / "evals")
-    base = json.loads(path.read_text())
+    base = json.loads(path.read_text(encoding="utf-8"))
     assert "regressions" not in base and compare(rep.as_dict(), base, 0.05) == []
     worse = rep.as_dict()
     worse["golden"]["modes"]["plain"]["hit@5"] = base["golden"]["modes"]["plain"]["hit@5"] - 0.2

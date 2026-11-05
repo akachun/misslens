@@ -32,6 +32,8 @@
 | `test_sandbox.py` | 샌드박스 경로, 공유 자료 쓰기 거부 | D45 |
 | `test_resume.py` | 계획 기록, 제출 전 답안, 생성 재개, 세트 기록 출처 | D52·D53 |
 | `test_vocab.py` | 단어장 추출(글자 그대로·긴 구절 필터·빠진 문제 재요청), 누적·외움 | D54 |
+| `test_handoff.py` | 평가용 zip: 거부 목록, 자격 증명 검사, SQLite 복사, 포함 목록(git 체크아웃에서만) | D56 |
+| `test_portability.py` | Windows 대비: 텍스트 파일 읽기·쓰기에 `encoding='utf-8'` 명시(한국어 Windows 기본 cp949) | D56 |
 | `test_ui.py` | Streamlit AppTest: 전체 흐름, 새로고침 복원, 코치 대화, 입력 폼, 이어 풀기, 지난 세트, 단어장 | D42·D47·D52~D54 |
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |

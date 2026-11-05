@@ -51,7 +51,7 @@ SECRET_RE = [
 TEXT_SUFFIXES = {".py", ".md", ".txt", ".yaml", ".yml", ".toml", ".json", ".jsonl", ".cfg", ".ini", ".html", ".htm",
                  ".mmd", ".csv", ".sh", ".env"}
 
-HANDOFF = """# MissLens 평가용 패키지
+HANDOFF = r"""# MissLens 평가용 패키지
 
 {date} 생성 · 커밋 `{commit}` · 학습 기록: {record}
 
@@ -72,11 +72,27 @@ HANDOFF = """# MissLens 평가용 패키지
 
 ## 실행
 
+[uv](https://docs.astral.sh/uv/)와 Python 3.11 이상이 필요합니다. 압축을 푼 `misslens` 폴더에서 실행합니다.
+
+**macOS · Linux (bash/zsh)**
+
 ```bash
-uv venv --python 3.12 .venv && source .venv/bin/activate
+uv venv --python 3.12 .venv
+source .venv/bin/activate
 uv pip install -e ".[dev]"
 pytest                                   # 모델 없이 도는 기본 테스트
 ```
+
+**Windows (PowerShell)**
+
+```powershell
+uv venv --python 3.12 .venv
+.\.venv\Scripts\Activate.ps1             # 실행 정책 오류가 나면 먼저: Set-ExecutionPolicy -Scope Process Bypass
+uv pip install -e ".[dev]"
+pytest
+```
+
+(명령 프롬프트 cmd.exe에서는 `.venv\Scripts\activate.bat`. PowerShell 5.1은 `&&`를 지원하지 않으니 한 줄에 하나씩 실행합니다.)
 
 모델 호출에는 저장소 루트의 `.env`에 Amazon Bedrock 자격 증명이 필요합니다(Sonnet 4.6, Haiku 4.5 사용 승인).
 
@@ -92,6 +108,9 @@ streamlit run app/main.py               # 화면(학습·단어장·자료·현�
 python -m misslens.cli retrieval-eval   # 검색 품질 점수(기준선과 비교)
 ```
 
+환경변수를 붙여 실행할 때(예: 샌드박스 모드) macOS·Linux는 `MISSLENS_SANDBOX=1 streamlit run app/main.py`,
+Windows PowerShell은 `$env:MISSLENS_SANDBOX="1"; streamlit run app/main.py`입니다. 교안 수집(`collect`)은 평가에 필요 없습니다.
+
 처음 검색할 때 임베딩 모델 bge-m3(약 2GB)를 내려받습니다. 시연 순서는 `docs/demo.md`, 테스트 안내는 `docs/testing.md`에 있습니다.
 """
 
@@ -100,7 +119,14 @@ def denied(rel: str) -> bool:
     return any(p.search(rel) for p in DENY_RE)
 
 
+def is_git_checkout() -> bool:
+    return (ROOT / ".git").exists()
+
+
 def tracked_files() -> list[str]:
+    if not is_git_checkout():
+        raise SystemExit("make_handoff_zip.py runs from the git checkout (it ships git-tracked files only); "
+                         "this folder has no .git (an unpacked hand-off zip?)")
     out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     return [line for line in out.splitlines() if line and (ROOT / line).is_file()]
 

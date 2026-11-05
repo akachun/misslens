@@ -244,7 +244,7 @@ def test_unknown_role():
 def test_seed_from_model_status(tmp_path):
     p = tmp_path / "model_status.json"
     now = datetime.now(timezone.utc)
-    p.write_text(json.dumps({"probed_at": now.isoformat(), "quota_exceeded": [f"{EP[0]}:{SONNET}"]}))
+    p.write_text(json.dumps({"probed_at": now.isoformat(), "quota_exceeded": [f"{EP[0]}:{SONNET}"]}), encoding="utf-8")
     st = RouterState()
     assert st.seed_from_model_status(p, 900, now=100.0) == [(EP[0], SONNET)]
     assert st.is_cooling((EP[0], SONNET), 100.0 + 899)
@@ -256,7 +256,7 @@ def test_seed_from_model_status(tmp_path):
 
     naive = tmp_path / "naive.json"   # no timezone in probed_at -> treated as UTC, no crash
     naive.write_text(json.dumps({"probed_at": now.replace(tzinfo=None).isoformat(),
-                                 "quota_exceeded": [f"{EP[0]}:{SONNET}"]}))
+                                 "quota_exceeded": [f"{EP[0]}:{SONNET}"]}), encoding="utf-8")
     assert RouterState().seed_from_model_status(naive, 900, now=0.0) == [(EP[0], SONNET)]
 
 

@@ -52,7 +52,7 @@ def test_resolve_endpoints_rejects_unknown():
 
 def test_unknown_endpoint_in_availability_rejected(tmp_path: Path):
     p = tmp_path / "m.yaml"
-    p.write_text("endpoints: [{name: a, region: r, prefix: us}]\navailability: {b: [m]}\nroles: {}\n")
+    p.write_text("endpoints: [{name: a, region: r, prefix: us}]\navailability: {b: [m]}\nroles: {}\n", encoding="utf-8")
     with pytest.raises(ValueError):
         load_model_config(p)
 
