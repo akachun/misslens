@@ -23,7 +23,7 @@ Supervisor 그래프 하나가 모든 요청을 7개 에이전트로 보냅니�
 | Supervisor | 명령은 바로 분기, 자유 발화는 의도·영역·문제 수 추출, 애매하면 실행하지 않음 | LangGraph 부모 그래프 | Haiku 4.5 (자유 발화만) |
 | Planner | 학습 기록 통계로 오늘의 계획 제안 → **interrupt①** 승인·수정·취소 | 서브그래프 | Haiku 4.5 |
 | Generator | 세부 항목 선택 → 검색 → 이중 언어 문제 → validator → 근거 검증 → 순차 스트리밍 | 코드 파이프라인 + 백그라운드 스레드 | Sonnet 4.6 생성 / Haiku 4.5 검증 |
-| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 판정 표, 자기 판단, 놓친 문구 | 코드(판정은 ledger의 순수 함수) | — |
+| Grader & Diagnostician | 제출 채점, 재질문 폼(오답 + 미끼), 판정 표, 자기 판단, 놓친 문구, 세트 단어장(정답을 가른 영어 표현·뜻, 누적 '단어장' 탭) | 코드(판정은 ledger의 순수 함수) | Haiku 4.5 (단어장) |
 | Coach | 오답 해설: 자료 검색·학습 기록 tool을 스스로 골라 쓰고 출처 표시 | ReAct 서브그래프(tool 사용) | Sonnet 4.6 |
 | Reporter | 범위·정답률·실수 비율(미끼 기준선과 나란히)·놓친 문구 순위·진단 일치율 | 코드 | 없음 |
 | Collector | 학습자 로그인 프로필로 지정 교안을 읽기 전용 수집 → **interrupt②** 로그인 대기 | 서브그래프 | 없음 |
@@ -309,7 +309,7 @@ streamlit run app/main.py                       # 화면(학습·자료·현황�
 |---|---|---|
 | `exams/<exam_id>/exam.yaml` | 시험 팩(영역·비중·세부 항목·언어·형식, version) | 포함 |
 | `exams/<exam_id>/sources.yaml` | 수집 대상 URL과 사이트 규칙 | 포함 |
-| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패), 계획 기록, 제출 전 답안 | 제외 |
+| `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패), 계획 기록, 제출 전 답안, 단어장 | 제외 |
 | `data/checkpoints.sqlite` | LangGraph 체크포인트(interrupt 재개) | 제외 |
 | `data/index/<exam_id>/` | FAISS 색인과 청크 | 제외 |
 | `data/sources/` | 넣은 자료, 수집본, 연습 문제 원본 | 제외 |
