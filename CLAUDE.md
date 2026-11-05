@@ -74,6 +74,7 @@ python -m misslens.cli collect run             # sources.yaml 수집 → 색인(
 python -m misslens.cli collect reindex skilljar # 정리 규칙(sources.yaml) 바꾼 뒤 수집본 재정리·재색인(재수집 없음)
 python -m misslens.cli practice import         # 연습 문제 파일 → 문체 예시 은행(data/practice/)
 python -m misslens.cli eval --export           # 진단 일치율 + eval 데이터(data/eval/)
+python -m misslens.cli export-questions        # 제출한 세트의 문제 → 상위 모델(Opus·GPT) 검토용 Markdown(data/review/)
 python -m misslens.cli retrieval-eval          # 검색 점수·색인 건강 vs 기준선(evals/ccar-f/)
 pytest -m realdata                 # 실제 색인 회귀 검사(기본 테스트에서는 제외)
 python scripts/make_handoff_zip.py --list   # 비공개 평가용 zip 미리 보기(만들 때는 --list 없이). 손으로 묶지 않는다

@@ -459,6 +459,13 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--export", nargs="?", const="", metavar="PATH",
                     help="기본값 data/eval/misses-<날짜>.yaml (git 제외)")
     ev.add_argument("--exam", default="ccar-f")
+    xq = sub.add_parser("export-questions", help="생성된 문제를 상위 모델 검토용 Markdown으로 내보내기(D58)")
+    xq.add_argument("--set", type=int, action="append", dest="sets", metavar="ID",
+                    help="이 세트만(여러 번 지정 가능). 생략하면 제출한 세트 전부")
+    xq.add_argument("--evidence", choices=["full", "sources", "none"], default="full",
+                    help="근거 부록: full=발췌 포함(기본), sources=출처 이름만, none=넣지 않음")
+    xq.add_argument("-o", "--output", metavar="PATH", help="기본값 data/review/questions-<날짜>.md (샌드박스는 data/sandbox/review/)")
+    xq.add_argument("--exam", default="ccar-f")
     pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
     pr.add_argument("action", choices=["import"])
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
@@ -522,6 +529,8 @@ def main(argv: list[str] | None = None) -> int:
             return retrieval_eval_command(cli, args)
         elif args.cmd == "eval":
             eval_command(cli, args.export)
+        elif args.cmd == "export-questions":
+            return export_questions_command(cli, args)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 
@@ -665,6 +674,29 @@ def eval_command(cli: CLI, export: str | None) -> None:
         path = Path(export) if export else PROJECT_ROOT / "data" / "eval" / f"misses-{datetime.now():%Y%m%d}.yaml"
         n = export_eval(cli.ledger, cli.pack, path)
         cli.console.print(f"{n}개를 저장했습니다: {path}")
+
+
+def export_questions_command(cli: CLI, args: argparse.Namespace) -> int:
+    """제출한 세트의 문제를 검토 지시문·근거 부록과 함께 Markdown 파일로 저장한다(D58). 모델 호출 없음."""
+    from misslens.agents.generator.context import RetrievalContext
+    from misslens.paths import state_dir
+    from misslens.review_export import build_review_markdown, collect_questions
+
+    if not collect_questions(cli.ledger, cli.pack.exam_id, args.sets):
+        cli.console.print("내보낼 문제가 없습니다. 제출한 세트(제출·리뷰 완료)의 문제만 내보냅니다.")
+        return 1
+    context = None
+    if args.evidence != "none":
+        index = open_index(cli.pack.exam_id)
+        context = RetrievalContext(index) if index is not None and len(index) else None
+    out = build_review_markdown(cli.pack, cli.ledger, set_ids=args.sets, evidence=args.evidence, context=context)
+    path = Path(args.output) if args.output else state_dir() / "review" / f"questions-{datetime.now():%Y%m%d-%H%M}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(out.markdown, encoding="utf-8")
+    cli.console.print(f"{out.questions}문제(세트 {', '.join(map(str, out.sets))}, 세부 항목 {len(out.tasks)}개)를 "
+                      f"저장했습니다: {path}\n파일을 Claude Opus나 GPT 대화에 첨부하거나 붙여 넣으세요. "
+                      "검토 지시문이 파일 맨 위에 있습니다.")
+    return 0
 
 
 def reindex_collected(cli: CLI, pack: ExamPack, ledger: Ledger, srcs: Any, names: list[str]) -> int:

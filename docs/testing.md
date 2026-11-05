@@ -34,12 +34,13 @@
 | `test_vocab.py` | 단어장 추출(글자 그대로·긴 구절 필터·빠진 문제 재요청), 누적·외움 | D54 |
 | `test_handoff.py` | 평가용 zip: 거부 목록, 자격 증명 검사, SQLite 복사, 포함 목록(git 체크아웃에서만) | D56 |
 | `test_portability.py` | Windows 대비: 텍스트 파일 읽기·쓰기에 `encoding='utf-8'` 명시(한국어 Windows 기본 cp949) | D56 |
+| `test_review_export.py` | 상위 모델 검토용 내보내기: 제출한 세트만, 정답·violates·근거 부록, 근거 모드, 자료 속 Markdown을 코드 블록으로 | D58 |
 | `test_model_facing_text.py` | 모델에 보내는 구조화 출력 스키마(`QuestionDraft`·`PlanDraft`)와 코치 도구 설명이 영어로 남아 있는지(주석은 한국어) | D57 |
 | `test_ui.py` | Streamlit AppTest: 전체 흐름, 새로고침 복원, 코치 대화, 입력 폼, 이어 풀기, 지난 세트, 단어장 | D42·D47·D52~D54 |
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-05 최종 확인: 기본 312 통과(T23 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
+2026-11-05 최종 확인: 기본 316 통과(T24 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
 
 **Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
 
@@ -140,7 +141,22 @@ python -m misslens.cli eval                 # 일치율과 판정→내 판단 �
 python -m misslens.cli eval --export        # data/eval/misses-<날짜>.yaml (tests/fixtures/eval_misses.yaml과 같은 형식)
 ```
 
-## 5. 실행 환경 메모
+## 5. 생성 문제 사후 검토 (D58)
+
+앱 안의 검사(validator, Haiku 근거 확인)는 형식과 '정답이 자료로 뒷받침되는지'만 본다. 정답이 하나뿐인지, 오답 보기의 `violates`가 맞는지, 사실·번역 오류는 상위 모델로 표본 검토한다.
+
+```bash
+python -m misslens.cli export-questions                    # 제출한 세트 전부, 근거 발췌 포함
+python -m misslens.cli export-questions --set 4 --evidence sources   # 한 세트, 출처 이름만(파일이 작아짐)
+```
+
+1. 만든 파일을 Claude Opus 대화에 첨부한다(검토 지시문과 답변 형식이 맨 위에 있다).
+2. 같은 계열의 착각을 피하려면 같은 파일을 GPT에도 넣어 두 결과를 비교한다.
+3. '수정·폐기'가 몰리는 유형(복수 정답, violates 오류, 사실 오류 등)을 보고 생성 지시문이나 근거 확인을 고친다. 검토 결과는 학습 통계에 넣지 않는다.
+
+주의: 근거 발췌에는 수집한 강의 자료가 들어 있다. 개인 대화에 원문을 넣고 싶지 않으면 `--evidence sources`나 `none`을 쓴다. 근거는 출제 때와 같은 질의로 다시 검색한 것이라 출제 뒤 색인이 바뀌었으면 다를 수 있다.
+
+## 6. 실행 환경 메모
 
 - **샌드박스**(`MISSLENS_SANDBOX=1`): 학습 기록·체크포인트를 `data/sandbox/`에 따로 둔다. 화면 검토와 리허설은 여기서 한다. 색인은 공유(읽기 전용)라 검색 평가 결과는 같다.
 - **`/verify`**: 커밋 전에 실행한다. 테스트가 `tests/`에 따로 있어 매핑이 `~/.gstack/projects/misslens/pregate.json`에 있다. 새 소스 폴더를 만들면 거기에 테스트 매핑을 추가한다. 녹색일 때만 커밋한다.
