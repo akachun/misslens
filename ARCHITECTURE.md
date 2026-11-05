@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D54) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D55) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -426,6 +426,7 @@ misslens/
 │   ├── ui/app.py   # Streamlit 화면(§10)
 │   └── graph.py    # Supervisor 그래프: route → planner/generate/report/collect_<site>/ingest/submit (D41)
 ├── app/            # Streamlit 진입점(main.py) → src/misslens/ui/app.py
+├── .streamlit/config.toml   # 최소 툴바(Deploy·개발자 메뉴 숨김), 사용 통계 끔(D55)
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
 ├── scripts/draw_graph.py     # 그래프 그림 → docs/graphs/*.mmd (README에 포함)
@@ -498,6 +499,7 @@ misslens/
 | 엔드포인트 5개 × 모델 4개 조합이 지금 응답하는지(할당량 초과 여부) | `scripts/probe_models.py` → `data/model_status.json` | 할당량 초과 조합은 시작부터 쿨다운. 모델 존재 여부는 §6.2 표로 확인 완료. **2026-11-04 확인: 20개 모두 응답, 할당량 초과 없음, Sonnet 4.6 구조화 출력 성공** |
 | bge-m3 다운로드와 로드 | 개발 시작 직후 확인 | 실패하면 검색 방식을 다시 결정. **2026-11-04 확인: 1024차원, MPS 로드 성공 → D17 유지** |
 | CCA-F 공식 세부 항목(30개 추정) | 과정 자료 | `exam.yaml` 확정(첫 실제 세트 전). **2026-11-04 확인: 시험 가이드 v1.0 기준 30개, `exam.yaml` version 2(final). 2026-11-05 전체 가이드 PDF로 재대조, 제목 잘림 수정해 version 3(D37)** |
+| 모델 제공자 전환(제출 후): 개인 구독(ChatGPT·Claude)으로 사용 | 각 사 최신 정책(구독에 API 포함 여부·자동화 허용 범위) | 구독은 보통 API 권한이 없어 API 키(사용량 과금)가 필요. A안 API 키 + 역할별 제공자(Claude·GPT) 선택: `llm.py`·`models.yaml`·테스트 2개만 수정, 에이전트 그대로, 1~1.5일. B안 구독 CLI(`claude -p` 등) 호출: 약관 확인 필요, 지연·한도, 코치 tool 재설계, 2~3일+. GPT는 프롬프트·엄격 JSON 스키마 재검증 필요. TODOS.md '제출 후 1순위' |
 | 사내 자료의 외부 모델 반입 승인 | 담당자 확인 | 승인 전에는 공개 자료만 사용. **2026-11-05 승인** |
 | 교안 사이트 이용약관 | 약관 확인 | 허용하지 않으면 수동 저장 방식 사용. **2026-11-05 확인, Collector로 수집** |
 | 과정 평가 기준(HITL·RAG·멀티 에이전트) | 강사 확인 | 데모 시나리오 조정. **여러 패턴 권장, 학습자 우선순위: 멀티 에이전트 > RAG > HITL** |

@@ -2,6 +2,17 @@
 
 v1 범위 밖이거나 구현 중에 발견했지만 마감 전에 하지 않기로 한 일입니다. 진행 중인 작업은 [TASK.md](TASK.md), 설계와 결정 근거는 [ARCHITECTURE.md](ARCHITECTURE.md)에 있습니다.
 
+## 제출 후 1순위: 모델 제공자 전환 (2026-11-05 검토)
+
+지금은 `.env`의 AWS 자격 증명으로 Amazon Bedrock을 쓴다. 학습자가 실제로 쓰는 것은 GPT·Claude 개인 구독이다. 개인 구독은 보통 API 호출 권한을 포함하지 않으므로, 적용 전에 각 사의 최신 정책을 확인한다.
+
+- [ ] **A안(추천) API 키 + 역할별 제공자 선택**: Anthropic API·OpenAI API 키를 `.env`에 두고 `models.yaml`에서 역할마다 제공자·모델을 고른다(예: 출제 Claude, 라우팅 GPT).
+  - 바뀌는 곳: `llm.py`(제공자별 모델 생성 ChatAnthropic·ChatOpenAI, 오류 분류를 HTTP 429·529·401 기준으로, Bedrock 엔드포인트 5곳 전환을 제공자 간 전환으로), `models.yaml` 구조, `probe_models.py`, `tests/test_llm.py`·`test_bedrock_config.py`. 에이전트·검색·학습 기록·화면은 그대로(모든 호출이 `get_llm(역할)` 한 곳, 쓰는 기능은 invoke·구조화 출력·bind_tools 셋뿐).
+  - GPT 쪽 재검증: 조건 문구 글자 그대로 옮기기, 근거 검증 엄격함, 라우팅 분류(`pytest -m live`를 제공자별로). OpenAI 엄격 JSON 스키마는 모든 필드 필수라 기본값이 있는 스키마는 tool calling 방식으로 받거나 조정.
+  - 작업량 1~1.5일. 비용은 사용량 과금(Sonnet급 10문제 세트 출제·검증·해설에 대략 0.5~1달러 추정, 요금표로 확인).
+- [ ] B안 구독 CLI 호출(`claude -p`, Codex CLI 등): 약관 확인 필요, 호출마다 수 초 지연·구독 한도, 구조화 출력은 JSON 파싱, 코치 tool 사용은 MCP 노출 등 재설계. 2~3일 이상.
+- 근거: ARCHITECTURE §6, §13(확인이 필요한 사항)
+
 ## 배포와 확장
 
 - [ ] **동료 배포 준비**: 개인 AWS 자격 증명 없이 쓸 수 있는 방식(공용 계정, 사내 호스팅) 검토 → 설치 가이드

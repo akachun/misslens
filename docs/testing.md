@@ -36,7 +36,7 @@
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-05 최종 확인: 기본 302 통과, `-m realdata` 1 통과, `-m live` 9 통과.
+2026-11-05 최종 확인: 기본 305 통과(T21 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, T21은 모델 호출을 바꾸지 않음).
 
 ## 2. 언제 무엇을 돌리나
 
