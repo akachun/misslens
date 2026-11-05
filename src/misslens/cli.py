@@ -475,6 +475,10 @@ def main(argv: list[str] | None = None) -> int:
     qe.add_argument("--limit", type=int, help="앞에서 N개 세부 항목만(시험 실행용)")
     qe.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
     qe.add_argument("--exam", default="ccar-f")
+    tr = sub.add_parser("trace", help="로컬 트레이스 요약: 역할별 모델 호출·노드 소요 시간·최근 실행(D60)")
+    tr.add_argument("--day", help="YYYYMMDD(기본 오늘) 또는 all")
+    tr.add_argument("--last", type=int, default=3, help="최근 실행 N개를 단계별로 보여 준다")
+    tr.add_argument("--exam", default="ccar-f")
     pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
     pr.add_argument("action", choices=["import"])
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
@@ -542,6 +546,8 @@ def main(argv: list[str] | None = None) -> int:
             return export_questions_command(cli, args)
         elif args.cmd == "question-eval":
             return question_eval_command(cli, args)
+        elif args.cmd == "trace":
+            return trace_command(cli, args)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 
@@ -769,6 +775,45 @@ def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
     path = save_round(args.round_no, m, results, report)
     cli.console.print(f"판정기 OK {m['judge_ok_rate']} · violates 유효 {m['violates_valid_rate']} · "
                       f"정답 하나 {m['single_answer_rate']} → {path}")
+    return 0
+
+
+def trace_command(cli: CLI, args: argparse.Namespace) -> int:
+    """로컬 트레이스(data/traces/, 샌드박스는 data/sandbox/traces/)를 요약한다. 모델 호출 없음."""
+    from misslens.trace import load_events, recent_traces, summarize, trace_dir
+
+    events = load_events(args.day)
+    if not events:
+        cli.console.print(f"트레이스가 없습니다: {trace_dir()} ({args.day or '오늘'}). 앱이나 CLI로 모델을 호출하면 쌓입니다.")
+        return 1
+    s = summarize(events)
+    tbl = Table("역할", "호출", "오류", "전환", "p50 ms", "p95 ms", "입력 토큰", "출력 토큰", "엔드포인트")
+    for role, r in sorted(s["roles"].items()):
+        tbl.add_row(role, str(r["calls"]), str(r["errors"]), str(r["failovers"]), str(r["p50_ms"]),
+                    str(r["p95_ms"]), f"{r['in']:,}", f"{r['out']:,}",
+                    ", ".join(f"{k} {v}" for k, v in sorted(r["endpoints"].items())))
+    cli.console.print(tbl)
+    if s["nodes"]:
+        nt = Table("그래프 노드", "실행", "오류", "interrupt", "p50 ms", "p95 ms")
+        for node, n in sorted(s["nodes"].items()):
+            nt.add_row(node, str(n["runs"]), str(n["errors"]), str(n["interrupts"]), str(n["p50_ms"]),
+                       str(n["p95_ms"]))
+        cli.console.print(nt)
+    for tid, evs in recent_traces(events, args.last):
+        lines = []
+        for e in evs:
+            where = e.get("node") or e.get("span") or ""
+            if e["kind"] == "llm":
+                tok = f" {e.get('input_tokens') or '-'}→{e.get('output_tokens') or '-'} tok"
+                fo = f" 전환 {e['failovers']}" if e.get("failovers") else ""
+                lines.append(f"  llm  {e['role']:<9} {e['status']:<10} {e['ms']:>6} ms{tok}{fo} "
+                             f"{e.get('endpoint') or ''} {('@' + where) if where else ''}")
+            else:
+                label = e.get("node") if e["kind"] == "node" else e.get("name")
+                extra = " ".join(f"{k}={e[k]}" for k in ("task_id", "tries", "items") if e.get(k) is not None)
+                lines.append(f"  {e['kind']:<4} {label:<14} {e['status']:<10} {e['ms']:>6} ms {extra}")
+        cli.console.print(Panel(escape("\n".join(lines)), title=f"trace {tid} · {evs[0]['ts'][11:19]}"))
+    cli.console.print(f"실행 {s['traces']}개 · 파일 {trace_dir()}")
     return 0
 
 

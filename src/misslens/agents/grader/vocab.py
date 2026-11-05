@@ -23,6 +23,7 @@ from misslens.agents.grader.review import LANGUAGE_NAMES
 from misslens.exam_pack import ExamPack
 from misslens.ledger import Ledger
 from misslens.llm import LLMCallError
+from misslens.trace import span
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,13 @@ def clean_items(items: list[VocabItem], questions: list[dict], attempts: dict[in
 
 def extract_vocab(llm: Any, pack: ExamPack, ledger: Ledger, set_id: int) -> list[dict]:
     """세트의 단어 목록을 한 번 만들어 저장한다. 이후 호출은 저장된 목록을 돌려준다(모델 호출 없음)."""
+    with span("vocab", set_id=set_id) as sc:
+        items = _extract_vocab(llm, pack, ledger, set_id)
+        sc["attrs"]["items"] = len(items)
+        return items
+
+
+def _extract_vocab(llm: Any, pack: ExamPack, ledger: Ledger, set_id: int) -> list[dict]:
     stored = ledger.set_vocab(set_id)
     if stored:
         return stored

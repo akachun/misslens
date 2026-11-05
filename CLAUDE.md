@@ -78,6 +78,7 @@ python -m misslens.cli practice import         # 연습 문제 파일 → 문체
 python -m misslens.cli eval --export           # 진단 일치율 + eval 데이터(data/eval/)
 python -m misslens.cli export-questions        # 제출한 세트의 문제 → 상위 모델(Opus·GPT) 검토용 Markdown(data/review/)
 python -m misslens.cli question-eval --round N --notes "바꾼 것"   # 문제 품질 라운드 평가 → evaluation/roundN_report.md(실호출)
+python -m misslens.cli trace                   # 로컬 트레이스 요약(모델 호출·노드·span, data/traces/)
 python -m misslens.cli retrieval-eval          # 검색 점수·색인 건강 vs 기준선(evals/ccar-f/)
 pytest -m realdata                 # 실제 색인 회귀 검사(기본 테스트에서는 제외)
 python scripts/make_handoff_zip.py --list   # 비공개 평가용 zip 미리 보기(만들 때는 --list 없이). 손으로 묶지 않는다

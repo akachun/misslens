@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from botocore.config import Config
+from langchain_core.callbacks import get_usage_metadata_callback
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from misslens.bedrock import (
@@ -123,8 +124,10 @@ class Router:
 
     def __init__(self, config: ModelConfig, endpoints: list[Endpoint], factory: LLMFactory,
                  state: RouterState | None = None, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep, trace: bool = False):
+        """trace: 호출마다 로컬 트레이스(D60)를 남긴다. 앱이 쓰는 기본 router만 켠다."""
         self.config = config
+        self.trace = trace
         self.endpoints = endpoints
         self.factory = factory
         self.state = state or RouterState()
@@ -157,6 +160,18 @@ class Router:
             raise KeyError(f"unknown role {role!r}; known: {sorted(self.config.roles)}")
         timeout = int(self.config.roles[role]["timeout"])
         attempts: list[Attempt] = []
+        started = time.perf_counter()
+        total_tries = 0
+
+        def traced(status: str, endpoint: str | None, model: str | None, usage: dict | None,
+                   error: str | None = None) -> None:
+            if self.trace:
+                from misslens.trace import record_llm
+
+                record_llm(role, endpoint=endpoint, model=model, status=status, tries=total_tries, usage=usage,
+                           ms=round((time.perf_counter() - started) * 1000), error=error,
+                           attempts=[{"endpoint": a.endpoint, "model": a.model, "status": a.status} for a in attempts])
+
         for endpoint, model in self.candidates(role):
             combo = (endpoint.name, model)
             now = self.clock()
@@ -171,8 +186,10 @@ class Router:
             tries = 0
             while True:
                 tries += 1
+                total_tries += 1
                 try:
-                    result = call(llm)
+                    with get_usage_metadata_callback() as usage_cb:
+                        result = call(llm)
                 except Exception as exc:  # noqa: BLE001 - 아래에서 분류한다
                     status = classify_error(exc)
                     if status is CallStatus.TRANSIENT and tries < TRANSIENT_MAX_ATTEMPTS:
@@ -189,6 +206,7 @@ class Router:
                     attempts.append(Attempt(endpoint.name, model, status.value, f"{type(exc).__name__}: {exc}"[:300]))
                     self._record_failure(combo, status)
                     if status not in _SWITCH:
+                        traced(status.value, endpoint.name, model, None, f"{type(exc).__name__}: {exc}"[:300])
                         raise LLMCallError(role, attempts, exc) from exc
                     logger.warning("llm role=%s endpoint=%s model=%s failed (%s), switching",
                                    role, endpoint.name, model, status.value)
@@ -196,8 +214,11 @@ class Router:
                 with self.state.lock:
                     self.state.last_success[role] = endpoint.name
                 logger.info("llm role=%s endpoint=%s model=%s ok", role, endpoint.name, model)
+                traced("ok", endpoint.name, model, _sum_usage(usage_cb.usage_metadata))
                 return result
+        traced("all_failed", None, None, None, "no endpoint x model succeeded")
         raise LLMCallError(role, attempts)
+
 
     def _record_failure(self, combo: Combo, status: CallStatus) -> None:
         with self.state.lock:
@@ -205,6 +226,14 @@ class Router:
                 self.state.cooldown_until[combo] = self.clock() + self.config.cooldown_seconds
             elif status is CallStatus.UNAVAILABLE:
                 self.state.unavailable.add(combo)
+
+
+def _sum_usage(by_model: dict | None) -> dict | None:
+    """get_usage_metadata_callback은 모델별로 모은다. 한 호출의 입력·출력 토큰 합으로 줄인다."""
+    if not by_model:
+        return None
+    return {"input_tokens": sum(u.get("input_tokens", 0) for u in by_model.values()),
+            "output_tokens": sum(u.get("output_tokens", 0) for u in by_model.values())}
 
 
 class RoleLLM:
@@ -256,7 +285,7 @@ def default_router() -> Router:
 
             load_dotenv(PROJECT_ROOT / ".env", override=False)
             config = load_model_config()
-            router = Router(config, resolve_endpoints(config), bedrock_factory)
+            router = Router(config, resolve_endpoints(config), bedrock_factory, trace=True)
             seeded = router.state.seed_from_model_status(MODEL_STATUS_PATH, config.cooldown_seconds, router.clock())
             if seeded:
                 logger.info("starting in cooldown from model_status.json: %s", seeded)

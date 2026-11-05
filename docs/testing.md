@@ -34,6 +34,7 @@
 | `test_vocab.py` | 단어장 추출(글자 그대로·긴 구절 필터·빠진 문제 재요청), 누적·외움 | D54 |
 | `test_handoff.py` | 평가용 zip: 거부 목록, 자격 증명 검사, SQLite 복사, 포함 목록(git 체크아웃에서만) | D56 |
 | `test_portability.py` | Windows 대비: 텍스트 파일 읽기·쓰기에 `encoding='utf-8'` 명시(한국어 Windows 기본 cp949) | D56 |
+| `test_trace.py` | 로컬 트레이스: 라우터의 모델 호출 기록(전환·토큰·본문 제외), span 중첩·오류, 그래프 노드와 노드 안 호출, 끄기, 요약·CLI | D60 |
 | `test_question_eval.py` | 문제 품질 라운드 평가: 인-아웃 세트 파일, 직접 풀기(정답 숨김)·분해 판정·요약 계산, 생성 통계, 리포트·앞 라운드 비교, CLI(1라운드·다시 채점) | D59 |
 | `test_review_export.py` | 상위 모델 검토용 내보내기: 제출한 세트만, 정답·violates·근거 부록, 근거 모드, 자료 속 Markdown을 코드 블록으로 | D58 |
 | `test_model_facing_text.py` | 모델에 보내는 구조화 출력 스키마(`QuestionDraft`·`PlanDraft`)와 코치 도구 설명이 영어로 남아 있는지(주석은 한국어) | D57 |
@@ -41,7 +42,7 @@
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-05 최종 확인: 기본 325 통과(T25 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
+2026-11-05 최종 확인: 기본 334 통과(T26 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
 
 **Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
 

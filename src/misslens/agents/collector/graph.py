@@ -112,7 +112,10 @@ RECURSION_LIMIT = 2000  # 페이지마다 그래프 한 단계. LangGraph 기본
 
 
 def run_config(thread_id: str) -> dict:
-    return {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
+    """그래프 실행 설정. CLI Supervisor와 수집이 함께 쓴다. 노드 트레이스 콜백을 붙인다(D60)."""
+    from misslens.trace import with_tracing
+
+    return with_tracing({"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT})
 
 
 def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = None,

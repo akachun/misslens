@@ -28,6 +28,7 @@ from langgraph.prebuilt import ToolNode
 from misslens.agents.generator.context import Chunk, reference_block
 from misslens.agents.grader.review import FOCUS, LANGUAGE_NAMES, DiagnosisRow, explain_miss
 from misslens.exam_pack import ExamPack
+from misslens.trace import with_tracing
 from misslens.ledger import Ledger, task_accuracy, top_missed_phrases
 
 logger = logging.getLogger(__name__)
@@ -208,7 +209,7 @@ def _config(thread_id: str | None) -> dict:
     cfg: dict = {"recursion_limit": 2 * MAX_TOOL_ROUNDS + 4}
     if thread_id:
         cfg["configurable"] = {"thread_id": thread_id}
-    return cfg
+    return with_tracing(cfg)
 
 
 def _turn_result(msgs: list) -> CoachResult | None:

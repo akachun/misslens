@@ -7,7 +7,7 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D59) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D60) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
@@ -234,6 +234,8 @@ flowchart LR
 | **미끼와 자기 판단으로 진단 보정** | 재질문에 맞힌 문제를 섞어 기준선 산출, 정답 공개 후·해설 전에 자기 판단 수집 | '다시 보면 맞힌다' 효과를 따로 보고, 진단이 맞는지 공부하면서 eval 데이터를 쌓음 | D14, D31, D43 |
 | **프롬프트 주입 방어** | 수집 본문·검색 결과·tool 결과를 '참고 자료(data)' 블록으로 감쌈 | 교안 안의 문장이 지시로 실행되지 않게 | §7, 규칙 7 |
 | **샌드박스** | `MISSLENS_SANDBOX=1`: 학습 기록·체크포인트를 `data/sandbox/`로 | 시연·검토가 실제 통계를 오염시키지 않음 | D45 |
+| **로컬 트레이스** | 라우터가 모든 모델 호출(역할·엔드포인트·지연·토큰·전환)을, 콜백이 LangGraph 노드를, span이 작업 단위를 JSONL로 기록 → `trace` 요약 | 어느 에이전트·노드가 느리거나 실패하는지, 할당량 전환이 얼마나 일어나는지 봄. 본문은 남기지 않음 | D60 |
+| **LLM-as-Judge 라운드 평가** | 고정 인-아웃 세트 → 새로 생성 → 판정기(정답 숨기고 풀기 + 오답 보기별 분해 판정) → `evaluation/round<N>_report.md` | 지시문을 바꿀 때마다 같은 입력으로 품질을 숫자로 비교. 판정기는 외부 검토(Opus·GPT)로 보정 | D58, D59 |
 
 ## 화면
 
@@ -328,6 +330,7 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 | `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 | `question-eval --round N [--existing\|--from-set ID] [--notes 문장]` | 문제 생성 품질 라운드 평가: 인-아웃 세트로 생성 → LLM-as-Judge → `evaluation/round<N>_report.md`(D59, 실호출) |
+| `trace [--day YYYYMMDD\|all] [--last N]` | 로컬 트레이스 요약: 역할별 모델 호출·전환·지연·토큰, 그래프 노드 소요 시간, 최근 실행(D60) |
 | `export-questions [--set ID] [--evidence full\|sources\|none] [-o PATH]` | 제출한 세트의 문제(정답·오답 근거·해설)와 근거 발췌를 검토 지시문과 함께 Markdown으로 저장(기본 `data/review/`). Claude Opus나 GPT 대화에 붙여 넣어 사후 검토한다(모델 호출 없음, D58) |
 
 모든 명령은 `python -m misslens.cli <명령>`으로 실행하고, 시험은 `--exam ccar-f`(기본값)로 고릅니다.
@@ -342,6 +345,7 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 | `exams/<exam_id>/sources.yaml` | 수집 대상 URL과 사이트 규칙 | 포함 |
 | `data/ledger.sqlite` | 학습 기록(세트·문제·풀이·놓친 문구·자기 판단·자료·생성 실패), 계획 기록, 제출 전 답안, 단어장 | 제외 |
 | `data/checkpoints.sqlite` | LangGraph 체크포인트(interrupt 재개) | 제외 |
+| `data/traces/` | 로컬 트레이스(모델 호출·노드·span 메타데이터, D60) | 제외 |
 | `data/index/<exam_id>/` | FAISS 색인과 청크 | 제외 |
 | `data/sources/` | 넣은 자료, 수집본, 연습 문제 원본 | 제외 |
 | `secrets/profiles/<site>/` | 브라우저 로그인 프로필(권한 0700) | 제외 |
@@ -350,6 +354,45 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 - 수집한 본문은 지시가 아니라 참고 자료로만 프롬프트에 넣습니다.
 - 예상문제 사이트는 자동으로 수집하지 않습니다. 직접 저장한 연습 문제는 문체 예시로만 쓰고, 출제 근거나 그대로 출제하는 문제로 쓰지 않습니다.
 - 검증(validator → 근거 검증)을 통과하지 못한 문제는 보여 주지도, 기록하지도 않습니다.
+
+## 가드레일
+
+화면에서는 티가 나지 않고 학습 기록이나 보안이 조용히 틀어지는 지점마다 막는 장치를 두었습니다.
+
+| 단계 | 가드레일 | 위치 | 테스트 |
+|---|---|---|---|
+| 입력 | 수집 본문·검색 결과·도구 결과를 '참고 자료(data, 지시 아님)' 블록으로 감싸 프롬프트 주입 차단. 수집 페이지에 `untrusted external content` 표시 | `generator/context.py` `reference_block`, `collector/graph.py`, `ingest/loaders.py`, 코치·단어장·판정기 프롬프트 | `test_generator.py`, `test_ingest.py` |
+| 입력 | 자유 발화는 신뢰도 0.6 미만이거나 의도를 모르면 실행하지 않음. 파일 경로는 문장에서 받지 않음 | `supervisor` `MIN_CONFIDENCE`, `route_text` | `test_supervisor.py` |
+| 입력 | 수집은 `sources.yaml`에 허용한 도메인만, 로그인 만료·수강 미등록 페이지는 저장하지 않고 멈춤(interrupt②). 예상문제 사이트는 자동 수집 안 함 | `collector/sources.py` `allows`·`is_expired`·`is_not_enrolled` | `test_collector.py` |
+| 출력(문제) | 구조 validator(보기 4개, 정답 1개, 조건 문구가 지문에 글자 그대로, `violates` 일치) → 연습 문제 베끼기 검사(60% 이상 겹치면 거절) → 다른 모델(Haiku)의 근거 확인. 최초 1회 + 재생성 2회, 세부 항목 2개 연속 실패 시 세트 중단 | `generator/schema.py` `validation_errors`, `practice.py` `copy_reason`, `generator/pipeline.py` `MAX_TRIES` | `test_generator.py`, `test_practice.py` |
+| 출력(문제) | 검증을 통과하지 못한 문제는 보여 주지도 기록하지도 않음(규칙 2) | `generator/pipeline.py` `run_set` | `test_generator.py`, `test_cli_e2e.py` |
+| 진단·통계 | 판정 표는 순수 함수, 통계는 ledger에서만, '문제 이상'으로 표시한 풀이(`invalid=1`)는 모든 통계에서 제외 | `ledger/judge.py`, `ledger/stats.py` | `test_ledger.py`, `test_grader.py` |
+| 도구 사용 | 코치 도구는 읽기 전용 2개, 질문마다 도구 호출 최대 3회, 실패하면 저장된 해설로 대체 | `grader/coach.py` `MAX_TOOL_ROUNDS` | `test_coach.py` |
+| 단어장 | 지문·보기에 글자 그대로 있는 표현만 저장(모델이 지어낸 표현 차단) | `grader/vocab.py` `clean_items` | `test_vocab.py` |
+| 사람 확인 | interrupt는 계획 승인과 로그인 대기 두 곳에만(규칙 4) | `agents/planner`, `agents/collector/graph.py` | `test_supervisor.py`, `test_collector.py` |
+| 모델 운영 | 엔드포인트 5곳 순차 전환, 오류 종류별 재시도 상한·쿨다운, 역할별 타임아웃, 모델 ID는 설정 파일에만 | `llm.py` `Router`, `config/models.yaml` | `test_llm.py`, `test_bedrock_config.py` |
+| 모델 입력 고정 | 모델에 보내는 스키마·도구 설명은 영어로 유지(주석 한국어화가 모델 입력을 바꾸지 않게) | D57 | `test_model_facing_text.py` |
+| 보안 | 비밀번호를 입력·저장하지 않음(사람이 보이는 브라우저에서 로그인), 로그인 프로필 권한 0700, 샌드박스에서 색인·수집 쓰기 거부 | `collector/browser.py`, `paths.py` `refuse_in_sandbox` | `test_collector.py`, `test_sandbox.py` |
+| 보안 | 평가용 zip은 허용 목록·거부 목록(.env, secrets, 체크포인트 등)·자격 증명 패턴 검사를 거친 스크립트로만 생성 | `scripts/make_handoff_zip.py` | `test_handoff.py` |
+| 관측 | 트레이스에는 메타데이터만 남기고 프롬프트·응답 본문은 기록하지 않음 | `trace.py` | `test_trace.py` |
+
+## 트레이스
+
+모든 모델 호출과 LangGraph 노드 실행을 로컬 파일(`data/traces/YYYYMMDD.jsonl`, 샌드박스는 `data/sandbox/traces/`)에 남깁니다(D60).
+
+| 기록 | 내용 |
+|---|---|
+| `llm` | 역할, 엔드포인트, 모델, 상태, 지연(ms), 입력·출력 토큰, 엔드포인트 전환 내역, 호출한 그래프 노드·thread_id |
+| `node` | 그래프 노드 이름, 소요 시간, 상태(ok·error·interrupt) |
+| `span` | 작업 단위(`generate` 세부 항목별 시도 횟수, `vocab`, `judge`) |
+
+```bash
+python -m misslens.cli trace              # 오늘: 역할별 호출·오류·전환·p50/p95·토큰, 노드별 소요 시간, 최근 실행 3개
+python -m misslens.cli trace --day all --last 5
+```
+
+- 프롬프트와 응답 본문은 남기지 않습니다(수집한 강의 자료가 섞이므로). 끄려면 `MISSLENS_TRACE=0`.
+- LangSmith로 보고 싶으면 `.env`에 `LANGSMITH_TRACING=true`와 `LANGSMITH_API_KEY`를 넣으면 LangChain이 자동으로 보냅니다. 이때는 프롬프트와 강의 발췌가 외부 서비스로 전송되므로 기본으로 켜지 않았습니다.
 
 ## 평가용 전달(비공개)
 

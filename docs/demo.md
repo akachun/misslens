@@ -67,6 +67,13 @@
 - 설명: 사람이 직접 로그인한 브라우저 프로필로, `sources.yaml`에 적힌 코스의 레슨만 읽는다. 세션이 만료되면 수집이 멈추고 "로그인이 필요합니다"와 '완료/중단' 버튼이 뜨며, 완료를 누르면 멈춘 레슨부터 이어간다.
 - 근거: `pytest tests/test_collector.py -k expired -v`(만료 → interrupt → 같은 URL 재개), `pytest tests/test_supervisor.py -k collect -v`(Supervisor를 거쳐도 interrupt가 올라옴).
 
+### 8. 평가와 관측 (2분) — 트레이스·LLM-as-Judge·가드레일
+
+- 터미널: `MISSLENS_SANDBOX=1 python -m misslens.cli trace --last 2` → 방금 시연한 실행이 노드(route → planner → generate …)와 모델 호출(역할·엔드포인트·지연·토큰·전환)로 보인다.
+- `evaluation/README.md`: 외부 검토(Opus·GPT, 20문제 중 OK 1) → 판정기 보정(외부와 일치 25% → 80%) → 지시문 보강 2라운드(OK 25 → 44%, 정답 하나 90 → 100%), 남은 구조 문제(개념 오답의 `violates`).
+- README '가드레일' 표: 입력(주입 차단·신뢰도)·출력(검증·베끼기·근거 확인)·통계·도구·보안 단계별 장치와 테스트.
+- 말할 것: "점수가 좋아진 것과 그대로인 것을 같이 보여 드립니다. 그대로인 지표는 설계 규칙을 바꿔야 해서 다음 라운드로 남겼습니다."
+
 ## 실패할 때
 
 | 상황 | 대응 |

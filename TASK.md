@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T25 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/). 테스트 기본 325·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀). 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
+| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T26 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/), 로컬 트레이스·가드레일 정리. 테스트 기본 334·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀). 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
 | 마지막 갱신 | 2026-11-05 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -174,6 +174,7 @@
 - [x] **T23** 마무리(D57, 학습자 요청): 코드 주석과 docstring을 한국어로(모델에 보내는 프롬프트·스키마·도구 설명은 영어 유지, `tests/test_model_facing_text.py`로 고정). 주석 외 코드 변화 없음을 AST 비교로 확인. 문서 최종 교차 확인(TASK 수치·경로, testing.md 수치, CLAUDE.md 언어 규칙)
 - [x] **T24** 상위 모델 검토용 내보내기(D58, 학습자 요청): `export-questions`(제출한 세트만, 정답·violates·해설, 세부 항목별 근거 발췌 부록, `--evidence full|sources|none`, 자료 속 Markdown은 코드 블록). `src/misslens/review_export.py`, 테스트 `tests/test_review_export.py` 4개. 샌드박스 20문제 내보내기 확인
 - [x] **T25** 문제 품질 라운드 평가(D59, Day 9 과제 '인-아웃 세트 자체 평가·라운드 리포트'): 외부 교차 검토(Opus·GPT, 20문제 중 OK 1) → 원인(지시문에 key constraint 기준 없음, Haiku 근거 확인이 관대) → 출제·근거 확인 지시문 보강. `question-eval`(인-아웃 세트 `evals/ccar-f/question_set.yaml`, 별도 DB, 판정기 `judge` 역할), 판정기 v1→v2 보정(외부 검토와 OK 일치 25%→80%). 1·2라운드 리포트(`evaluation/`): OK 25→44%, 정답 하나 90→100%, 사실 50→83%, 적합성 65→83%, violates 유효 50% 그대로(개념 오답 구조 문제 → TODOS 3라운드). 테스트 `tests/test_question_eval.py` 9개
+- [x] **T26** 트레이스·가드레일(D60, Day 9 과제): 로컬 JSONL 트레이스(`trace.py`: 라우터의 모든 모델 호출, LangGraph 노드 콜백, span), `trace` 요약 명령, 실호출로 노드·토큰·엔드포인트 기록 확인. README '가드레일' 표(단계별 장치·위치·테스트)와 '트레이스' 절, 프로필 권한 0700 테스트 추가, demo.md 8단계(평가와 관측). 테스트 `tests/test_trace.py` 7개
 - [ ] 제출
 
 ---
@@ -206,7 +207,7 @@
 
 ## 세션 인계 메모
 
-**다음 작업(2026-11-05 갱신):** 구현은 끝났다(T1~T25). 생성 문제 품질은 `export-questions`로 내보내 Opus·GPT로 검토한다(docs/testing.md §5). 남은 것: 학습자 Streamlit 리허설(`MISSLENS_SANDBOX=1`, `docs/demo.md` 순서) → 데모 30분 전 `python scripts/probe_models.py`·`pytest -m live` → 제출. 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
+**다음 작업(2026-11-05 갱신):** 구현은 끝났다(T1~T26). 생성 문제 품질은 `export-questions`로 내보내 Opus·GPT로 검토한다(docs/testing.md §5). 남은 것: 학습자 Streamlit 리허설(`MISSLENS_SANDBOX=1`, `docs/demo.md` 순서) → 데모 30분 전 `python scripts/probe_models.py`·`pytest -m live` → 제출. 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
 - 근거 자료 주의: `guide.pdf`에는 공식 샘플 문제와 정답이 들어 있다. 생성 문제가 샘플과 비슷해질 수 있으니 실제로 풀어 보며 확인한다.
 
 새 세션을 시작할 때 다음 순서로 진행한다.
@@ -267,3 +268,4 @@
 | 2026-11-05 | T23: 코드 주석·docstring 한국어화(src·scripts·tests 73개 파일, 4개 에이전트 분담). 주석 외 코드 변화 0건을 AST 비교로 확인, 모델에 보내는 docstring 3곳은 영어 유지 + `test_model_facing_text.py`. 문서 최종 교차 확인: TASK 헤더(T1~T23·테스트 수)·T11 그래프 경로·리허설 상태, testing.md 수치·테스트 지도, CLAUDE.md 언어 규칙, ARCHITECTURE D57 |
 | 2026-11-05 | T24: 생성 문제 상위 모델 검토 방식 논의 → 앱 밖 표본 검토로 결정(D58). `export-questions` 추가, 샌드박스 20문제·근거 부록(세부 항목 20개) 내보내기 확인. 자동화는 TODOS |
 | 2026-11-05 | 외부 교차 검토 결과 공유(Opus·GPT: OK 1/20, violates 오류 다수, 정답 오류 0). T25: 지시문 보강 + `question-eval` 라운드 평가. 1라운드 판정기 v1이 관대(OK 80% vs 외부 5%) → v2 분해 판정으로 보정(일치 80%). 2라운드 18/20 생성(Sonnet 할당량 초과로 엔드포인트 전환 발생), 개선 지표와 남은 구조 문제 기록. Day 9 교육 일정 검토 |
+| 2026-11-05 | 세션을 tmux + Remote Control로 옮김(모바일 이어 하기). T26: 로컬 트레이스와 가드레일 정리. 첫 테스트 실행이 실제 `data/traces/`에 기록을 남긴 것을 발견(206줄, 모두 테스트) → 삭제하고 conftest에서 tmp로 돌림 |

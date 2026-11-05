@@ -34,6 +34,7 @@ from misslens.agents.generator.select import select_tasks
 from misslens.exam_pack import ExamPack
 from misslens.ledger import Ledger
 from misslens.llm import LLMCallError, get_llm
+from misslens.trace import span
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,14 @@ class Generator:
     # --- 세부 항목 하나 -------------------------------------------------------------------
 
     def generate_for_task(self, task_id: str) -> TaskResult:
+        """세부 항목 하나의 문제 생성(초안 → validator → 근거 확인 → 재시도). 트레이스 span으로 감싼다(D60)."""
+        with span("generate", task_id=task_id) as sc:
+            res = self._generate_for_task(task_id)
+            sc["attrs"].update(tries=res.tries, ready=res.question is not None,
+                               rejections=[r.split(":")[0] for r in res.reasons] or None)
+            return res
+
+    def _generate_for_task(self, task_id: str) -> TaskResult:
         domain = self.pack.domain_of(task_id)
         scenarios = self.pack.scenarios_for_domain(domain.id)
         scenario = self.rng.choice(scenarios) if scenarios else None

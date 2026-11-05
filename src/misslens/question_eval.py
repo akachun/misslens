@@ -31,6 +31,7 @@ from misslens.bedrock import PROJECT_ROOT
 from misslens.exam_pack import ExamPack
 from misslens.ledger import Ledger
 from misslens.llm import LLMCallError
+from misslens.trace import span
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,11 @@ class QuestionResult:
 
 def judge_question(llm: Any, pack: ExamPack, q: dict, chunks: list[Chunk]) -> tuple[BlindAnswer, Judgement]:
     """두 번 호출한다: 정답을 숨기고 직접 풀기, 그다음 정답·violates·근거를 보고 세부 판정."""
+    with span("judge", task_id=q.get("task_id")):
+        return _judge_question(llm, pack, q, chunks)
+
+
+def _judge_question(llm: Any, pack: ExamPack, q: dict, chunks: list[Chunk]) -> tuple[BlindAnswer, Judgement]:
     blind = llm.with_structured_output(BlindAnswer).invoke(
         [SystemMessage(BLIND_SYSTEM), HumanMessage(_question_text(q, with_key=False))])
     blind = BlindAnswer.model_validate(blind) if isinstance(blind, dict) else blind

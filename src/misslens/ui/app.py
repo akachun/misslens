@@ -120,7 +120,9 @@ def resources() -> Resources:
 # --- supervisor job ---------------------------------------------------------------------------
 
 def run_config(thread_id: str) -> dict:
-    return {"configurable": {"thread_id": thread_id}, "recursion_limit": 2000}
+    from misslens.trace import with_tracing
+
+    return with_tracing({"configurable": {"thread_id": thread_id}, "recursion_limit": 2000})
 
 
 def new_thread(kind: str) -> str:

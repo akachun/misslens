@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import sys
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -335,3 +336,18 @@ def test_reindex_replaces_collected_chunks(tmp_path, monkeypatch):
     assert rows and all(h not in ("old1", "old2") for _, h in rows)
     assert "본문 없는(영상만) 페이지 1개" in out.getvalue()
     ledger.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX 권한 비트는 Windows에서 의미가 다르다")
+def test_login_profile_dirs_are_private(tmp_path, monkeypatch):
+    """로그인 프로필(세션 쿠키)은 소유자만 읽을 수 있어야 한다(권한 0700, 규칙 7)."""
+    import stat
+
+    import misslens.agents.collector.browser as br
+
+    monkeypatch.setattr(br, "PROFILES_DIR", tmp_path / "secrets" / "profiles")
+    path = br.profile_dir("skil/ljar")
+    assert path.name == "skil_ljar"                      # 사이트 이름이 경로를 벗어나지 못한다
+    br._secure_dir(path)
+    for p in (tmp_path / "secrets", tmp_path / "secrets" / "profiles", path):
+        assert stat.S_IMODE(p.stat().st_mode) == 0o700, p
