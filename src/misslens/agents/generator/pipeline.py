@@ -150,18 +150,24 @@ class Generator:
 
     # --- one set --------------------------------------------------------------------------
 
-    def run_set(self, set_id: int, n: int, emit) -> None:
+    def run_set(self, set_id: int, n: int, emit, plan: dict[str, int] | None = None) -> None:
         """Fill set `set_id` with up to n verified questions, calling emit(Event) as they become ready.
 
         `seq` numbers every slot (ready or failed) so it stays unique; only ready questions count toward n.
+        `plan` (domain id -> count, from the approved Planner plan, §4.3) caps how many ready questions each
+        domain gets; the task order inside a domain still follows select_tasks (coverage first, then weakness).
         """
         seq = 0
         ready = 0
         consecutive_failures = 0
+        per_domain: dict[str, int] = {}
         candidates = select_tasks(self.pack, self.ledger, exclude=self.failed_tasks, rng=self.rng)
         for task_id in candidates:
             if ready >= n:
                 break
+            domain = self.pack.domain_of(task_id).id
+            if plan is not None and per_domain.get(domain, 0) >= plan.get(domain, 0):
+                continue
             if self._cancel.is_set():
                 emit(Event("stopped", message="생성을 취소했습니다."))
                 return
@@ -194,6 +200,7 @@ class Generator:
                     emit(Event("ready", seq=seq, question_id=qid, question=res.question))
                     seq += 1
                     ready += 1
+                    per_domain[domain] = per_domain.get(domain, 0) + 1
                     consecutive_failures = 0
             if consecutive_failures >= MAX_CONSECUTIVE_TASK_FAILURES:
                 emit(Event("stopped", message="연속 2개 세부 항목에서 문제 생성에 실패해 세트를 중단했습니다."))
@@ -204,13 +211,15 @@ class Generator:
 class QuestionStream:
     """Background generation; the consumer pulls Events in order with next()."""
 
-    def __init__(self, generator: Generator, set_id: int, n: int):
+    def __init__(self, generator: Generator, set_id: int, n: int, plan: dict[str, int] | None = None):
         self._q: queue.Queue[Event] = queue.Queue()
-        self._thread = threading.Thread(target=self._run, args=(generator, set_id, n), daemon=True)
+        self.generator = generator
+        self.set_id = set_id
+        self._thread = threading.Thread(target=self._run, args=(generator, set_id, n, plan), daemon=True)
 
-    def _run(self, generator: Generator, set_id: int, n: int) -> None:
+    def _run(self, generator: Generator, set_id: int, n: int, plan: dict[str, int] | None) -> None:
         try:
-            generator.run_set(set_id, n, self._q.put)
+            generator.run_set(set_id, n, self._q.put, plan=plan)
         except Exception as exc:  # noqa: BLE001
             logger.exception("generation thread crashed")
             self._q.put(Event("stopped", message=f"생성 중 오류로 중단했습니다: {type(exc).__name__}: {exc}"))

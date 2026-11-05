@@ -4,6 +4,8 @@
     python -m misslens.cli status [--exam ccar-f]        # quick numbers from the ledger
     python -m misslens.cli ingest PATH... [--paste]      # add study material (files or folders) to the index
     python -m misslens.cli search "query" [--task 2.1]   # inspect what retrieval returns
+    python -m misslens.cli plan [-n 10]                  # Planner draft -> approve (interrupt①) -> solve
+    python -m misslens.cli ask "도구 설계 5문제"          # free text -> Supervisor router -> agent
     python -m misslens.cli practice import [DIR]         # parse learner-supplied practice sets into the style bank
     python -m misslens.cli collect login skilljar        # sign in by hand in a visible browser (profile only)
     python -m misslens.cli collect run [--site skilljar] # collect sources.yaml pages, then ingest them
@@ -31,16 +33,7 @@ from rich.table import Table
 from misslens.agents.generator import Generator, QuestionStream
 from misslens.agents.grader import build_reask_form, diagnosis_rows, explain_miss, highlight, submit_review
 from misslens.exam_pack import ExamPack, load_exam_pack
-from misslens.ledger import (
-    Answer,
-    Ledger,
-    avg_time,
-    coverage,
-    generation_failures,
-    miss_breakdown,
-    set_score,
-    top_missed_phrases,
-)
+from misslens.ledger import Answer, Ledger, miss_breakdown, set_score
 
 LETTERS = "ABCD"
 Ask = Callable[[str], str]
@@ -76,9 +69,14 @@ class CLI:
     # --- quiz ------------------------------------------------------------------------------
 
     def quiz(self, n: int, generator: Generator, *, explainer: Any = None) -> int | None:
-        c = self.console
         set_id = self.ledger.create_set(self.pack.exam_id, n)
         stream = QuestionStream(generator, set_id, n).start()
+        return self.run_stream(set_id, n, stream, explainer=explainer)
+
+    def run_stream(self, set_id: int, n: int, stream: QuestionStream, *, explainer: Any = None) -> int | None:
+        """Solve a set while it is being generated, submit it, then review (no interrupts, rule 4)."""
+        c = self.console
+        generator = stream.generator
         c.print(Panel(f"{self.pack.name} · {n}문제 세트 #{set_id}\n"
                       "실전처럼 영어 지문으로 풉니다. 해설은 세트를 제출한 뒤 리뷰에서 보여 줍니다.", title="MissLens"))
         answers: list[Answer] = []
@@ -168,27 +166,61 @@ class CLI:
     # --- status ----------------------------------------------------------------------------
 
     def status(self) -> None:
-        c, ex = self.console, self.pack.exam_id
-        cov = coverage(self.ledger, ex, self.pack.task_ids, task_id_map=self.pack.task_id_map)
-        mb = miss_breakdown(self.ledger, ex)
-        t = avg_time(self.ledger, ex)
-        ratio = "-" if mb.reading_ratio is None else f"{mb.reading_ratio:.0%}"
-        base = "-" if mb.baseline is None else f"{mb.baseline:.0%}"
-        c.print(f"범위 {len(cov.asked)}/{len(self.pack.task_ids)} ({cov.ratio:.0%}) · 해석 실수 비율 {ratio} "
-                f"(미끼 기준선 {base}) · 개념 {mb.concept} · 해석 {mb.reading} · 불확실 {mb.uncertain}")
-        if t.overall_ms is not None:
-            c.print(f"평균 풀이 시간 {t.overall_ms / 1000:.0f}초")
-        phrases = top_missed_phrases(self.ledger, ex)
-        if phrases:
+        from misslens.agents.reporter import build_report
+
+        self.render_report(build_report(self.pack, self.ledger).as_dict())
+
+    def render_report(self, r: dict) -> None:
+        """One renderer for the Reporter's numbers (CLI status and the Supervisor's status route)."""
+        c = self.console
+        ratio = "-" if r["reading_ratio"] is None else f"{r['reading_ratio']:.0%}"
+        base = "-" if r["baseline"] is None else f"{r['baseline']:.0%}"
+        c.print(f"범위 {len(r['asked'])}/{r['tasks_total']} ({r['coverage_ratio']:.0%}) · 해석 실수 비율 {ratio} "
+                f"(미끼 기준선 {base}) · 개념 {r['concept']} · 해석 {r['reading']} · 불확실 {r['uncertain']}")
+        if r["avg_time_ms"] is not None:
+            c.print(f"평균 풀이 시간 {r['avg_time_ms'] / 1000:.0f}초")
+        tbl = Table("영역", "비중", "출제 항목", "풀이", "정답률(보정)")
+        for d in r["domains"]:
+            tbl.add_row(f"{d['domain']} {escape(d['name'])}", f"{d['weight']:.0%}", f"{d['asked']}/{d['tasks']}",
+                        str(d["attempts"]), f"{d['accuracy']:.0%}")
+        c.print(tbl)
+        if r["top_phrases"]:
             tbl = Table("놓친 문구", "횟수")
-            for p, n in phrases:
+            for p, n in r["top_phrases"]:
                 tbl.add_row(escape(p), str(n))
             c.print(tbl)
-        if cov.never_asked:
-            c.print("미출제: " + ", ".join(cov.never_asked))
-        fails = generation_failures(self.ledger, ex, limit=5)
-        for f in fails:
+        if r["never_asked"]:
+            c.print("미출제: " + ", ".join(r["never_asked"]))
+        for f in r["failures"]:
             c.print(f"[red]생성 실패[/] {f['task_id']} ({f['tries']}회): {escape(f['reason'][:160])}")
+
+    # --- plan approval (interrupt①) ---------------------------------------------------------
+
+    def ask_plan(self, payload: dict) -> dict:
+        """Show the drafted plan; return the resume value for the planner's interrupt."""
+        c, plan = self.console, payload["plan"]
+        names = {d["domain"]: d for d in payload.get("table", [])}
+        tbl = Table("영역", "비중", "출제 항목", "정답률(보정)", "오늘 문제 수", title=f"오늘의 계획 · {plan['total']}문제")
+        for dom, n in plan["counts"].items():
+            d = names.get(dom, {})
+            tbl.add_row(f"{dom} {escape(d.get('name', ''))}", f"{d.get('weight', 0):.0%}",
+                        f"{d.get('asked', 0)}/{d.get('tasks', 0)}", f"{d.get('accuracy', 0.5):.0%}", str(n))
+        c.print(tbl)
+        c.print(escape(plan.get("rationale", "")))
+        if payload.get("error"):
+            c.print(f"[red]{escape(payload['error'])}[/]")
+        while True:
+            a = self._ask("Enter=승인, e=문제 수 고치기, q=취소 > ").strip().lower()
+            if a == "":
+                return {"action": "approve"}
+            if a in ("q", "quit"):
+                return {"action": "cancel"}
+            if a == "e":
+                doms = list(plan["counts"])
+                raw = self._ask(f"{' '.join(doms)} 순서로 문제 수를 공백으로 구분해 입력 > ").split()
+                if len(raw) == len(doms) and all(x.lstrip("-").isdigit() for x in raw):
+                    return {"action": "approve", "counts": dict(zip(doms, map(int, raw)))}
+                c.print(f"{len(doms)}개의 정수를 입력하세요.")
 
 
 # --- material ------------------------------------------------------------------------------
@@ -234,6 +266,75 @@ def open_index(exam_id: str, *, must_exist: bool = False):
     from misslens.retrieval.embed import get_embedder
 
     return ChunkIndex(exam_id, get_embedder())
+
+
+# --- supervisor ------------------------------------------------------------------------------
+
+def make_services(pack: ExamPack, ledger: Ledger):
+    """Real agents for the Supervisor graph: retrieval if indexed, practice style bank, Bedrock models."""
+    from misslens.agents.collector import Crawl4AIFetcher, load_sources
+    from misslens.agents.generator.context import RetrievalContext
+    from misslens.agents.ingest import Ingestor
+    from misslens.graph import Services
+    from misslens.llm import get_llm
+    from misslens.practice import PracticeSamples, load_bank
+
+    index = open_index(pack.exam_id)
+    bank = load_bank(pack.exam_id)
+    samples = PracticeSamples(bank) if bank else None
+    context = RetrievalContext(index) if index is not None and len(index) else None
+
+    def make_generator() -> Generator:
+        return Generator(pack, ledger, context=context, samples=samples,
+                         copy_guard=samples.copy_reason if samples else None)
+
+    try:
+        sources = load_sources(pack.exam_id)
+    except FileNotFoundError:
+        sources = None
+    return Services(pack=pack, ledger=ledger, make_generator=make_generator, router_llm=get_llm("router"),
+                    planner_llm=get_llm("planner"),
+                    make_ingestor=lambda: Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)),
+                    sources=sources, fetchers={n: Crawl4AIFetcher(n) for n in (sources.sites if sources else {})})
+
+
+def run_supervisor(cli: "CLI", request: dict, *, explainer: Any = None, svc: Any = None,
+                   checkpointer: Any = None) -> dict:
+    """Send one request through the Supervisor graph; answer its interrupts (plan approval, login wait) here."""
+    from langgraph.types import Command
+
+    from misslens.agents.collector import login, new_thread_id, sqlite_checkpointer
+    from misslens.agents.collector.graph import run_config
+    from misslens.graph import build_supervisor_graph
+
+    svc = svc or make_services(cli.pack, cli.ledger)
+    graph = build_supervisor_graph(svc, checkpointer=checkpointer or sqlite_checkpointer())
+    cfg = run_config(new_thread_id("supervisor"))
+
+    def open_login(payload: dict) -> None:
+        login(payload["site"], payload["login_url"])
+
+    out = graph.invoke(request, cfg)
+    while out.get("__interrupt__"):
+        payload = out["__interrupt__"][0].value
+        if payload["kind"] == "plan":
+            resume: Any = cli.ask_plan(payload)
+        else:
+            resume = login_prompt(cli.console, cli._ask, lambda p=payload: open_login(p))(payload)
+        out = graph.invoke(Command(resume=resume), cfg)
+    if out.get("message"):
+        cli.console.print(escape(out["message"]))
+    if out.get("report"):
+        cli.render_report(out["report"])
+    if out.get("results"):
+        print_collect_summary(cli.console, out)
+    for r in out.get("ingested") or []:
+        cli.console.print(f"{r['status']} {r['chunks']}개 청크 · {escape(r['source'])}")
+    if out.get("set_id") is not None and out["set_id"] in svc.streams:
+        n = sum(out["plan"]["counts"].values()) if out.get("plan") and out.get("plan_status") == "approved" \
+            else int((out.get("args") or {}).get("count") or 10)
+        cli.run_stream(out["set_id"], n, svc.streams.pop(out["set_id"]), explainer=explainer)
+    return out
 
 
 # --- collector -----------------------------------------------------------------------------
@@ -292,6 +393,14 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("paths", nargs="*")
     g.add_argument("--paste", metavar="LABEL", help="표준 입력의 텍스트를 이 이름으로 넣는다")
     g.add_argument("--exam", default="ccar-f")
+    pl = sub.add_parser("plan", help="오늘의 계획 제안 → 승인(interrupt①) → 세트 풀이")
+    pl.add_argument("-n", type=int, default=10)
+    pl.add_argument("--exam", default="ccar-f")
+    pl.add_argument("--no-explain", action="store_true")
+    ak = sub.add_parser("ask", help="자연어 지시(예: \"도구 설계 영역 5문제 내줘\")")
+    ak.add_argument("text")
+    ak.add_argument("--exam", default="ccar-f")
+    ak.add_argument("--no-explain", action="store_true")
     pr = sub.add_parser("practice", help="연습 문제 파일을 문체 예시 은행으로 변환")
     pr.add_argument("action", choices=["import"])
     pr.add_argument("dir", nargs="?", help="기본값 data/sources/practice_problems")
@@ -334,6 +443,13 @@ def main(argv: list[str] | None = None) -> int:
                 cli.console.print("넣을 자료가 없습니다.")
                 return 1
             run_ingest(Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)), docs, cli.console)
+        elif args.cmd in ("plan", "ask"):
+            from misslens.llm import get_llm
+
+            explainer = None if args.no_explain else get_llm("explainer")
+            request = ({"intent": "plan_quiz", "args": {"count": args.n}} if args.cmd == "plan"
+                       else {"text": args.text})
+            run_supervisor(cli, request, explainer=explainer)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 

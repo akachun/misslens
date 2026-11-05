@@ -115,8 +115,12 @@ def run_config(thread_id: str) -> dict:
 
 
 def build_collector_graph(site: Site, fetcher: Fetcher, *, checkpointer: Any = None,
-                          out_dir: Path = COLLECTED_DIR, sleep: Callable[[float], None] = time.sleep,
-                          clock: Callable[[], float] = time.monotonic):
+                          out_dir: Path | None = None, sleep: Callable[[float], None] | None = None,
+                          clock: Callable[[], float] | None = None):
+    # Defaults resolved at call time (not import time) so tests can patch the module.
+    out_dir = out_dir or COLLECTED_DIR
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
     last_request = [float("-inf")]
 
     def fetch(state: CollectState) -> CollectState:

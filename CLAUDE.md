@@ -57,6 +57,8 @@ pytest -m "not live"               # 기본 테스트(LLM 가짜 모델)
 pytest -m live                     # Bedrock 실호출 스모크
 streamlit run app/main.py          # UI
 python -m misslens.cli quiz        # CLI 세트 풀이
+python -m misslens.cli plan -n 10  # 계획 제안 → 승인(interrupt①) → 풀이 → 리뷰
+python -m misslens.cli ask "도구 설계 5문제"  # 자연어 지시 → Supervisor 라우팅
 python -m misslens.cli ingest data/sources/exam_guide   # 자료 넣기(파일·폴더, --paste 이름)
 python -m misslens.cli search "tool_choice" --task 2.3  # 검색 결과 확인
 python -m misslens.cli status      # 현황 요약

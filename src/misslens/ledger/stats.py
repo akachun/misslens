@@ -76,6 +76,40 @@ def coverage(ledger: Ledger, exam_id: str, task_ids: list[str], *,
 
 
 @dataclass(frozen=True)
+class DomainSummary:
+    """Per domain: coverage (tasks asked at least once) and accuracy over each task's recent window."""
+    domain: str
+    tasks: int
+    asked: int
+    correct: int
+    attempts: int
+
+    @property
+    def accuracy(self) -> float:
+        return laplace(self.correct, self.attempts)
+
+    @property
+    def unasked_ratio(self) -> float:
+        return (self.tasks - self.asked) / self.tasks if self.tasks else 0.0
+
+
+def domain_summary(ledger: Ledger, exam_id: str, task_domain: dict[str, str], *,
+                   task_id_map: dict[str, str] | None = None) -> dict[str, DomainSummary]:
+    """task_domain: current task_id -> domain id (from the exam pack). Built from coverage() and task_accuracy(),
+    so the Planner and Reporter see the same numbers as the rest of the app."""
+    cov = coverage(ledger, exam_id, list(task_domain), task_id_map=task_id_map)
+    acc = task_accuracy(ledger, exam_id, task_id_map=task_id_map)
+    asked = set(cov.asked)
+    out: dict[str, DomainSummary] = {}
+    for d in dict.fromkeys(task_domain.values()):
+        tids = [t for t, dd in task_domain.items() if dd == d]
+        out[d] = DomainSummary(d, len(tids), sum(t in asked for t in tids),
+                               sum(acc[t].correct for t in tids if t in acc),
+                               sum(acc[t].attempts for t in tids if t in acc))
+    return out
+
+
+@dataclass(frozen=True)
 class MissBreakdown:
     concept: int = 0
     reading: int = 0

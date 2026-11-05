@@ -118,11 +118,14 @@ select_tasks(N) ──▶ Q1: 검색 → 생성 → validator → 근거 검증 
 ### 4.3 계획 승인 (interrupt①, D21)
 
 ```
-Planner: ledger 통계 → 계획 초안 {domain: count, ...}
-  → interrupt(계획 초안) ⏸  화면: 계획 표, 수정 가능
-  ← Command(resume=승인된 계획)
-  → Generator에 세트 생성 요청
+Planner: ledger.domain_summary → 규칙 초안(시험 비중 × (1 + 미출제 비율) × (1.5 − 정답률), 최대 잔여 반올림)
+  → planner 모델(Haiku)이 문제 수 조정 + 한국어 근거 작성(검증 실패·호출 실패면 규칙 초안 사용)
+  → interrupt({kind: "plan", plan, table, error}) ⏸  화면: 영역별 비중·출제 항목·정답률·오늘 문제 수
+  ← Command(resume={"action": "approve", "counts"?: {...}}) / {"action": "cancel"}
+     고친 문제 수가 틀리면(모르는 영역, 음수, 합계 0 또는 30 초과) 이유와 함께 다시 interrupt
+  → Generator.run_set(plan=영역별 문제 수): 영역 상한 안에서 select_tasks 순서(범위 먼저, 그다음 약점)로 출제
 ```
+- 구현: `agents/planner/`(계획·검증·서브그래프), `agents/reporter/`(F9 현황, 모델 없음), `agents/supervisor/`(자유 발화 라우터), `graph.py`(Supervisor 그래프, D41). CLI `plan [-n]`, `ask "<문장>"`, `status`는 Reporter.
 
 ### 4.4 로그인 대기 (interrupt②, D21)
 
@@ -390,7 +393,7 @@ misslens/
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status|ingest|search`)
-│   └── graph.py
+│   └── graph.py    # Supervisor 그래프: route → planner/generate/report/collect_<site>/ingest/submit (D41)
 ├── app/            # Streamlit
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
 ├── scripts/probe_models.py   # 엔드포인트 × 모델 조합 응답 확인
@@ -421,6 +424,7 @@ misslens/
 | D38 | Collector가 `expand: lessons` 코스 페이지에서 그 코스의 레슨 링크(바로 아래 한 단계)만 따라감 | v1은 적힌 URL만(링크 따라가기는 v1 이후), 레슨 URL을 사람이 모두 적기 | Skilljar 레슨 URL은 로그인·수강 등록 후에만 보이고 코스 7개에 레슨이 수십 개라 손으로 적을 수 없음. 범위를 같은 코스 경로 한 단계로 묶어 도메인 밖이나 다른 페이지로 번지지 않게 함 |
 | D39 | 학습자가 브라우저에서 직접 저장한 제3자 연습 문제(CertSafari 250문항, 자동 수집 아님: 규칙 7)를 구조화해 문체 예시와 베끼기 검사에만 사용 | 검색 색인에 추가, 변환해 바로 출제, 사용 안 함 | 형식·세부 항목 태그가 정확해 문체 예시로 좋음. 정답이 사이트 것이라 근거로 쓰면 검증이 순환하고, 그대로 출제하면 규칙 2(검증 통과 문제만)를 우회함. 실측에서 예시를 넣어도 validator 통과율은 떨어지지 않음(3/4 대 3/4) |
 | D40 | `QuestionDraft` 필드 순서를 `stem_en → key_constraints → … → options`로 바꿈, 리스트 필드가 JSON 문자열로 오면 풀어서 받음 | 기존 순서(보기 다음에 key_constraints) | 근거 자료를 붙인 뒤 첫 시도 validator 통과율이 1/8로 떨어짐(모델이 가이드 문장을 key_constraints로 씀). 순서를 바꾸자 6/8. tool calling이 리스트를 문자열로 보내 실패하는 경우를 실측으로 확인 |
+| D41 | Supervisor 그래프는 Planner·Collector를 서브그래프 노드로, Generator·Reporter·Ingest·Grader(제출)는 함수 노드로 둔다. 진행 중인 문제 스트림과 수집 브라우저는 상태가 아니라 `Services`에 두고 상태에는 id만 둔다. 영역별 통계는 ledger `domain_summary`로 추가 | 모든 에이전트를 서브그래프로, 스트림을 상태에 저장 | interrupt가 있는 두 에이전트만 서브그래프여야 부모 체크포인터로 재개됨. 스레드·브라우저 객체는 체크포인트에 직렬화할 수 없음. 풀이·리뷰는 interrupt 없이 UI가 진행하고 결과만 `submit`으로 보냄(규칙 4) |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |
 | D9 | ledger가 통계를 단독 소유 | 서브그래프마다 계산 | 숫자가 어긋나는 문제를 원천 차단 |
