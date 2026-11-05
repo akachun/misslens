@@ -183,3 +183,14 @@ def test_max_tagged_leaves_room_for_untagged_and_where_filters(index):
     assert sum(h.tagged for h in hits) == 2 and any("skilljar" in h.source for h in hits)
     hits = index.search("subagent coordinator task tools", k=4, where=lambda c: "skilljar" in c.source)
     assert [h.source for h in hits] == ["https://anthropic-partners.skilljar.com/claude-code-in-action/1"]
+
+
+def test_query_coverage_weights_bm25_by_what_it_can_see(index):
+    """D51: an English query is fully visible to BM25 (fusion unchanged); Korean words absent from the corpus
+    lower its weight; a common word ('the') counts for nothing, a rare one ('caching') for a lot."""
+    assert index.query_coverage("prompt caching reduces cost") == 1.0
+    assert index.query_coverage("권한 모드 질문") == 0.0
+    assert index.query_coverage("the 권한 모드") == 0.0
+    rare = index.query_coverage("caching 권한 모드")
+    assert 0.0 < rare < 1.0
+    assert index.query_coverage("caching cost 권한 모드") > rare

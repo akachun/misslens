@@ -151,6 +151,23 @@ class ChunkIndex:
                 counts[t] = counts.get(t, 0) + 1
         return counts
 
+    def query_coverage(self, query: str) -> float:
+        """How much of the query's information BM25 can see (D51): idf of the tokens found in the corpus over the
+        idf of all tokens, an unseen token counting as the rarest one.
+
+        BM25 scores only the tokens it knows, so its ranking is trusted in proportion. An English query over the
+        English corpus is 1.0 (unchanged 0.5/0.5 fusion). "Claude Code 권한 모드는 어떤 것들이 있나요" is 0.04: BM25
+        sees only the common words "claude code", which no longer outvote the dense ranking that understood the
+        Korean. A rare English term inside a Korean question keeps some weight ("extended thinking은 …" 0.18)."""
+        toks = set(tokenize(query))
+        if not toks or self._bm25 is None:
+            return 0.0
+        idf = self._bm25.idf
+        rare = max(idf.values(), default=1.0)
+        seen = sum(max(idf[t], 0.0) for t in toks if t in idf)
+        unseen = sum(1 for t in toks if t not in idf) * rare
+        return seen / (seen + unseen) if seen + unseen > 0 else 0.0
+
     def _dense(self, query: str, n: int) -> list[int]:
         q = self.embedder.encode([query])
         _, ids = self._faiss.search(np.ascontiguousarray(q, dtype=np.float32), n)
@@ -175,7 +192,8 @@ class ChunkIndex:
             # Rank the whole corpus when filtering, so matching chunks are never cut off early.
             if task_id is not None or where is not None:
                 n = len(self.chunks)
-            fused = rrf([self._dense(query, n), self._sparse(query, n)], [DENSE_WEIGHT, SPARSE_WEIGHT])
+            fused = rrf([self._dense(query, n), self._sparse(query, n)],
+                        [DENSE_WEIGHT, SPARSE_WEIGHT * self.query_coverage(query)])
             if where is not None:
                 fused = [(i, s) for i, s in fused if where(self.chunks[i])]
             tagged = [(i, s) for i, s in fused if task_id is not None and task_id in self.chunks[i].task_ids]

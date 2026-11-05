@@ -1,0 +1,118 @@
+# MissLens 테스트와 평가
+
+무엇을 어떤 테스트로 지키는지, 언제 무엇을 돌리는지, 검색 품질 점수를 어떻게 읽고 갱신하는지 정리한 문서다. 설계 근거는 [ARCHITECTURE.md](../ARCHITECTURE.md)(§8, D50·D51), 작업 규칙은 [CLAUDE.md](../CLAUDE.md)에 있다.
+
+## 1. 테스트 계층
+
+| 계층 | 무엇을 지키나 | 어디 | 실행 | 비용 |
+|---|---|---|---|---|
+| 단위·통합 | 규칙 1~7(통계는 ledger만, 검증 통과 문제만, 판정 표, interrupt 두 곳, 설정 위치, 보안), 각 에이전트 로직, 그래프 분기·재개 | `tests/test_*.py` | `pytest` (기본) | 없음. LLM은 `tests/fakes.py`의 `FakeRoleLLM`(GenericFakeChatModel), 임베딩은 `FakeEmbedder` |
+| 화면 | 실제 앱 스크립트의 흐름(계획 승인 새로고침 복원 → 풀이 → 리뷰 → 자기 판단 → 진단 → 코치 대화 → 현황) | `tests/test_ui.py` | `pytest` (기본) | 없음. Streamlit AppTest + 메모리 DB |
+| 실호출 스모크 | Bedrock이 실제로 구조화 출력·tool 호출을 받아 주는지(문제 생성, 라우터, Planner, 코치) | `tests/test_*_live.py` | `pytest -m live` | Bedrock 할당량 사용(9개 약 1분) |
+| **검색 품질(실제 색인)** | 실제 색인의 검색 점수와 건강 상태가 기준선보다 나빠지지 않았는지 | `tests/test_retrieval_realdata.py`, `evals/ccar-f/` | `pytest -m realdata` 또는 `python -m misslens.cli retrieval-eval` | 없음(로컬 bge-m3, 약 8초) |
+| 진단 일치율 | 시스템 판정(개념/해석)이 학습자 자기 판단과 맞는지 | 앱 사용 중 자동 수집(`miss_feedback`) | `python -m misslens.cli eval [--export]` | 없음 |
+
+기본 `pytest`는 `live`와 `realdata`를 뺀다(`pyproject.toml`의 `addopts`). 모든 테스트는 수집 폴더를 임시 폴더로 바꿔 실제 `data/`에 쓰지 않는다(`tests/conftest.py`).
+
+## 2. 언제 무엇을 돌리나
+
+| 바꾼 것 | 돌릴 것 |
+|---|---|
+| 코드 전반 | `pytest` → 커밋 전 `/verify` |
+| 프롬프트, 스키마, 모델 설정 | `pytest` + `pytest -m live` |
+| **청킹, 데이터 정리(`sources.yaml`의 `drop_lines`·`drop_blocks`), 태깅, 검색 순위(RRF·중복 제거·커버리지)** | `pytest` + `python -m misslens.cli retrieval-eval` (나아졌으면 `--save-baseline`) |
+| 정답 질의 세트(`evals/<exam>/retrieval.yaml`) | `pytest tests/test_retrieval_eval.py` + `retrieval-eval --save-baseline` |
+| 화면(`ui/app.py`) | `pytest tests/test_ui.py` + 샌드박스 서버로 눈으로 확인 |
+| 시연 전 | `python scripts/probe_models.py` + `pytest -m live` |
+
+## 3. 검색 품질 평가 (D50)
+
+문제 출제(Generator)와 코치 답변은 모두 색인 검색에 기댄다. 가짜 임베더 단위 테스트는 검색 '로직'만 확인하므로, 실제 색인은 점수로 따로 본다. 2026-11-05에 청크의 29%에 영상 플레이어 메뉴가 섞여 있었고, 코치가 "Skilljar 자료는 없다"고 잘못 답했는데 단위 테스트는 모두 통과했던 것이 계기다.
+
+### 3.1 정답 질의 세트 — `evals/ccar-f/retrieval.yaml`
+
+```yaml
+- {id: d3-permission-ko, domain: d3, query: "Claude Code 권한 모드는 어떤 것들이 있나요",
+   expect: [{text: [permission], source: claude-code-in-action}]}
+```
+
+- **내용으로 판정한다.** 검색된 청크가 `text`의 모든 문구를 포함하고(대소문자 무시), `source`가 있으면 출처에 그 문자열이 들어 있을 때 정답이다. `expect`는 대안 목록이라 하나만 맞으면 된다. 청크 번호를 쓰지 않으므로 청킹이나 정리 규칙을 바꿔도 세트를 그대로 쓴다.
+- `domain`은 영역별 점수용(`course`는 시험 세부 항목과 무관한 코스 주제), `task_id`는 코치·출제 모드에서 쓰는 세부 항목 필터다.
+- 지금 30개: 영역마다 4~6개, 코스 전용 3개, **3분의 1은 한국어**(학습자가 코치에게 묻는 방식).
+
+**질의를 추가하는 법**
+1. 학습자가 실제로 한 질문이나 시험 세부 항목에서 질의를 고른다. 코치 대화에서 답이 아쉬웠던 질문이 가장 좋다.
+2. 정답 청크를 판정할 문구는 너무 흔하지 않게(예: `tool` 대신 `tool_choice`), 너무 길지 않게 고른다. 다시 청킹해도 한 청크 안에 남을 만한 짧은 구절이어야 한다.
+3. `pytest tests/test_retrieval_eval.py`로 형식을 검사하고, `retrieval-eval`로 '답할 수 없는 질의' 목록에 들어가지 않는지 확인한다(색인에 정답이 하나도 없으면 채점에서 빠지고 따로 보고된다).
+4. 새 질의가 들어가면 점수의 분모가 바뀌므로 `--save-baseline`으로 기준선을 다시 저장한다.
+
+### 3.2 지표
+
+세 가지 검색 모드로 각각 잰다. 실제로 검색을 쓰는 세 가지 방식이다.
+
+| 모드 | 흉내 내는 호출 | 설정 |
+|---|---|---|
+| 일반 | 학습자 자유 질문 그대로 | 세부 항목 필터 없음 |
+| 코치 | 코치의 `search_material` | 태그 일치 청크를 앞에 최대 2개(D49) |
+| 출제 | Generator의 `RetrievalContext` | 태그 일치 청크 먼저, k=6 |
+
+| 지표 | 뜻 |
+|---|---|
+| hit@k | 정답 청크가 상위 k개 안에 하나라도 있는 질의의 비율 |
+| MRR@10 | 첫 정답 순위의 역수 평균(1위 = 1, 2위 = 0.5 …, 10위 밖 = 0) |
+| 영역별 hit@5 | 영역마다 hit@5 |
+| 상위5 자료원 | 상위 5개에 섞인 자료원 종류 수 평균(가이드·코스별). 높을수록 근거가 다양 |
+| 상위5 중복쌍 | 상위 5개 안에서 거의 같은(Jaccard > 0.8) 청크 쌍 수. 0이어야 함(D46) |
+| 5위 밖 | hit@5에 실패한 질의 id. 개선 대상 |
+| 출제 근거: 태그 일치 비율 | 세부 항목 30개마다 Generator 질의의 상위 6개 중 그 항목에 태그된 청크 비율의 평균 |
+
+**색인 건강 검사**(하나라도 실패하면 평가 실패)
+
+| 검사 | 기준 |
+|---|---|
+| `vectors_match_chunks` | FAISS 벡터 수 = 청크 수, 표본 벡터 길이가 1(정규화) |
+| `no_junk_chunks` | 알려진 잡음 패턴(영상 플레이어 메뉴 등)과 `sources.yaml` 정리 규칙에 걸리는 줄이 있는 청크 0개 |
+| `no_invalid_tags` | 시험 팩에 없는 세부 항목 태그 0개 |
+| `no_short_chunks` | 40자 미만 청크 0개 |
+| `every_task_has_material` | 30개 세부 항목 모두 태그된 청크가 1개 이상 |
+
+참고 값(실패 조건 아님): 완전 중복 청크 수, 미분류 비율, 자료가 적은 세부 항목(5청크 미만), 출처별 청크 수.
+
+### 3.3 기준선과 회귀
+
+- 기준선: `evals/ccar-f/retrieval_baseline.json`(점수만 있고 본문은 없어서 커밋한다).
+- 회귀 판정: 건강 검사 실패, 또는 일반·코치·출제 hit@5, 일반 MRR@10, 출제 근거 태그 일치 비율 중 하나가 기준선보다 **0.05 넘게** 떨어지면 실패(`--max-drop`으로 조정). 답할 수 있는 질의 수가 줄어도 실패.
+- 갱신 절차: 바꾼다 → `retrieval-eval`로 비교 → 나아졌거나 의도한 변화면 `retrieval-eval --save-baseline` → 기준선 파일을 함께 커밋. 건강 검사가 실패하면 저장이 거부된다.
+
+### 3.4 점수 기록
+
+| 날짜 | 바꾼 것 | 건강 | 일반 hit@5 / MRR | 코치 hit@5 / MRR | 출제 hit@5 / MRR | 비고 |
+|---|---|---|---|---|---|---|
+| 2026-11-05 | 수집 직후 색인(1,674청크) | 실패: 잡음 555 | 0.93 / 0.881 | 0.93 / — | 0.90 / — | 백업 색인으로 사후 측정 |
+| 2026-11-05 | 화면 장식 제거·재색인(D48, 1,278청크) | 통과 | 0.97 / 0.875 | 0.97 / 0.908 | 0.93 / 0.906 | 첫 기준선. 5위 밖: d3-permission-ko(한국어) |
+| 2026-11-05 | 질의 커버리지 가중 RRF(D51) | 통과 | **1.00 / 0.89** | **1.00 / 0.92** | **0.97 / 0.92** | 현재 기준선. 5위 밖: 출제 모드 d2-tool-choice |
+
+### 3.5 결과를 읽는 법과 흔한 원인
+
+| 증상 | 의심할 것 |
+|---|---|
+| 건강 검사 `no_junk_chunks` 실패 | 사이트 화면이 바뀌어 정리 규칙이 안 맞음 → `sources.yaml` 규칙 추가 후 `collect reindex` |
+| 한국어 질의만 5위 밖 | BM25가 질의의 영어 일부(흔한 단어)만 보고 순위를 끌어내림 → 커버리지 가중(D51) 확인 |
+| 출제 모드만 낮음 | 태그 우선 규칙이 덜 관련된 태그 청크로 자리를 채움 → 태깅 품질이나 태그 상한 검토 |
+| 상위5 자료원이 1에 가까움 | 한 자료(가이드)가 결과를 독점 → `max_tagged`, 중복 제거 확인 |
+| 답할 수 없는 질의 증가 | 정리 규칙이 본문까지 지웠거나 자료가 빠짐 → 해당 출처 파일 확인 |
+
+## 4. 진단 일치율 (D43)
+
+리뷰 중 '자기 판단' 단계(정답 공개 → 개념/해석/모르겠음, 해설 전)에서 남긴 라벨을 판정과 비교한다. 공부만 하면 데이터가 쌓인다.
+
+```bash
+python -m misslens.cli eval                 # 일치율과 판정→내 판단 표
+python -m misslens.cli eval --export        # data/eval/misses-<날짜>.yaml (tests/fixtures/eval_misses.yaml과 같은 형식)
+```
+
+## 5. 실행 환경 메모
+
+- **샌드박스**(`MISSLENS_SANDBOX=1`): 학습 기록·체크포인트를 `data/sandbox/`에 따로 둔다. 화면 검토와 리허설은 여기서 한다. 색인은 공유(읽기 전용)라 검색 평가 결과는 같다.
+- **`/verify`**: 커밋 전에 실행한다. 테스트가 `tests/`에 따로 있어 매핑이 `~/.gstack/projects/misslens/pregate.json`에 있다. 새 소스 폴더를 만들면 거기에 테스트 매핑을 추가한다. 녹색일 때만 커밋한다.
+- **실호출**: 할당량을 쓴다. 할당량 초과가 의심되면 먼저 `python scripts/probe_models.py`.
