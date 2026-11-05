@@ -382,7 +382,7 @@ class Question(QuestionDraft):    # 코드가 채우는 부분 + 저장 형태(q
 | 로그인 | 화면에서 브라우저를 띄우지 않는다. 앱이 도는 컴퓨터에서 `collect login <site>`로 로그인한 뒤 '완료'를 누르면 같은 페이지부터 이어서 수집 |
 | 구현 | `src/misslens/ui/app.py`, 진입점 `app/main.py`(`streamlit run app/main.py`). 테스트는 Streamlit AppTest + 메모리 DB·가짜 LLM(`tests/test_ui.py`) |
 
-## 11. 디렉토리 구조 (예정)
+## 11. 디렉토리 구조 (2026-11-05 구현 기준)
 
 ```
 misslens/
@@ -395,7 +395,8 @@ misslens/
 │   ├── exam_pack.py   llm.py   bedrock.py(설정 로드·오류 분류)   ledger/   retrieval/(tokenize·embed·index)
 │   ├── practice.py    # 연습 문제 은행: 문체 예시·베끼기 검사(D39)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
-│   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|status|ingest|search`)
+│   ├── cli.py      # rich CLI (`python -m misslens.cli quiz|plan|ask|status|ingest|search|collect|practice`)
+│   ├── ui/app.py   # Streamlit 화면(§10)
 │   └── graph.py    # Supervisor 그래프: route → planner/generate/report/collect_<site>/ingest/submit (D41)
 ├── app/            # Streamlit 진입점(main.py) → src/misslens/ui/app.py
 ├── tests/          # pytest (live 마커 분리), fixtures/eval_misses.yaml(T1-a 실제 오답, eval용)
