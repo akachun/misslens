@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T26 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/), 로컬 트레이스·가드레일 정리. 테스트 기본 335·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀). 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
+| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T26 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/), 로컬 트레이스·가드레일 정리, 과제 산출물 규약 맞춤(`test_queries.csv`·질의 API `POST /query`·RAGAS, 질의 평가 14/20→19/20). 테스트 기본 355·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀). 남은 것: 화면 리허설, 데모 직전 점검, 제출. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
 | 마지막 갱신 | 2026-11-06 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -175,7 +175,9 @@
 - [x] **T24** 상위 모델 검토용 내보내기(D58, 학습자 요청): `export-questions`(제출한 세트만, 정답·violates·해설, 세부 항목별 근거 발췌 부록, `--evidence full|sources|none`, 자료 속 Markdown은 코드 블록). `src/misslens/review_export.py`, 테스트 `tests/test_review_export.py` 4개. 샌드박스 20문제 내보내기 확인
 - [x] **T25** 문제 품질 라운드 평가(D59, Day 9 과제 '인-아웃 세트 자체 평가·라운드 리포트'): 외부 교차 검토(Opus·GPT, 20문제 중 OK 1) → 원인(지시문에 key constraint 기준 없음, Haiku 근거 확인이 관대) → 출제·근거 확인 지시문 보강. `question-eval`(인-아웃 세트 `evals/ccar-f/question_set.yaml`, 별도 DB, 판정기 `judge` 역할), 판정기 v1→v2 보정(외부 검토와 OK 일치 25%→80%). 1·2라운드 리포트(`evaluation/`): OK 25→44%, 정답 하나 90→100%, 사실 50→83%, 적합성 65→83%, violates 유효 50% 그대로(개념 오답 구조 문제 → TODOS 3라운드). 테스트 `tests/test_question_eval.py` 9개
 - [x] **T26** 트레이스·가드레일(D60, Day 9 과제): 로컬 JSONL 트레이스(`trace.py`: 라우터의 모든 모델 호출, LangGraph 노드 콜백, span), `trace` 요약 명령, 실호출로 노드·토큰·엔드포인트 기록 확인. README '가드레일' 표(단계별 장치·위치·테스트)와 '트레이스' 절, 프로필 권한 0700 테스트 추가, demo.md 8단계(평가와 관측). 테스트 `tests/test_trace.py` 7개
-- [ ] 제출
+- [x] **T27** 과제 산출물 규약 맞춤(D61, 과제 안내서 `mini_project.pdf` 대조): 인-아웃 세트 `test_queries.csv`(20건, positive 8·negative 4·edge 5·guardrail 3), 질의 API `POST /query`(FastAPI, `qa.py`: 입력 가드레일 → router `classify` → 코치 ReAct → 출력 가드레일), `query`·`query-eval` 명령, RAGAS 0.4.3(langchain-community 호환 shim, `get_llm("judge")`·bge-m3 어댑터). 1라운드 14/20 → 라우터·질의응답 지시문 수정 → 2라운드 19/20(RAGAS cp 0.81→0.87, f 0.80→0.79, ar 0.77→0.73). SERVICE §10 수익·사내 기여, §12 인-아웃 세트, §13 가드레일 정의, F12. README 제출 요약(패턴 Day 대응·RAGAS·통과율·회고·핵심 코드 위치)·API 절. 테스트 `tests/test_qa.py` 20개, 라우터 실호출 5개 재확인
+- [ ] 시연 캡처(Google Form 업로드용): 화면 주요 단계 + API 응답
+- [ ] 제출(Google Form, 15:00 마감): GitHub URL + 시연 캡처
 
 ---
 
@@ -272,3 +274,4 @@
 | 2026-11-06 | 2라운드 외부 교차 검토(Opus·GPT, 18문제 판정 모두 일치): 외부 OK 5% → 22%, 정답 오류 0. 합의 라벨(보기 단위 포함)을 `question_set.yaml`의 `round2`에 넣고 `question-eval --relabel`(모델 호출 없이 재계산)과 보기 단위 보정 지표 추가. 판정기 v2: 종류 분류 92% 일치, 요구사항이 아닌 문구 8/9 찾음, '요구사항이지만 진짜 이유 아님' 0/8 → TODOS 판정기 v3. Streamlit 샌드박스 서버를 tmux `misslens-ui`로 다시 띄움 |
 | 2026-11-06 | 최종 점검: 기본 335·realdata 1 통과, 문서 경로·CLI 명령(README·CLAUDE.md)·결정 ID(D1~D60) 대조 이상 없음. 테스트 수(testing.md·TASK)와 다음 작업 문구 갱신, SERVICE '가정과 위험'에 violates 위험 추가. zip 미리 보기가 고정 폴더만 보여 `evaluation/`이 빠진 것처럼 보이던 출력 수정(실제로는 포함), HANDOFF.md에 '평가와 관측' 안내 추가 |
 | 2026-11-06 | 진행 상황·규칙 점검(통계 집계·모델 ID·interrupt 위치·encoding 위반 없음, 기본 335 통과). `dist/` zip이 D58~D60 이전 것이라 제출 직전 재생성 필요 확인. 리팩토링 후보 5개(Generator 조립 중복, UI→CLI 의존, `cli.main` 분할, 현황 포맷 중복, Ledger 닫기)를 TODOS '구조'에 추가(제출 후) |
+| 2026-11-06 | T27: 과제 안내서 대조 → 빠진 산출물(`test_queries.csv`, `POST /query`, RAGAS 리포트, SERVICE 수익·가드레일·인-아웃 절, README 템플릿 항목) 추가. 질의 평가 1라운드 14/20 → 2라운드 19/20, RAGAS 3지표 기록. 남은 실패 1건은 판정기 오판(TODOS) |

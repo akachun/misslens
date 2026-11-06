@@ -36,13 +36,14 @@
 | `test_portability.py` | Windows 대비: 텍스트 파일 읽기·쓰기에 `encoding='utf-8'` 명시(한국어 Windows 기본 cp949) | D56 |
 | `test_trace.py` | 로컬 트레이스: 라우터의 모델 호출 기록(전환·토큰·본문 제외), span 중첩·오류, 그래프 노드와 노드 안 호출, 끄기, 요약·CLI | D60 |
 | `test_question_eval.py` | 문제 품질 라운드 평가: 인-아웃 세트 파일, 직접 풀기(정답 숨김)·분해 판정·요약 계산, 생성 통계, 리포트·앞 라운드 비교, CLI(1라운드·다시 채점) | D59 |
+| `test_qa.py` | 질의 API: 입력 가드레일(막을 것·통과시킬 시험 주제), 차단 입력은 모델 호출·trace 없음, 출력 가드레일, 기능 요청 안내·현황 수치, 근거·단계 기록, `POST /query` 규약, `test_queries.csv` 스키마, 통과 판정·리포트, RAGAS import | D61 |
 | `test_review_export.py` | 상위 모델 검토용 내보내기: 제출한 세트만, 정답·violates·근거 부록, 근거 모드, 자료 속 Markdown을 코드 블록으로 | D58 |
 | `test_model_facing_text.py` | 모델에 보내는 구조화 출력 스키마(`QuestionDraft`·`PlanDraft`)와 코치 도구 설명이 영어로 남아 있는지(주석은 한국어) | D57 |
 | `test_ui.py` | Streamlit AppTest: 전체 흐름, 새로고침 복원, 코치 대화, 입력 폼, 이어 풀기, 지난 세트, 단어장 | D42·D47·D52~D54 |
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-06 최종 확인: 기본 335 통과(2라운드 라벨·`--relabel` 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
+2026-11-06 최종 확인: 기본 355 통과(질의 API·RAGAS 평가 D61 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
 
 **Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
 
@@ -173,7 +174,22 @@ python -m misslens.cli question-eval --round 2 --relabel                        
 - 출제 지시문, 근거 확인, 판정기를 바꾸면 새 라운드를 돌리고 리포트의 '앞 라운드' 열로 비교한다. 판정기를 바꿨으면 앞 라운드도 같은 판정기로 다시 채점해야 비교가 공정하다.
 - 라운드가 만든 `data/eval/round<N>_questions.md`를 외부 검토(§5)에 넣어 판정기 점수를 확인한다. 두 검토의 최종 YAML 합의를 `evals/ccar-f/question_set.yaml`의 `round<N>`에 넣고(판정, 두 쪽 모두 지적한 유형, 보기별 종류·유효 여부), `--relabel`로 판정기 보정 지표를 다시 낸다.
 
-## 7. 실행 환경 메모
+## 7. 질의 API 평가 (D61)
+
+`test_queries.csv`(id·category·input·expected_traits·forbidden·expected_tools·note, 세미콜론 구분)로 `POST /query` 경로를 잰다. 라운드 요약은 [evaluation/README.md](../evaluation/README.md).
+
+```bash
+python -m misslens.cli query "tool_choice를 any로 두면 어떻게 동작해?"     # 하나만(단계·근거 표시, --json)
+python -m misslens.cli query-eval --round 3 --notes "바꾼 것"            # 20건 + RAGAS → evaluation/query_round3_report.md
+python -m misslens.cli query-eval --round 3 --no-ragas --limit 5         # 빠른 확인
+```
+
+- 실호출이다(질의당 router Haiku 1회 + 답변 Sonnet 1~4회 + 판정 Sonnet 1회, RAGAS는 질의당 Sonnet 약 5~10회). 20건 + RAGAS가 약 10분.
+- `expected_tools`는 trace의 단계 이름(`search_material`, `learner_history`, `build_report`, `guard_input`)이나 경로(`route:quiz`, `route:status`)와 비교한다. 비워 두면 도구 조건이 없다.
+- 질의를 추가하면 `test_qa.py`의 스키마 검사(카테고리, 가드레일 질의는 실제로 입력 가드레일에 걸림)도 통과해야 한다.
+- 질의응답 지시문(`qa.py` `QA_SYSTEM`), 라우터 지시문, 판정기를 바꾸면 새 라운드를 돌린다. 판정기를 바꿨으면 앞 라운드도 다시 실행해 같은 판정기로 비교한다.
+
+## 8. 실행 환경 메모
 
 - **샌드박스**(`MISSLENS_SANDBOX=1`): 학습 기록·체크포인트를 `data/sandbox/`에 따로 둔다. 화면 검토와 리허설은 여기서 한다. 색인은 공유(읽기 전용)라 검색 평가 결과는 같다.
 - **`/verify`**: 커밋 전에 실행한다. 테스트가 `tests/`에 따로 있어 매핑이 `~/.gstack/projects/misslens/pregate.json`에 있다. 새 소스 폴더를 만들면 거기에 테스트 매핑을 추가한다. 녹색일 때만 커밋한다.

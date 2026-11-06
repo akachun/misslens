@@ -2,6 +2,20 @@
 
 문제 생성 품질을 라운드마다 같은 입력으로 다시 재고, 바꾼 것과 결과를 남긴다(D58, D59). 검색 품질 점수는 `evals/ccar-f/retrieval_baseline.json`과 `docs/testing.md` §3에 따로 있다.
 
+## 질의 API 라운드 (D61)
+
+`test_queries.csv`(20건) → `POST /query`와 같은 `answer_query` → 기대 도구 확인 + 판정기(`judge`)의 기대 특성·금지 항목 판정 → RAGAS 3지표. 실행: `python -m misslens.cli query-eval --round N --notes "바꾼 것"`.
+
+| 라운드 | 바꾼 것 | **통과** | positive | negative | edge | guardrail | context_precision | faithfulness | answer_relevancy | 리포트 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 기준선(첫 구현) | **14/20** | 6/8 | 2/4 | 3/5 | 3/3 | 0.81 | 0.80 | 0.77 | [query_round1_report.md](query_round1_report.md) |
+| 2 | 라우터: 설명 요청·세부 항목 기록 질문은 코치 질문, 모호한 말은 낮은 신뢰도. 질의응답: 공식 문서 권유·연습 세트 안내·되묻기 하나 | **19/20** | 7/8 | 4/4 | 5/5 | 3/3 | 0.87 | 0.79 | 0.73 | [query_round2_report.md](query_round2_report.md) |
+
+- 남은 실패(8번)는 판정기가 도구 결과(ledger 현황)를 보지 못해 실제 수치를 의심한 오판이다. 판정기를 고치면 두 라운드를 다시 실행해 같은 판정기로 비교한다.
+- RAGAS 표본은 근거를 찾아 답한 질의만이다(1라운드 8건, 2라운드 9건). '자료에 없음' 답(9번)은 answer_relevancy가 0으로 나온다.
+
+## 문제 생성 품질 라운드 (D59)
+
 ## 방법
 
 | 구성 | 내용 |

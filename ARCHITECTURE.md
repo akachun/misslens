@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 상태 | v1 확정 (2026-11-04), 구현 반영 갱신 (2026-11-05, Phase 3~4) |
-| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D60) |
+| 근거 | 제품 인터뷰(/office-hours), 엔지니어링 리뷰(/plan-eng-review, 결정 D1~D25), 리전 추가(D26), 구현 중 결정(D27~D61) |
 | 관련 문서 | [SERVICE.md](SERVICE.md) · [TASK.md](TASK.md) |
 
 > 이 문서의 결정은 리뷰에서 확정된 것이다. 바꿔야 한다면 §12 기술 결정 기록에 새 항목을 추가하고 바꾼다.
@@ -422,6 +422,9 @@ misslens/
 │   ├── paths.py       # 학습 기록·체크포인트 위치, 샌드박스(D45)
 │   ├── review_export.py  # 상위 모델 검토용 문제 내보내기(D58)
 │   ├── question_eval.py  # 문제 생성 품질 라운드 평가: 인-아웃 세트·LLM-as-Judge·리포트(D59)
+│   ├── qa.py          # 질의응답: 입력 가드레일 → router → 코치 ReAct → 출력 가드레일(D61)
+│   ├── api.py         # FastAPI: POST /query, GET /health(D61)
+│   ├── query_eval.py  # test_queries.csv 통과율 + RAGAS 라운드 평가(D61)
 │   ├── trace.py       # 로컬 트레이스: 모델 호출·그래프 노드·span → data/traces/*.jsonl(D60)
 │   ├── agents/{supervisor, collector, ingest, planner, generator, grader, reporter}/
 │   │                  # grader/: reask.py(재질문 폼) · review.py(판정 저장·진단) · coach.py(tool 사용 코치, D44·D47) · vocab.py(단어장, D54)
@@ -485,6 +488,7 @@ misslens/
 | D58 | 생성 문제의 상위 모델 검토는 앱 밖에서: `export-questions`가 제출한 세트의 문제(정답·violates·key constraints·해설)와 세부 항목별 근거 발췌를 검토 지시문과 함께 Markdown으로 저장하고, 학습자가 Claude Opus·GPT에 붙여 넣는다. 모델 호출·통계 기록 없음. 풀지 않은 세트는 정답이 드러나므로 제외 | 앱 안에 Opus 검토 단계 추가, 출제마다 자동 검토 | 마감 전이라 비용·지연·실패 경로를 늘리지 않음. Bedrock 할당량과 무관하게 학습자 구독으로 검토 가능. 같은 계열 착각을 피하려 다른 회사 모델도 쓸 수 있음. 자동화는 TODOS |
 | D59 | 문제 생성 품질은 라운드로 잰다: 고정 인-아웃 세트(세부 항목 20개 + 1라운드 외부 검토 판정) → 같은 입력으로 새로 생성(별도 DB) → `judge` 역할(Sonnet 4.6)이 정답을 숨긴 직접 풀기 + 오답 보기별 분해 판정, 요약은 코드가 계산 → `evaluation/round<N>_report.md`. 판정기는 외부 검토와의 일치로 보정(v1 OK 일치 25% → v2 80%). 외부 라벨은 라운드별(`round<N>`, 보기 단위 포함)로 세트 파일에 넣고 `--relabel`로 모델 호출 없이 재계산. 같은 라운드에서 출제·근거 확인 지시문에 '요구사항만 key constraint' 등 보강 | 판정기 없이 외부 검토만, RAGAS 라이브러리 도입, 판정기 v1(항목별 참/거짓) 유지 | 외부 검토는 사람이 붙여 넣어야 해서 반복이 느림. RAGAS는 근거 기반 답변 평가용이라 '오답 근거가 요구사항인가' 같은 출제 기준을 재지 못하고 의존성이 큼(검색 지표는 이미 hit@k·MRR로 잼). v1은 생성기와 같은 계열이라 관대했음 |
 | D60 | 관측은 로컬 JSONL 트레이스: 모든 모델 호출은 `Router.run`이 기록(역할·엔드포인트·모델·상태·지연·토큰·전환 내역, 그래프 노드 안이면 노드·thread_id), LangGraph 노드는 실행 설정의 콜백(`GraphTracer`)이, 작업 단위는 `span`이 기록. `data/traces/`(샌드박스 분리), 본문은 기록하지 않음, `MISSLENS_TRACE=0`으로 끔, `trace` 명령으로 요약. 테스트용 router는 기본으로 끄고 conftest가 기록 위치를 tmp로 돌림 | LangSmith 기본 사용, 모든 runnable 콜백 기록 | LangSmith는 프롬프트와 수집한 강의 발췌가 외부로 나감(환경 변수로 선택 가능하게만 안내). 모든 호출이 지나는 라우터 한 곳이 가장 확실하고, 그래프 밖(백그라운드 생성 스레드·CLI) 호출도 잡힘 |
+| D61 | 과제 표준 규약에 맞춰 질의 API(`POST /query` → answer·contexts·trace, FastAPI)를 추가한다. 경로는 입력 가드레일(규칙: 자격 증명·주입·덤프 사이트) → router 분류(`classify`, 기능 요청은 실행하지 않고 안내, 현황은 Reporter 수치) → 코치와 같은 ReAct 그래프·읽기 전용 도구(질의응답 지시문) → 출력 가드레일. 평가는 `test_queries.csv`(20건, positive·negative·edge·guardrail) 통과율(기대 도구 + `judge` 판정)과 RAGAS 0.4(context_precision without reference·faithfulness·answer_relevancy)를 `query-eval` 라운드로. RAGAS의 모델·임베딩은 어댑터로 `get_llm("judge")`·bge-m3를 쓴다. ragas 0.4.3이 langchain-community 0.4에서 사라진 VertexAI 모듈을 import하므로 그 이름만 빈 클래스로 채운다 | API에서 Supervisor 그래프 전체 실행(문제 생성까지), RAGAS 대신 자체 판정기로만, RAGAS 기본 OpenAI 모델 | 문제 생성·제출은 학습 기록을 바꾸고 interrupt·백그라운드 스트림이 있어 HTTP 한 번에 맞지 않는다(규칙 2, 4). 과제 산출물이 RAGAS 지표를 이름으로 요구하고, 질의응답은 RAGAS가 재는 '근거 기반 답변' 형태라 D59의 이유(출제 기준은 못 잼)가 해당하지 않는다. 모델 호출은 규칙 5대로 라우터 한 곳으로 |
 | D6/D20 | 조건 분기 + 자유 발화만 LLM | 모든 입력을 LLM이 분류 | 버튼 입력의 지연과 오분류를 없애고 자연어 지시는 유지 |
 | D7 | (대체됨) 풀이 흐름 첫 질문: session_state + resume, 학습은 CLI | — | 사용자가 '세트로 풀고 리뷰 때 처리'하는 대안을 제시해 D8로 다시 결정 |
 | D8 | 세트 풀이 + 리뷰 시 진단 | 문제마다 즉시 채점 | 실전과 같은 조건, 풀이 시간 데이터, 구현 단순화 |

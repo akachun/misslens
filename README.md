@@ -7,13 +7,105 @@
 | 문서 | 내용 |
 |---|---|
 | [SERVICE.md](SERVICE.md) | 무엇을, 왜 만드는가(기능 요구사항 F1~F10, 성공 기준) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D60) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조, 흐름, 데이터 모델, 기술 결정(D1~D61) |
 | [TASK.md](TASK.md) | 진행 상황과 작업 로그 |
 | [TODOS.md](TODOS.md) | v1 이후 할 일 |
 | [docs/demo.md](docs/demo.md) | 데모 시나리오와 실패할 때 대체 경로 |
 | [docs/testing.md](docs/testing.md) | 테스트 계층, 실행 시점, 검색 품질 평가(지표·정답 질의·기준선) |
 | [evaluation/README.md](evaluation/README.md) | 문제 생성 품질 라운드 평가: 방법, 라운드 요약, 판정기 보정, 발견 |
 | [CLAUDE.md](CLAUDE.md) | 코딩 에이전트용 규칙 |
+
+## 미니 PJT 제출 요약
+
+과제 README 템플릿 순서로 정리한 요약입니다. 자세한 내용은 아래 절과 링크한 문서에 있습니다.
+
+### 무엇을 푸나
+
+영어 시나리오형 자격증 시험(CCA-F)에서 개념은 아는데 지문의 조건 문구를 놓쳐 틀리는 학습자가, **왜 틀렸는지(개념 실수 vs 해석 실수)와 어떤 문구를 놓쳤는지**를 알고 그 약점 위주로 다시 연습하게 한다. 사용자·문제·가치·확장(수익 모델, 사내 기여)·인-아웃 세트·가드레일 정의는 [SERVICE.md](SERVICE.md).
+
+### 활용한 패턴 (Day 1~7)
+
+12개 패턴 중 11개를 적용했습니다(MCP만 미적용).
+
+| # | 패턴 | Day | 어떻게 활용 | 위치 |
+|---|---|---|---|---|
+| 1 | LCEL chain · Pydantic 구조화 출력 | 1 | 문제·라우팅·계획·근거 확인·판정을 Pydantic 스키마로 받음. 필드 순서를 생성 순서로 써서 첫 시도 통과율 1/8 → 6/8(D40) | `generator/schema.py`, `supervisor`, `question_eval.py` |
+| 2 | ReAct (도구 자율 선택) | 3 | 코치와 질의 API가 `bind_tools` + `ToolNode`로 자료 검색·학습 기록 도구를 스스로 골라 호출(질문마다 최대 3회) | `grader/coach.py`, `qa.py` |
+| 3 | RAG (하이브리드 검색·순위 결합) | 2 | bge-m3 의미 검색 + BM25 → 질의 커버리지(idf) 가중 RRF, 세부 항목 태그 우선. 정답 질의 30개 hit@5 1.00 | `retrieval/index.py` |
+| 4 | 도구 다중 (DB·검색) | 4 | `search_material`(색인) + `learner_history`(SQLite 학습 기록)를 한 답변에서 결합 | `grader/coach.py` `make_tools` |
+| 5 | MCP 서버 연동 | 4 | 미적용(TODOS) | - |
+| 6 | 가드레일 (PII·프롬프트 주입) | 5 | 입력: 자격 증명·주입·덤프 수집 요구 거절, 자료를 '참고 데이터' 블록으로. 출력: 지시문 유출 교체·키 가림. 출제: validator → 근거 검증 → 재생성 | `qa.py`, `generator/context.py`, `generator/pipeline.py` |
+| 7 | HITL (`interrupt()`) | 5 | 계획 승인(interrupt①), 로그인 대기(interrupt②). 새로고침·재시작 뒤에도 체크포인터로 재개 | `agents/planner`, `agents/collector/graph.py` |
+| 8 | 미들웨어 (재시도·마스킹) | 5 | 모든 모델 호출이 `get_llm(role)` 라우터를 지나며 오류 종류별 재시도·쿨다운·엔드포인트 5곳 전환·모델 폴백, 트레이스 기록 | `llm.py` |
+| 9 | Multi-Agent Supervisor | 6 | Supervisor가 Planner·Generator·Grader·Reporter·Collector·Ingest로 위임(Planner·Collector는 서브그래프) | `graph.py` |
+| 10 | Plan-Execute · 장기 메모리 | 7 | Planner가 약점·범위로 계획 → 승인 → 생성 실행. 학습 기록(ledger, SQLite)이 세션을 넘어 출제·계획·코치에 쓰임 | `agents/planner`, `ledger/` |
+| 11 | Observability · Trace | 7 | 로컬 JSONL 트레이스(모델 호출·노드·span, 본문 제외) + `trace` 요약, API 응답의 `trace` | `trace.py` |
+| 12 | 평가 (RAGAS · LLM-as-Judge) | 7 | `test_queries.csv` 통과율 + RAGAS 3지표(`query-eval`), 문제 품질 LLM-as-Judge 라운드(`question-eval`, 외부 검토로 보정), 검색 hit@k·MRR | `query_eval.py`, `question_eval.py`, `retrieval/evaluate.py` |
+
+### 아키텍처
+
+아래 [한눈에 보는 구조](#한눈에-보는-구조)와 [에이전트별 그래프](#에이전트별-그래프)(컴파일된 LangGraph에서 생성한 그림). 질의 API 경로는 `입력 가드레일 → router 분류 → (기능 요청이면 안내 | 코치 ReAct: search_material·learner_history) → 출력 가드레일`입니다([API](#api)).
+
+### 실행 방법
+
+[설치](#설치) → `.env`에 Bedrock 자격 증명 → `streamlit run app/main.py`(화면), `python -m misslens.cli <명령>`(CLI), `uvicorn misslens.api:app`(API). 평가: `python -m misslens.cli query-eval --round N`, `question-eval --round N`, `retrieval-eval`.
+
+### RAGAS 지표
+
+`python -m misslens.cli query-eval --round N`이 `test_queries.csv`로 질의 API를 돌린 뒤, 근거를 찾아 답한 질의에 RAGAS 0.4 지표를 계산합니다. 평가 모델은 `judge` 역할(Sonnet 4.6), 임베딩은 bge-m3입니다. 리포트: [1라운드](evaluation/query_round1_report.md) · [2라운드](evaluation/query_round2_report.md).
+
+| 지표 | 1라운드 (8건) | 2라운드 (9건) |
+|---|---|---|
+| context_precision | 0.81 | **0.87** |
+| faithfulness | 0.80 | **0.79** |
+| answer_relevancy | 0.77 | **0.73** |
+
+- context_precision은 `LLMContextPrecisionWithoutReference`입니다. 정답 문장이 없으므로 답변을 기준으로 검색 발췌가 쓸모 있었는지 봅니다.
+- 2라운드 수정은 라우팅과 안내 문구였고 근거 충실도는 목표가 아니었습니다. 두 라운드에 모두 있는 8건만 비교하면 context_precision 0.81→0.85, faithfulness 0.80→0.76, answer_relevancy 0.77→0.73으로, 실행마다 답이 새로 생성되는 변동 범위 안입니다.
+- 9번("Opus 5의 컨텍스트 창")은 자료에 없다고 올바르게 답했지만 RAGAS가 '모른다' 답을 무관한 답으로 봐 answer_relevancy가 0입니다. 9번을 빼면 2라운드 answer_relevancy는 0.83입니다. 16번(시험 전략 질문)은 자료가 얇아 faithfulness가 낮습니다(0.11).
+- 검색 자체는 정답 질의 30개로 따로 잽니다: hit@5 일반·코치 1.00, 출제 0.97([docs/testing.md](docs/testing.md) §3).
+
+### 인-아웃 세트 통과율 (자체 평가)
+
+**질의 API (`test_queries.csv` 20건)**: 통과 = 기대 도구가 모두 호출되고, 판정기가 기대 특성을 모두 충족하고 금지 항목이 없다고 봄.
+
+| 라운드 | 전체 | positive | negative | edge | guardrail |
+|---|---|---|---|---|---|
+| 1차 (첫 구현) | 14/20 | 6/8 | 2/4 | 3/5 | 3/3 |
+| 2차 (지시문 수정 후) | **19/20** | 7/8 | 4/4 | 5/5 | 3/3 |
+
+- **개선폭: +5건.** 주요 개선: (1) 라우터 지시문에서 '개념·설정·전략 설명 요청과 세부 항목 하나의 기록 질문은 기능 요청이 아니라 코치 질문'으로 구분(3·6·17번: 개념 질문을 문제 세트 요청으로, 모호한 말을 계획 요청으로 오분류하던 것), (2) 질의응답 지시문에 '자료에 없으면 공식 문서 확인 권유, 실제 시험 문제 요구에는 연습 세트 안내, 모호하면 되묻기 하나만'(9·12·13번).
+- 남은 1건(8번 현황)은 판정기가 ledger에서 읽은 실제 수치를 '근거 없는 숫자'로 본 오판입니다. 판정기에 도구 결과를 넘기는 수정은 앞 라운드 재채점이 필요해 다음 라운드로 미뤘습니다(TODOS).
+
+**문제 생성 품질 (`evals/ccar-f/question_set.yaml` 세부 항목 20개, [evaluation/README.md](evaluation/README.md))**: 외부 교차 검토(Opus·GPT) OK 1/20(5%) → **4/18(22%)**, 판정기 OK 25% → 44%, 사실 확인 50% → 83%, 정답이 하나뿐 90% → 100%.
+
+### 트라이앤에러 회고
+
+| 시도했지만 실패한 접근 | 왜 실패했나 | 최종 채택 | 결정 |
+|---|---|---|---|
+| 세부 항목 설명만 주고 출제 | 지어낸 API 플래그가 검증을 통과(검사 3개일 때)하거나 실제 플래그까지 떨어짐(4개일 때) | 학습 자료 RAG를 근거로 출제 + 다른 모델(Haiku)이 근거 확인 | D34 |
+| 구조화 출력에서 보기를 먼저 생성 | 조건 문구가 지문에 글자 그대로 없어 validator 실패, 첫 시도 통과 1/8 | 필드 순서를 생성 순서로(지문 → 조건 문구 → 보기), 6/8 | D40 |
+| 한국어 질의에 RRF 그대로 | BM25가 흔한 영어 단어만 맞춰 정답 청크가 41위 | 질의 커버리지(idf) 가중 RRF, 정답 질의 hit@5 1.00 | D51 |
+| 수집 본문을 그대로 색인 | 영상 플레이어 메뉴 글자가 청크의 29%, 코치가 "Skilljar 자료 없음"이라고 잘못 답함 | 사이트별 정리 규칙 + 재색인, 검색 도구에 `source` 필터 | D48·D49 |
+| 판정기 v1(항목별 참/거짓 한 번) | 생성기와 같은 계열이라 관대, 외부 검토와 OK 일치 25% | 정답을 숨기고 직접 풀기 + 오답 보기별 분해 판정(v2), 일치 80% | D59 |
+| 질의 API 라우터에 출제용 분류 지시문 그대로 | 개념 질문을 문제 세트 요청으로 오분류(1차 14/20) | 질문과 기능 요청을 구분하는 지시문, 2차 19/20 | D61 |
+| RAGAS 기본 설정 | ragas 0.4.3이 langchain-community 0.4에서 사라진 모듈을 import해 실패, 기본 평가 모델은 OpenAI | 그 이름만 빈 클래스로 채우는 shim + `get_llm("judge")`·bge-m3 어댑터(규칙 5 유지) | D61 |
+
+**남은 한계와 다음 방향**
+- 문제 품질: 외부 검토 OK 22%. 오답 보기의 근거 문구(`violates`)가 요구사항이 아닌 경우가 많다(유효 50%) → 개념 오답은 `violates`를 비우는 규칙 변경과 판정기 v3(TODOS).
+- 질의 평가 판정기가 도구 결과를 보지 못해 실제 수치를 의심한다(8번) → 판정기에 도구 출력 전달 후 두 라운드 재채점.
+- MCP 연동과 Docker 이미지는 하지 않았다. 모델 제공자가 Bedrock에 묶여 있어 API 키 기반 제공자 선택이 제출 후 1순위다(TODOS).
+
+### 핵심 코드 위치
+
+| 과제 규약 | 이 저장소 | 내용 |
+|---|---|---|
+| `src/agent.py` | `src/misslens/graph.py:83` `build_supervisor_graph` | 메인 Supervisor 그래프 |
+| `src/tools.py` | `src/misslens/agents/grader/coach.py:90` `make_tools` | 도메인 도구(`search_material`, `learner_history`), ReAct 그래프 `build_coach_graph`(179행) |
+| `src/retriever.py` | `src/misslens/retrieval/index.py:65` `ChunkIndex`(`search` 184행, `rrf` 56행) | 하이브리드 RAG |
+| API | `src/misslens/api.py:73`, `src/misslens/qa.py:181` `answer_query` | `POST /query`, 가드레일·라우팅·답변 |
+| 평가 | `src/misslens/query_eval.py:151` `ragas_scores`, `src/misslens/question_eval.py` | RAGAS·인-아웃 세트, 문제 품질 라운드 |
+| `data/` | git 제외(로그인 교안·개인 학습 기록) | 구성은 [데이터와 보안](#데이터와-보안), 평가용 데이터는 비공개 zip([평가용 전달](#평가용-전달비공개)) |
 
 ## 한눈에 보는 구조
 
@@ -330,12 +422,41 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 | `eval [--export [PATH]]` | 진단 일치율(리뷰 때 남긴 내 판단 vs 판정), eval 데이터 저장(기본 `data/eval/`) |
 | `practice import [DIR]` | 연습 문제 파일 → 문체 예시 은행 |
 | `question-eval --round N [--existing\|--from-set ID] [--notes 문장]` | 문제 생성 품질 라운드 평가: 인-아웃 세트로 생성 → LLM-as-Judge → `evaluation/round<N>_report.md`(D59, 실호출) |
+| `query "<질문>" [--json]` | 질문 하나에 근거 기반으로 답하기(`POST /query`와 같은 경로: 입력 가드레일 → 라우터 → 코치 ReAct → 출력 가드레일), 단계와 근거 출처 표시(D61) |
+| `query-eval --round N [--notes 문장] [--no-ragas]` | `test_queries.csv` 인-아웃 세트 통과율 + RAGAS 지표 라운드 평가 → `evaluation/query_round<N>_report.md`(D61, 실호출) |
 | `trace [--day YYYYMMDD\|all] [--last N]` | 로컬 트레이스 요약: 역할별 모델 호출·전환·지연·토큰, 그래프 노드 소요 시간, 최근 실행(D60) |
 | `export-questions [--set ID] [--evidence full\|sources\|none] [-o PATH]` | 제출한 세트의 문제(정답·오답 근거·해설)와 근거 발췌를 검토 지시문과 함께 Markdown으로 저장(기본 `data/review/`). Claude Opus나 GPT 대화에 붙여 넣어 사후 검토한다(모델 호출 없음, D58) |
 
 모든 명령은 `python -m misslens.cli <명령>`으로 실행하고, 시험은 `--exam ccar-f`(기본값)로 고릅니다.
 
 **샌드박스:** `MISSLENS_SANDBOX=1`을 붙이면(예: `MISSLENS_SANDBOX=1 streamlit run app/main.py`) 학습 기록과 체크포인트를 `data/sandbox/`에 따로 저장합니다. 시연·검토·리허설이 실제 통계에 섞이지 않고, 색인·수집본은 읽기만 합니다(자료 넣기·수집은 막힘).
+
+## API
+
+과제 표준 규약을 따르는 질의 API입니다(D61). 질문에 답하기만 하고 학습 기록은 쓰지 않습니다. 문제 풀이·계획 승인·수집은 화면과 CLI에서 합니다.
+
+```bash
+uvicorn misslens.api:app --port 8000            # 샌드박스 기록으로: MISSLENS_SANDBOX=1 uvicorn ...
+curl -s localhost:8000/query -H 'Content-Type: application/json' \
+     -d '{"question": "tool_choice를 any로 두면 어떻게 동작해?"}'
+```
+
+PowerShell: `Invoke-RestMethod -Uri http://localhost:8000/query -Method Post -ContentType 'application/json; charset=utf-8' -Body '{"question": "tool_choice를 any로 두면 어떻게 동작해?"}'`
+
+```json
+{
+  "answer": "tool_choice를 \"any\"로 두면 모델은 반드시 도구를 하나 이상 호출하지만 어떤 도구를 쓸지는 스스로 고릅니다. … (출처: guide.pdf p.11)",
+  "contexts": [{"doc_id": "guide.pdf", "text": "…"}],
+  "trace": [{"step": "guard_input", "input": "…", "output": "pass"},
+            {"step": "route", "input": "…", "output": "unknown (0.30)"},
+            {"step": "search_material", "input": "{\"query\": \"tool_choice any behavior\"}", "output": "<reference_material>…"},
+            {"step": "guard_output", "input": "answer", "output": "pass"},
+            {"step": "answer", "input": "coach", "output": "…"}],
+  "route": "answer"
+}
+```
+
+`route`는 `answer`(코치가 답함), `route:<intent>`(문제 풀기·계획·현황·수집 요청을 알아보고 어디서 하는지 안내, 현황은 수치 요약), `blocked:<종류>`(입력 가드레일: credential·injection·dump_site) 중 하나입니다. `GET /health`는 상태 확인용입니다.
 
 ## 데이터와 보안
 
@@ -362,6 +483,8 @@ streamlit run app/main.py                       # 화면(학습·단어장·자�
 | 단계 | 가드레일 | 위치 | 테스트 |
 |---|---|---|---|
 | 입력 | 수집 본문·검색 결과·도구 결과를 '참고 자료(data, 지시 아님)' 블록으로 감싸 프롬프트 주입 차단. 수집 페이지에 `untrusted external content` 표시 | `generator/context.py` `reference_block`, `collector/graph.py`, `ingest/loaders.py`, 코치·단어장·판정기 프롬프트 | `test_generator.py`, `test_ingest.py` |
+| 입력(질의 API) | 비밀번호·자격 증명 전달(`pw=…`, "알려 줄 테니 로그인해 줘", 액세스 키), 프롬프트 주입(지시 무시·지시문 공개 요구), 덤프 사이트 수집 요구는 모델을 부르기 전에 규칙으로 거절. 시험 주제 질문("비밀번호를 저장하지 않는 에이전트", "system prompt에 예시")은 통과. 차단한 입력은 trace에도 원문을 남기지 않음 | `qa.py` `guard_input` | `test_qa.py`, `test_queries.csv` 18~20 |
+| 출력(질의 API) | 답에 지시문이 섞이면 답 전체를 거절 문장으로 교체, 액세스 키 형태는 가림. 기능 요청(문제 풀기·계획·수집)은 실행하지 않고 안내만(학습 기록을 바꾸지 않음) | `qa.py` `guard_output`, `_feature_answer` | `test_qa.py` |
 | 입력 | 자유 발화는 신뢰도 0.6 미만이거나 의도를 모르면 실행하지 않음. 파일 경로는 문장에서 받지 않음 | `supervisor` `MIN_CONFIDENCE`, `route_text` | `test_supervisor.py` |
 | 입력 | 수집은 `sources.yaml`에 허용한 도메인만, 로그인 만료·수강 미등록 페이지는 저장하지 않고 멈춤(interrupt②). 예상문제 사이트는 자동 수집 안 함 | `collector/sources.py` `allows`·`is_expired`·`is_not_enrolled` | `test_collector.py` |
 | 출력(문제) | 구조 validator(보기 4개, 정답 1개, 조건 문구가 지문에 글자 그대로, `violates` 일치) → 연습 문제 베끼기 검사(60% 이상 겹치면 거절) → 다른 모델(Haiku)의 근거 확인. 최초 1회 + 재생성 2회, 세부 항목 2개 연속 실패 시 세트 중단 | `generator/schema.py` `validation_errors`, `practice.py` `copy_reason`, `generator/pipeline.py` `MAX_TRIES` | `test_generator.py`, `test_practice.py` |

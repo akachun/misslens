@@ -58,6 +58,13 @@ v1 범위 밖이거나 구현 중에 발견했지만 마감 전에 하지 않기
 - [ ] 리뷰(재질문 폼 구성·제출)도 Supervisor 경로로 보내기: 지금은 제출(`submit`)만 그래프를 거치고 리뷰는 화면이 Grader 함수를 직접 부름(D41)
 - [ ] `get_llm` 라우터의 호출 로그를 Streamlit에 표시(어느 엔드포인트·모델이 응답했는지)
 
+### 질의 API 평가 (D61 이후)
+
+- [ ] 질의 평가 판정기에 도구 결과(`build_report`·`learner_history` 출력)를 넘긴다: 2라운드 8번은 ledger의 실제 수치를 '근거 없는 숫자'로 오판. 고친 뒤 1·2라운드를 다시 실행해 같은 판정기로 비교
+- [ ] 질의 API의 현황 답에 영역 이름을 함께(지금은 `d1 86%`처럼 ID만)
+- [ ] RAGAS answer_relevancy가 '자료에 없음' 답을 0으로 본다: negative 질의는 RAGAS 표본에서 빼거나 따로 보고
+- [ ] MCP 서버로 `search_material`·`learner_history` 노출(과제 패턴 5), Docker 이미지(bge-m3·Playwright 포함 크기 확인)
+
 ### 리팩토링 후보 (2026-11-06 점검, 동작 변화 없음)
 
 마감 직전이라 제출 후로 미뤘다. 1·2번을 함께 하고 기본 테스트(`pytest -m "not live"`)로 회귀를 확인한다.

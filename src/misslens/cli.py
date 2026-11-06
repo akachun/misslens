@@ -477,6 +477,16 @@ def main(argv: list[str] | None = None) -> int:
     qe.add_argument("--limit", type=int, help="앞에서 N개 세부 항목만(시험 실행용)")
     qe.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
     qe.add_argument("--exam", default="ccar-f")
+    qq = sub.add_parser("query", help="질문 하나에 근거 기반으로 답하기(POST /query와 같은 경로, D61)")
+    qq.add_argument("question")
+    qq.add_argument("--json", action="store_true", help="API 응답과 같은 JSON으로 출력")
+    qq.add_argument("--exam", default="ccar-f")
+    qv = sub.add_parser("query-eval", help="test_queries.csv 인-아웃 세트 통과율 + RAGAS 지표 라운드 평가(D61, 실호출)")
+    qv.add_argument("--round", type=int, required=True, dest="round_no", help="라운드 번호(리포트 파일 이름)")
+    qv.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
+    qv.add_argument("--limit", type=int, help="앞에서 N건만(시험 실행용)")
+    qv.add_argument("--no-ragas", action="store_true", help="RAGAS 지표를 건너뛴다(통과율만)")
+    qv.add_argument("--exam", default="ccar-f")
     tr = sub.add_parser("trace", help="로컬 트레이스 요약: 역할별 모델 호출·노드 소요 시간·최근 실행(D60)")
     tr.add_argument("--day", help="YYYYMMDD(기본 오늘) 또는 all")
     tr.add_argument("--last", type=int, default=3, help="최근 실행 N개를 단계별로 보여 준다")
@@ -550,6 +560,10 @@ def main(argv: list[str] | None = None) -> int:
             return question_eval_command(cli, args)
         elif args.cmd == "trace":
             return trace_command(cli, args)
+        elif args.cmd == "query":
+            return query_command(cli, args)
+        elif args.cmd == "query-eval":
+            return query_eval_command(cli, args)
         elif args.cmd == "practice":
             from misslens.practice import SOURCE_DIR, parse_dir, save_bank, summarize
 
@@ -787,6 +801,60 @@ def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
     path = save_round(args.round_no, m, results, report, notes=args.notes or "-")
     cli.console.print(f"판정기 OK {m['judge_ok_rate']} · violates 유효 {m['violates_valid_rate']} · "
                       f"정답 하나 {m['single_answer_rate']} → {path}")
+    return 0
+
+
+def _qa_service(cli: CLI):
+    from misslens.api import QAService
+    from misslens.llm import get_llm
+
+    index = open_index(cli.pack.exam_id)
+    cli.index = index
+    return QAService(cli.pack, cli.ledger, index, get_llm("explainer"), get_llm("router"))
+
+
+def query_command(cli: CLI, args: argparse.Namespace) -> int:
+    """질문 하나 → 답변·근거·단계(API와 같은 answer_query)."""
+    res = _qa_service(cli).ask(args.question)
+    if args.json:
+        print(json.dumps(res.as_dict(), ensure_ascii=False, indent=2))
+        return 0
+    cli.console.print(Panel(escape(res.answer), title=f"답변 · {res.route}"))
+    for s in res.trace:
+        cli.console.print(f"[dim]{escape(s['step'])}[/] {escape(s['input'][:80])} → {escape(s['output'][:120])}")
+    if res.contexts:
+        cli.console.print("근거: " + ", ".join(sorted({escape(c["doc_id"]) for c in res.contexts})))
+    return 0
+
+
+def query_eval_command(cli: CLI, args: argparse.Namespace) -> int:
+    """test_queries.csv로 질의 API를 평가하고 evaluation/query_round<N>_report.md를 저장한다(D61)."""
+    from misslens.bedrock import load_model_config
+    from misslens.llm import get_llm
+    from misslens.query_eval import (load_queries, load_round_metrics, metrics, ragas_scores, render_report,
+                                     run_round, save_round)
+
+    cases = load_queries()
+    cases = cases[:args.limit] if args.limit else cases
+    svc = _qa_service(cli)
+    judge = get_llm("judge")
+    say = lambda m: cli.console.print(escape(m))  # noqa: E731
+    say(f"{len(cases)}건 실행·판정 중")
+    rows = run_round(cases, svc.ask, judge, progress=say)
+    if not args.no_ragas:
+        from misslens.retrieval.embed import get_embedder
+
+        say("RAGAS 지표 계산 중(context_precision·faithfulness·answer_relevancy)")
+        ragas_scores(rows, judge, get_embedder())
+    m = metrics(rows)
+    roles = load_model_config().roles
+    notes = args.notes or "-"
+    report = render_report(args.round_no, m, rows, previous=load_round_metrics(args.round_no - 1), notes=notes,
+                           judge_model=roles["judge"]["model"], answer_model=roles["explainer"]["model"])
+    path = save_round(args.round_no, m, rows, report, notes=notes)
+    r = m["ragas"]
+    cli.console.print(f"통과 {m['passed']}/{m['total']} · RAGAS cp {r['context_precision']} · f {r['faithfulness']} · "
+                      f"ar {r['answer_relevancy']} ({m['ragas_samples']}건) → {path}")
     return 0
 
 
