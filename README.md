@@ -345,6 +345,22 @@ flowchart LR
 
 사이드바: 자연어 요청(여러 줄, Ctrl+Enter / ⌘+Enter로 보내기). 진행 중인 작업(문제 생성·단어장·요청)은 화면 위 '⏳ 진행 중' 한 줄에 모여 표시되고, 화면 위 '사용법'에 탭별 안내가 있습니다. 오른쪽 위 ⋮는 Streamlit 기본 메뉴입니다(최소 모드).
 
+### 시연 화면
+
+2026-11-06 샌드박스 기록으로 캡처했습니다(`docs/screenshots/`).
+
+| 화면 | 보여 주는 것 |
+|---|---|
+| ![학습 탭](docs/screenshots/01_study_tab.png) | **학습 탭**: 바로 풀기, 지난 세트(정답 수·개념/해석 수·진단 다시 보기). 위에 샌드박스 안내 |
+| ![세트 진단](docs/screenshots/02_diagnosis.png) | **세트 진단 요약**: 개념 실수 1·해석 실수 1·불확실 6, 미끼 기준선 100% |
+| ![해석 실수](docs/screenshots/03_reading_miss_1.png) | **해석 실수 판정**: 한국어 재질문에서 맞혀 해석 실수, 놓친 조건 문구를 지문에서 강조 |
+| ![코치 질문 칸](docs/screenshots/03_reading_miss_2.png) | **코치에게 질문** 칸과 '문제 이상(통계에서 빼기)' |
+| ![코치 해설](docs/screenshots/04_coach.png) | **코치 해설**(ReAct: 자료 검색·학습 기록 도구) 진단 결과와 학습 이력을 반영, 출처 `guide.pdf p.14, p.30` |
+| ![현황](docs/screenshots/05_status.png) | **현황**: 범위 20/30, 해석 실수 비율과 미끼 기준선, 영역별 정답률, 놓친 조건 문구 순위, 진단 일치율 |
+| ![계획 승인](docs/screenshots/06_plan_approval.png) | **계획 승인 대기(interrupt①)**: 영역별 문제 수와 근거를 보고 고쳐서 승인, 새로고침해도 이어짐 |
+| ![단어장](docs/screenshots/07_vocab.png) | **단어장**: 놓친 문제의 조건 표현을 원문 문장과 함께, 외운 표현 숨기기 |
+| ![API 가드레일](docs/screenshots/09_api_guardrail.png) | **`POST /query` 가드레일**: 프롬프트 주입 시도 → `blocked:injection`, 모델 호출 없음, 입력 원문은 trace에 남기지 않음 |
+
 ## 설치
 
 macOS 기준, Python 3.11 이상입니다.
