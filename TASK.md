@@ -271,3 +271,4 @@
 | 2026-11-05 | 세션을 tmux + Remote Control로 옮김(모바일 이어 하기). T26: 로컬 트레이스와 가드레일 정리. 첫 테스트 실행이 실제 `data/traces/`에 기록을 남긴 것을 발견(206줄, 모두 테스트) → 삭제하고 conftest에서 tmp로 돌림 |
 | 2026-11-06 | 2라운드 외부 교차 검토(Opus·GPT, 18문제 판정 모두 일치): 외부 OK 5% → 22%, 정답 오류 0. 합의 라벨(보기 단위 포함)을 `question_set.yaml`의 `round2`에 넣고 `question-eval --relabel`(모델 호출 없이 재계산)과 보기 단위 보정 지표 추가. 판정기 v2: 종류 분류 92% 일치, 요구사항이 아닌 문구 8/9 찾음, '요구사항이지만 진짜 이유 아님' 0/8 → TODOS 판정기 v3. Streamlit 샌드박스 서버를 tmux `misslens-ui`로 다시 띄움 |
 | 2026-11-06 | 최종 점검: 기본 335·realdata 1 통과, 문서 경로·CLI 명령(README·CLAUDE.md)·결정 ID(D1~D60) 대조 이상 없음. 테스트 수(testing.md·TASK)와 다음 작업 문구 갱신, SERVICE '가정과 위험'에 violates 위험 추가. zip 미리 보기가 고정 폴더만 보여 `evaluation/`이 빠진 것처럼 보이던 출력 수정(실제로는 포함), HANDOFF.md에 '평가와 관측' 안내 추가 |
+| 2026-11-06 | 진행 상황·규칙 점검(통계 집계·모델 ID·interrupt 위치·encoding 위반 없음, 기본 335 통과). `dist/` zip이 D58~D60 이전 것이라 제출 직전 재생성 필요 확인. 리팩토링 후보 5개(Generator 조립 중복, UI→CLI 의존, `cli.main` 분할, 현황 포맷 중복, Ledger 닫기)를 TODOS '구조'에 추가(제출 후) |

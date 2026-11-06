@@ -57,3 +57,13 @@ v1 범위 밖이거나 구현 중에 발견했지만 마감 전에 하지 않기
 
 - [ ] 리뷰(재질문 폼 구성·제출)도 Supervisor 경로로 보내기: 지금은 제출(`submit`)만 그래프를 거치고 리뷰는 화면이 Grader 함수를 직접 부름(D41)
 - [ ] `get_llm` 라우터의 호출 로그를 Streamlit에 표시(어느 엔드포인트·모델이 응답했는지)
+
+### 리팩토링 후보 (2026-11-06 점검, 동작 변화 없음)
+
+마감 직전이라 제출 후로 미뤘다. 1·2번을 함께 하고 기본 테스트(`pytest -m "not live"`)로 회귀를 확인한다.
+
+- [ ] **Generator 조립 한 곳으로**: 색인 → `RetrievalContext`, 연습 문제 → `PracticeSamples`, `copy_guard` 조립이 `cli.py`의 `make_services`·`quiz` 분기·`question_eval_command` 세 곳에 복사돼 있다. 한 곳만 고치면 경로마다 출제 조건이 달라진다 → `build_generator(pack, ledger)` 하나로
+- [ ] **서비스 조립을 CLI 밖으로**: `ui/app.py`(`default_resources`)가 `misslens.cli`에서 `make_services`·`open_index`를 가져온다. `misslens/services.py`로 옮겨 UI가 CLI(rich·argparse)에 의존하지 않게 한다(위 항목을 모을 자리)
+- [ ] **`cli.main()` 나누기**(약 170줄): `--exam`을 서브커맨드 13개마다 반복 → 공통 parent parser로. `ingest`·`practice`·`search`·`quiz` 본문을 다른 명령처럼 `*_command` 함수로 뺀다
+- [ ] **현황 표시 포맷 공유**: `CLI.render_report`와 `ui/app.py`의 `render_report`가 같은 Reporter 필드를 따로 포맷한다(계산은 ledger라 규칙 위반은 아님). 필드를 추가하면 양쪽을 고쳐야 하니 비율·시간 포맷 도우미만이라도 공유
+- [ ] **`question_eval_command`의 Ledger 닫기**: `--existing`의 `src`, 평가용 `rounds` Ledger를 닫지 않는다(한 번 실행하고 끝나는 명령이라 피해는 없음) → `try/finally`
