@@ -42,7 +42,7 @@
 | `test_retrieval_eval.py` / `test_retrieval_realdata.py` | 검색 평가 로직 / 실제 색인 회귀(`-m realdata`) | D50 |
 | `test_*_live.py` | Bedrock 실호출 스모크 9개(`-m live`) | — |
 
-2026-11-05 최종 확인: 기본 334 통과(T26 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
+2026-11-06 최종 확인: 기본 335 통과(2라운드 라벨·`--relabel` 이후), `-m realdata` 1 통과(T21 이후), `-m live` 9 통과(T20 시점, 이후 작업은 모델 호출을 바꾸지 않음).
 
 **Windows 확인(2026-11-05, 학습자 PC):** Windows · Python 3.14.8 · `python -m venv` + `pip install -e ".[dev]"`(uv 없이)로 압축을 푼 평가용 패키지에서 `pytest` → **309 passed, 1 skipped**(git 체크아웃이 아니라 `test_handoff.py`의 포함 목록 테스트를 건너뜀). 경고 13건은 langsmith 내부의 Python 3.16 폐기 예정 함수 사용으로 MissLens와 무관.
 

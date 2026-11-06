@@ -124,6 +124,12 @@ Windows PowerShell은 `$env:MISSLENS_SANDBOX="1"; streamlit run app/main.py`입�
 `streamlit run` 뒤 터미널에 나오는 주소(기본 http://localhost:8501)를 브라우저에서 엽니다(자동으로 열리지 않음,
 Streamlit의 첫 실행 이메일 질문도 나오지 않게 설정돼 있음. 다른 설정으로 질문이 나오면 Enter로 건너뜀).
 처음 검색할 때 임베딩 모델 bge-m3(약 2GB)를 내려받습니다. 시연 순서는 `docs/demo.md`, 테스트 안내는 `docs/testing.md`에 있습니다.
+
+## 평가와 관측
+
+- 문제 생성 품질 라운드 평가(인-아웃 세트, LLM-as-Judge, 외부 교차 검토로 판정기 보정): `evaluation/README.md`와 `evaluation/round1_report.md`·`round2_report.md`
+- 가드레일 목록(단계별 장치·코드 위치·테스트): `README.md`의 '가드레일' 절
+- 트레이스: 앱이나 CLI로 모델을 호출하면 `data/traces/`(샌드박스는 `data/sandbox/traces/`)에 쌓이고 `python -m misslens.cli trace`로 요약합니다(본문은 기록하지 않음)
 """
 
 
@@ -229,9 +235,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         size = sum((ROOT / p).stat().st_size for p in included)
         print(f"include {len(included)} files ({size / 1e6:.1f} MB)" + (f" + record {rec_src} -> {RECORD_TARGET}" if rec_src else ""))
-        for d in ["data/"] + [p for p in ("app", "config", "docs", "evals", "exams", "scripts", "src", "tests")]:
-            n = sum(1 for p in included if p.startswith(d))
-            print(f"  {d:12} {n} files")
+        groups: dict[str, int] = {}
+        for p in included:                     # 실제 포함 파일의 최상위 폴더(루트 파일은 "(root)")
+            top = p.split("/", 1)[0] + "/" if "/" in p else "(root)"
+            groups[top] = groups.get(top, 0) + 1
+        for d, n in sorted(groups.items()):
+            print(f"  {d:14} {n} files")
         print(f"excluded by rule: {len(dropped)}" + "".join(f"\n  - {p}" for p in dropped[:20]))
         hits = scan_secrets([ROOT / p for p in included], ROOT)
         print("credential scan: " + ("OK" if not hits else "FOUND\n  " + "\n  ".join(hits)))
