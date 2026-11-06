@@ -170,7 +170,7 @@
   - [x] CLI 리허설(샌드박스, 실제 색인·모델): 계획 → 2문제 → 재질문 → 자기 판단 → 해석 실수 판정 → 코치 해설(수집한 Skilljar 레슨 인용) → 현황, 83초
   - [~] Streamlit 화면으로 시연 리허설(학습자, `docs/demo.md` 순서): 진단 화면·코치 대화·이어 풀기·평가용 패키지(Windows) 화면까지 확인, 피드백은 T14~T21·헤드리스 설정으로 반영. 남은 것: 데모 당일 전체 순서 한 번
 - [x] **T22** 평가용 전달 방식(D56, 학습자 결정): 공개 저장소(데이터 제외) + 비공개 zip. `scripts/make_handoff_zip.py`(화이트리스트·거부 목록·SQLite 백업 복사·자격 증명 검사·HANDOFF.md). 새 clone에서 데이터·자격 증명 없이 기본 테스트 305 통과, 앱 기동 확인. zip 압축을 풀어 status·retrieval-eval(회귀 없음) 확인. 테스트 `tests/test_handoff.py` 4개
-  - [ ] 제출 직전에 zip 생성(`python scripts/make_handoff_zip.py`) → 강사님께 비공개 전달(헤드리스 설정 `a3386ee` 이후 zip이어야 이메일 질문이 안 나옴)
+  - [x] 제출 직전에 zip 생성(`python scripts/make_handoff_zip.py`): `dist/misslens-handoff-20261106-1036.zip`(7.1MB, 커밋 `512d36f`, 학습 기록 sandbox, 464개 파일, 자격 증명 검사 OK) → 강사님께 비공개 전달
 - [x] **T23** 마무리(D57, 학습자 요청): 코드 주석과 docstring을 한국어로(모델에 보내는 프롬프트·스키마·도구 설명은 영어 유지, `tests/test_model_facing_text.py`로 고정). 주석 외 코드 변화 없음을 AST 비교로 확인. 문서 최종 교차 확인(TASK 수치·경로, testing.md 수치, CLAUDE.md 언어 규칙)
 - [x] **T24** 상위 모델 검토용 내보내기(D58, 학습자 요청): `export-questions`(제출한 세트만, 정답·violates·해설, 세부 항목별 근거 발췌 부록, `--evidence full|sources|none`, 자료 속 Markdown은 코드 블록). `src/misslens/review_export.py`, 테스트 `tests/test_review_export.py` 4개. 샌드박스 20문제 내보내기 확인
 - [x] **T25** 문제 품질 라운드 평가(D59, Day 9 과제 '인-아웃 세트 자체 평가·라운드 리포트'): 외부 교차 검토(Opus·GPT, 20문제 중 OK 1) → 원인(지시문에 key constraint 기준 없음, Haiku 근거 확인이 관대) → 출제·근거 확인 지시문 보강. `question-eval`(인-아웃 세트 `evals/ccar-f/question_set.yaml`, 별도 DB, 판정기 `judge` 역할), 판정기 v1→v2 보정(외부 검토와 OK 일치 25%→80%). 1·2라운드 리포트(`evaluation/`): OK 25→44%, 정답 하나 90→100%, 사실 50→83%, 적합성 65→83%, violates 유효 50% 그대로(개념 오답 구조 문제 → TODOS 3라운드). 테스트 `tests/test_question_eval.py` 9개
@@ -281,3 +281,4 @@
 | 2026-11-06 | Codex 3차 리뷰(GATE PASS·P2 3건): 영어 비밀번호 전달("my password is …")을 입력 가드레일에 추가, 색인이 지워지면 옛 자료로 답하지 않게(`UNCHANGED` 표시). 판정기에 도구 결과 전달은 1·2라운드 재실행이 필요해 TODOS 유지. 테스트 3개 추가(기본 365) |
 | 2026-11-06 | 질의 판정기 v2: 학습 기록 도구(`build_report`·`learner_history`) 출력을 근거로 넘김(도구 출력은 잘라내지 않음). `query-eval --rejudge`로 1·2라운드 저장 답변 재채점(근거는 같은 ledger에서 다시 계산, v1 결과는 `*_judge_v1*`로 보존): 1라운드 14/20(v1과 동일), 2라운드 20/20(8번만 변경). 세부 항목 ID 정규식이 한글이 붙은 '2.3에서'를 놓치던 것 수정. 테스트 1개 추가 |
 | 2026-11-06 | 최종 전체 점검 + Codex 전체 리뷰(gpt-6.1-sol, git 추적 파일만, `.env`·`data/` 읽기 금지): 기본 372·realdata 1·live 9 통과(라우터 변경 뒤 live 재확인), 규칙 1~7 위반 없음, 공개 파일 자격 증명 0. 고친 것: 코치 질문 칸이 자격 증명 가드레일을 거치지 않음(규칙 7), `AWS_SECRET_ACCESS_KEY=`·`AWS_SESSION_TOKEN=` 형식 차단·가림, 화면·Supervisor가 처음 연 색인에 고정(자료를 넣어도 출제·코치가 옛 색인) → 색인 인스턴스 하나를 Ingestor와 공유, `trace --day YYYYMMDD` ValueError, 맞힌 문제에 '문제 이상' 버튼 없음. 미룬 것: 영역별 문제 수 상한(TODOS). 테스트 6개 추가 |
+| 2026-11-06 | 비공개 평가용 zip 생성(`512d36f` 기준, sandbox 기록). Streamlit·API 서버 재시작(제출 전 세트 0 확인) |
