@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | v1 제출 마감 | 2026-11-06(금) 오전 |
-| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T27 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/), 로컬 트레이스·가드레일 정리, 과제 산출물 규약 맞춤(`test_queries.csv`·질의 API `POST /query`·RAGAS, 질의 평가 14/20→20/20). 테스트 기본 372·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀), 시연 캡처 완료. 남은 것: Google Form 제출(15:00), 데모 직전 점검. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
+| 현재 단계 | **Phase 6 — 마무리** (구현 T1~T27 완료. 수집 314레슨·재색인 1,278청크. CLI·Streamlit 전체 루프, 코치 대화, 이어 풀기·세트 기록, 단어장, 진행 표시 정리, 평가용 zip, 주석 한국어화, 상위 모델 검토용 내보내기, 문제 품질 라운드 평가(evaluation/), 로컬 트레이스·가드레일 정리, 과제 산출물 규약 맞춤(`test_queries.csv`·질의 API `POST /query`·RAGAS, 질의 평가 14/20→20/20). 테스트 기본 372·realdata 1·live 9 통과(Windows 평가용 패키지 309·1 건너뜀), 시연 캡처 완료, **2026-11-06 제출 완료**. 남은 것: 데모가 있으면 직전 점검. 제출 후 1순위: 모델 제공자 전환(TODOS)) |
 | 마지막 갱신 | 2026-11-06 |
 
 **상태 표기:** `[ ]` 할 일 · `[~]` 진행 중 · `[x]` 완료 · `[-]` 보류/제외(이유 기록) · `⚠` 블로커
@@ -22,7 +22,7 @@
 | 3 | 자료(Ingest, 하이브리드 검색) + T2-c 완료 기준 확인 | 11/5 오전 | [x] |
 | 4 | Collector(로그인 수집, interrupt②) | 11/5 오후 | [x] 레슨 314개 수집·색인 완료 |
 | 5 | Supervisor, Planner(interrupt①), Reporter, Streamlit | 11/5 저녁 | [x] |
-| 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [~] 남은 것: Google Form 제출(GitHub URL + 캡처), 데모 직전 `probe_models.py` |
+| 6 | 테스트 마무리, 문서, 데모 준비, 제출 | 11/6 오전 | [x] 2026-11-06 제출 완료(데모가 있으면 직전 `probe_models.py`) |
 
 **절대 빼지 않는 것:** 세트 풀이 → 리뷰(미끼 포함 재질문) → 개념/해석 진단 → ledger 기록.
 
@@ -177,7 +177,7 @@
 - [x] **T26** 트레이스·가드레일(D60, Day 9 과제): 로컬 JSONL 트레이스(`trace.py`: 라우터의 모든 모델 호출, LangGraph 노드 콜백, span), `trace` 요약 명령, 실호출로 노드·토큰·엔드포인트 기록 확인. README '가드레일' 표(단계별 장치·위치·테스트)와 '트레이스' 절, 프로필 권한 0700 테스트 추가, demo.md 8단계(평가와 관측). 테스트 `tests/test_trace.py` 7개
 - [x] **T27** 과제 산출물 규약 맞춤(D61, 과제 안내서 `mini_project.pdf` 대조): 인-아웃 세트 `test_queries.csv`(20건, positive 8·negative 4·edge 5·guardrail 3), 질의 API `POST /query`(FastAPI, `qa.py`: 입력 가드레일 → router `classify` → 코치 ReAct → 출력 가드레일), `query`·`query-eval` 명령, RAGAS 0.4.3(langchain-community 호환 shim, `get_llm("judge")`·bge-m3 어댑터). 1라운드 14/20 → 라우터·질의응답 지시문 수정 → 2라운드 19/20, 판정기 v2 재채점 후 20/20(RAGAS cp 0.81→0.87, f 0.80→0.79, ar 0.77→0.73). SERVICE §10 수익·사내 기여, §12 인-아웃 세트, §13 가드레일 정의, F12. README 제출 요약(패턴 Day 대응·RAGAS·통과율·회고·핵심 코드 위치)·API 절. 테스트 `tests/test_qa.py` 20개, 라우터 실호출 5개 재확인
 - [x] 시연 캡처(Google Form 업로드용, `data/submission/`, git 제외): 학습 탭·해석 실수 진단(놓친 문구 강조)·코치 해설(출처)·현황·계획 승인(interrupt①)·단어장·`POST /query` 응답·가드레일 차단·평가 리포트. 캡처 중 단어장 코드 블록의 `&quot;` 표시 버그를 발견해 수정(`md_text`, 테스트 추가)
-- [ ] 제출(Google Form, 15:00 마감): GitHub URL + 시연 캡처
+- [x] 제출(Google Form, 2026-11-06): GitHub URL(https://github.com/akachun/misslens) + 시연 캡처. 비공개 zip은 강사님께 별도 전달
 
 ---
 
@@ -209,7 +209,7 @@
 
 ## 세션 인계 메모
 
-**다음 작업(2026-11-06 갱신):** 구현은 끝났다(T1~T27, 과제 산출물 규약 포함). 질의 API 품질은 `query-eval` 라운드(판정기 v2 기준 1라운드 14/20 → 2라운드 20/20), 다음은 세트 보강(TODOS). 문제 품질은 라운드 평가(`evaluation/README.md`, 2라운드 외부 OK 22%)로 관리하고, 다음 개선(규칙 3 변경, 판정기 v3)은 v1 이후(TODOS). 남은 것: 학습자 Streamlit 리허설(`MISSLENS_SANDBOX=1`, `docs/demo.md` 8단계, 서버는 tmux `misslens-ui`) → 데모 30분 전 `python scripts/probe_models.py`·`pytest -m live` → 제출. 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
+**다음 작업(2026-11-06 갱신):** 구현은 끝났다(T1~T27, 과제 산출물 규약 포함). 질의 API 품질은 `query-eval` 라운드(판정기 v2 기준 1라운드 14/20 → 2라운드 20/20), 다음은 세트 보강(TODOS). 문제 품질은 라운드 평가(`evaluation/README.md`, 2라운드 외부 OK 22%)로 관리하고, 다음 개선(규칙 3 변경, 판정기 v3)은 v1 이후(TODOS). **2026-11-06 제출 완료.** 데모가 있으면 30분 전 `python scripts/probe_models.py`·`pytest -m live`(`docs/demo.md` 8단계, 서버는 tmux `misslens-ui`·`misslens-api`, 샌드박스). 실제 공부는 `MISSLENS_SANDBOX=1` 없이 띄워 실제 기록에 쌓는다. 제출 후 1순위는 모델 제공자 전환, 그다음 Codex 리뷰에서 미룬 영역별 문제 수 상한과 리팩토링 후보(TODOS). 학습자가 쓰는 서버는 재시작 전에 제출 전 세트가 있는지 확인하고 묻는다(재시작하면 생성이 멈춤, '이어 풀기'로 재개). 청킹·정리·검색을 다시 손대면 `retrieval-eval`로 기준선과 비교한다(docs/testing.md). 진단 eval(T10)은 공부하며 자기 판단이 쌓이면 `eval`로 확인한다.
 - 근거 자료 주의: `guide.pdf`에는 공식 샘플 문제와 정답이 들어 있다. 생성 문제가 샘플과 비슷해질 수 있으니 실제로 풀어 보며 확인한다.
 
 새 세션을 시작할 때 다음 순서로 진행한다.
@@ -284,3 +284,4 @@
 | 2026-11-06 | 비공개 평가용 zip 생성(`512d36f` 기준, sandbox 기록). Streamlit·API 서버 재시작(제출 전 세트 0 확인) |
 | 2026-11-06 | 시연 캡처 9장을 `docs/screenshots/`로 공개하고 README '시연 화면' 절에 표로 붙임(학습자 결정). `08_api_query.png`는 guide.pdf 발췌가 보여 제외(Form 업로드용으로만), GitHub 화면 캡처는 중복이라 제외. `eval_misses.yaml`은 공개 유지(학습자 결정). zip 다시 생성 |
 | 2026-11-06 | `08_api_query.png`(API 응답, guide.pdf 짧은 발췌 포함)도 공개(학습자 결정). README 시연 화면 표에 추가, zip 다시 생성 |
+| 2026-11-06 | **제출 완료**(Google Form: GitHub URL + 시연 캡처, 비공개 zip `misslens-handoff-20261106-1039.zip`은 강사님께 별도 전달). zip 검증을 위해 서버를 내렸다가 다시 띄움 |
