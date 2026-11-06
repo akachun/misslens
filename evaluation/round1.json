@@ -1,5 +1,6 @@
 {
  "round": 1,
+ "notes": "기준선. 기존 출제 지시문(D40)으로 만든 샌드박스 20문제를 판정한다. 같은 문제를 Claude Opus·GPT가 교차 검토한 결과(OK 1/20, 수정 필요 19)를 기대 판정으로 두고 판정기를 보정한다. 판정기 v1(항목별 참/거짓)은 OK 80%로 외부 검토와 25%만 일치해(round1_judge_v1_report.md) v2(오답 보기별 분해 판정, 요약은 코드 계산)로 다시 판정했다.",
  "metrics": {
   "judge_version": 2,
   "questions": 20,
@@ -25,6 +26,8 @@
    "compared": 20,
    "ok_vs_not_ok_agreement": 0.8,
    "external_ok_rate": 0.05,
+   "judge_ok_on_external_ok": 1.0,
+   "judge_ok_on_external_fix": 4,
    "issue_recall": {
     "violates": {
      "external": 14,
@@ -50,7 +53,8 @@
      "external": 2,
      "judge_found": 0
     }
-   }
+   },
+   "options": null
   }
  },
  "results": [

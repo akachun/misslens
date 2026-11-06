@@ -1,5 +1,6 @@
 {
  "round": 2,
+ "notes": "출제 지시문 보강(D59): key constraint는 지켜야 할 요구사항·제한만(제안·관찰·진단·증상·배경 사실 금지), 오답은 그 요구사항을 어겨서 틀려야 함, 근거 자료가 인정하는 대안은 오답으로 쓰지 않음, 정답이 지문 문구를 옮겨 적지 않음, 오답끼리 같은 오개념 금지. 근거 확인(Haiku) 기준에도 같은 내용 추가. 같은 세부 항목 20개로 새로 생성(평가용 DB 세트 1). 판정기 v2로 채점(1라운드와 같은 판정기).",
  "metrics": {
   "judge_version": 2,
   "questions": 18,
@@ -21,7 +22,42 @@
    "fit": 3,
    "stem": 2
   },
-  "rounds_db_set": 1,
+  "calibration": {
+   "compared": 18,
+   "ok_vs_not_ok_agreement": 0.667,
+   "external_ok_rate": 0.222,
+   "judge_ok_on_external_ok": 0.75,
+   "judge_ok_on_external_fix": 5,
+   "issue_recall": {
+    "violates": {
+     "external": 14,
+     "judge_found": 8
+    },
+    "multiple": {
+     "external": 2,
+     "judge_found": 0
+    },
+    "fit": {
+     "external": 1,
+     "judge_found": 1
+    },
+    "stem": {
+     "external": 6,
+     "judge_found": 1
+    }
+   },
+   "options": {
+    "kind_agreement": 0.922,
+    "kind_compared": 51,
+    "valid_agreement": 0.735,
+    "valid_compared": 49,
+    "invalid_recall": 0.444,
+    "external_invalid": 18,
+    "judge_found_invalid": 8,
+    "false_alarm_rate": 0.097,
+    "external_valid": 31
+   }
+  },
   "generation": {
    "planned": 20,
    "generated": 18,
@@ -31,7 +67,8 @@
     "validator": 7,
     "generation_error": 3
    }
-  }
+  },
+  "rounds_db_set": 1
  },
  "results": [
   {
@@ -84,7 +121,35 @@
      "reason": "The question is well-constructed and the correct answer (D) accurately reflects the hub-and-spoke principle from the reference material. Options A and C share the same underlying misconception that direct peer communication is acceptable, while option B introduces a different but still incorrect alternative."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "fit",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "B",
+      "kind": "background",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -139,7 +204,35 @@
      "reason": "The answer and distractors are factually sound, but the Korean learner-language options are reordered relative to the English stem options, so the letter identifiers (A/B/C/D) no longer correspond between the two versions — this will cause confusion when learners try to match the violates labels to the Korean options."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "fact",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -192,7 +285,32 @@
      "reason": "The question is well-formed. The correct answer (A) directly mirrors the reference material's explicit guidance on stop_reason-based loop control. All three distractors are clearly wrong for distinct, non-overlapping reasons, and none is defensible as correct."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "B",
+      "kind": "observation",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": false
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -245,7 +363,32 @@
      "reason": "The question is well-constructed: each wrong option clearly violates one explicit constraint from the stem, the correct answer directly applies the reference material guidance on differentiating tool descriptions with purpose, inputs, boundary conditions, and when-to-use-versus-alternatives guidance, and there is no ambiguity in the Korean translation."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "observation",
+      "valid": false
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -298,7 +441,35 @@
      "reason": "Option B's cited 'violates' phrase is a background fact (\"coordinator's AgentDefinition already lists 'Task' in allowedTools\") rather than the actual requirement it breaks; B is wrong because it adds an unrequested allowedTools change to the report-synthesizer, which is irrelevant to the stated requirements, but the violates label misidentifies the reason. Additionally, C and D share the same misconception that subagents can automatically inherit context, which is a shared misconception across two distractors."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "multiple"
+    ],
+    "issues_any": [
+     "violates",
+     "multiple",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "B",
+      "kind": "background",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -351,7 +522,32 @@
      "reason": "The question is well-constructed: the correct answer applies full programmatic gating to both dependency chains, each wrong option breaks exactly one named requirement, and the financial compliance context correctly motivates why prompt-only approaches are insufficient per the reference material."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": null
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -408,7 +604,34 @@
      "reason": "The question is well-constructed and the correct answer (A) is clearly right per the reference material. The only notable concern is the unverified field name `updatedToolOutput` in option A — the reference material documents `updatedInput` for PreToolUse rewrites but does not name a specific field for PostToolUse output rewriting, making this detail uncertain rather than confirmed wrong."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": null
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": false
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -461,7 +684,33 @@
      "reason": "The question is well-constructed and accurately tests the distinction between fixed sequential pipelines and dynamic adaptive decomposition as described in the reference material. All wrong options clearly violate at least one of the two stated requirements, and the correct answer aligns cleanly with the reference material's guidance on adaptive investigation plans."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates",
+     "fit"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -514,7 +763,36 @@
      "reason": "The question is well-constructed and accurately tests fork_session knowledge. Each wrong option targets a distinct misconception (sequential forking, fresh-start summaries, or shared-session parallelism), and the violates phrases precisely match the stem constraints they break."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "multiple",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "multiple",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -569,7 +847,28 @@
      "reason": "The question is well-constructed: the correct answer (B) is the only option that satisfies both the project-scope requirement (.claude/ directory for version-control sharing) and the context-isolation requirement (context: fork frontmatter). Each wrong option breaks exactly one of the two stated requirements, and the violates phrases are accurate and precise."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "ok",
+    "issues": [],
+    "issues_any": [],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -622,7 +921,32 @@
      "reason": "The question is well-constructed: the correct answer (D) aligns exactly with the reference material's guidance that few-shot examples are the highest-leverage next move when detailed instructions already fail, and the distractors each break a clearly stated constraint. No factual, translation, or structural issues found."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "observation",
+      "valid": false
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -675,7 +999,32 @@
      "reason": "The question is well-constructed and factually accurate per the reference material. The correct answer (B) is clearly supported, and all distractors each break a distinct stated requirement in a non-overlapping way."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": false
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "background",
+      "valid": false
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -728,7 +1077,28 @@
      "reason": "The question is well-constructed and the correct answer (C) is the only option that satisfies all three stated requirements: per-category error classification with correct isRetryable flags and a human-readable description field on each error type. Each wrong option clearly violates exactly one stated requirement as identified by its violates tag."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "ok",
+    "issues": [],
+    "issues_any": [],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -781,7 +1151,28 @@
      "reason": "The question is well-constructed and clearly grounded in the reference material. The correct answer (B) directly applies the guide's concept of scoped cross-role tools (e.g., a verify_fact tool for the synthesis agent) while routing complex cases through the coordinator. Each wrong option cleanly violates a distinct stated requirement, and the Korean translation faithfully preserves all conditions and negations from the English stem."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "ok",
+    "issues": [],
+    "issues_any": [],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -834,7 +1225,34 @@
      "reason": "The question and all options are well-constructed and accurately reflect the reference material's guidance on plan mode vs. direct execution. The correct answer C cleanly matches each task to the appropriate mode, and the distractors each fail in a clear, non-overlapping way."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": null,
+      "valid": false
+     },
+     {
+      "option": "B",
+      "kind": null,
+      "valid": false
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": null
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -887,7 +1305,36 @@
      "reason": "The correct answer C is essentially a restatement of the proposed solution described in the stem (\"concrete before-and-after examples\" → \"concrete input/output examples\"), making it trivially selectable by vocabulary matching without understanding the underlying concept. The violates phrase for option A is misclassified as an observation when it is actually background/context, and option A is wrong for a different reason than stated."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates",
+     "fit",
+     "stem"
+    ],
+    "issues_any": [
+     "violates",
+     "fit",
+     "stem"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "observation",
+      "valid": false
+     },
+     {
+      "option": "B",
+      "kind": "proposal",
+      "valid": false
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": null
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -942,7 +1389,32 @@
      "reason": "The correct answer C is well-supported by the reference material, which explicitly calls out including prior review findings in context and instructing Claude to report only new or still-unaddressed issues. Option A's 'violates' phrase is mislabeled: it cites the current symptom ('floods the PR with duplicate comments') rather than a requirement the option breaks; the real problem with A is that cross-run session reuse is unsupported and the reference warns against same-session review."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "fix",
+    "issues": [
+     "violates"
+    ],
+    "issues_any": [
+     "violates"
+    ],
+    "options": [
+     {
+      "option": "A",
+      "kind": "observation",
+      "valid": false
+     },
+     {
+      "option": "B",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   },
   {
@@ -995,7 +1467,28 @@
      "reason": "The question is well-formed and the correct answer (B) is clearly supported by the reference material, which explicitly states that retries should include the original document, the failed extraction, and the specific validation error so the model can self-correct. All three wrong options are cleanly wrong for distinct and clear reasons."
     }
    },
-   "external": null,
+   "external": {
+    "verdict": "ok",
+    "issues": [],
+    "issues_any": [],
+    "options": [
+     {
+      "option": "A",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "C",
+      "kind": "requirement",
+      "valid": true
+     },
+     {
+      "option": "D",
+      "kind": "requirement",
+      "valid": true
+     }
+    ]
+   },
    "error": null
   }
  ]

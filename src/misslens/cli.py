@@ -472,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="새로 만들지 않고 세트 파일의 1라운드 문제(round1_source)를 판정한다")
     qe.add_argument("--from-set", type=int, metavar="ID",
                     help="새로 만들지 않고 평가용 DB의 이 세트를 다시 판정한다(판정기를 바꾼 뒤 재채점)")
+    qe.add_argument("--relabel", action="store_true",
+                    help="모델 호출 없이, 저장된 판정 결과에 세트 파일의 외부 라벨을 다시 붙여 지표·리포트를 다시 만든다")
     qe.add_argument("--limit", type=int, help="앞에서 N개 세부 항목만(시험 실행용)")
     qe.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
     qe.add_argument("--exam", default="ccar-f")
@@ -723,12 +725,22 @@ def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
     from misslens.llm import get_llm
     from misslens.practice import PracticeSamples, load_bank
     from misslens.question_eval import (ROUNDS_DB, SetItem, generate_round, judge_all, load_question_set,
-                                        load_round_metrics, metrics, render_report, save_round)
+                                        load_round_metrics, metrics, relabel_round, render_report, save_round)
     from misslens.review_export import build_review_markdown
 
     pack = cli.pack
     items, meta = load_question_set(pack.exam_id)
     items = items[:args.limit] if args.limit else items
+    if args.relabel:
+        m, results, notes = relabel_round(args.round_no, items)
+        notes = args.notes or notes or "-"
+        report = render_report(args.round_no, m, results, previous=load_round_metrics(args.round_no - 1),
+                               notes=notes, judge_model=load_model_config().roles["judge"]["model"])
+        path = save_round(args.round_no, m, results, report, notes=notes)
+        c = m.get("calibration") or {}
+        cli.console.print(f"외부 라벨 {c.get('compared', 0)}문제로 다시 계산(모델 호출 없음) · 판정기와 OK/비OK 일치 "
+                          f"{c.get('ok_vs_not_ok_agreement')} → {path}")
+        return 0
     index = open_index(pack.exam_id)
     context = RetrievalContext(index) if index is not None and len(index) else None
     say = lambda m: cli.console.print(escape(m))  # noqa: E731
@@ -741,8 +753,8 @@ def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
     elif args.from_set is not None:
         rounds = Ledger(ROUNDS_DB)
         made = {q["task_id"]: q for q in rounds.set_questions(args.from_set) if q["status"] == "ready"}
-        questions = [(f"r{args.round_no}-q{n + 1}", SetItem(it.task_id), made[it.task_id]["payload"])
-                     for n, it in enumerate(items) if it.task_id in made]
+        questions = [(f"r{args.round_no}-q{n + 1}", SetItem(it.task_id, external=it.labels.get(args.round_no)),
+                      made[it.task_id]["payload"]) for n, it in enumerate(items) if it.task_id in made]
         set_id = args.from_set
     else:
         ROUNDS_DB.parent.mkdir(parents=True, exist_ok=True)
@@ -772,7 +784,7 @@ def question_eval_command(cli: CLI, args: argparse.Namespace) -> int:
             m["generation"] = before["generation"]
     report = render_report(args.round_no, m, results, previous=load_round_metrics(args.round_no - 1),
                            notes=args.notes or "-", judge_model=judge_model)
-    path = save_round(args.round_no, m, results, report)
+    path = save_round(args.round_no, m, results, report, notes=args.notes or "-")
     cli.console.print(f"판정기 OK {m['judge_ok_rate']} · violates 유효 {m['violates_valid_rate']} · "
                       f"정답 하나 {m['single_answer_rate']} → {path}")
     return 0

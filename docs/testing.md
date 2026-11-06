@@ -166,11 +166,12 @@ python -m misslens.cli export-questions --set 4 --evidence sources   # 한 세�
 python -m misslens.cli question-eval --round 1 --existing --notes "기준선"          # 1라운드 문제(샌드박스)를 판정
 python -m misslens.cli question-eval --round 3 --notes "바꾼 것"                    # 같은 세부 항목 20개로 새로 생성 → 판정
 python -m misslens.cli question-eval --round 3 --from-set 2 --notes "판정기 수정"    # 이미 만든 라운드 세트를 다시 채점
+python -m misslens.cli question-eval --round 2 --relabel                         # 외부 라벨을 넣은 뒤 재계산(모델 호출 없음)
 ```
 
 - 실호출이다(생성 Sonnet 약 25회 + 근거 확인 Haiku + 판정 Sonnet 40회). 할당량을 확인하고 실행한다.
 - 출제 지시문, 근거 확인, 판정기를 바꾸면 새 라운드를 돌리고 리포트의 '앞 라운드' 열로 비교한다. 판정기를 바꿨으면 앞 라운드도 같은 판정기로 다시 채점해야 비교가 공정하다.
-- 라운드가 만든 `data/eval/round<N>_questions.md`를 외부 검토(§5)에 넣어 판정기 점수를 확인한다.
+- 라운드가 만든 `data/eval/round<N>_questions.md`를 외부 검토(§5)에 넣어 판정기 점수를 확인한다. 두 검토의 최종 YAML 합의를 `evals/ccar-f/question_set.yaml`의 `round<N>`에 넣고(판정, 두 쪽 모두 지적한 유형, 보기별 종류·유효 여부), `--relabel`로 판정기 보정 지표를 다시 낸다.
 
 ## 7. 실행 환경 메모
 

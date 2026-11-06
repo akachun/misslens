@@ -177,3 +177,41 @@ def test_saved_round_records_are_readable():
         data = json.loads(f.read_text(encoding="utf-8"))
         assert {"round", "metrics", "results"} <= set(data), f.name
         assert (REPORT_DIR / f.name.replace(".json", "_report.md")).exists(), f.name
+
+
+def test_round_labels_and_option_calibration(tmp_path, monkeypatch):
+    """2라운드부터는 세트 파일의 round<N> 라벨을 쓰고, 오답 보기 단위로 판정기와 외부 합의를 비교한다."""
+    import misslens.question_eval as qe
+    from misslens.question_eval import QuestionResult, option_calibration, relabel_round
+
+    (tmp_path / "ccar-f").mkdir()
+    (tmp_path / "ccar-f" / "question_set.yaml").write_text(
+        "exam_id: ccar-f\nround1_source: none\nitems:\n"
+        "  - {round1_qid: 7, task_id: '2.3', external: {verdict: fix, issues: [violates]},\n"
+        "     round2: {verdict: ok, issues: [], options: [{option: B, kind: requirement, valid: true},\n"
+        "       {option: C, kind: proposal, valid: false}, {option: D, kind: null, valid: null}]}}\n"
+        "  - {round1_qid: 8, task_id: '2.1', external: {verdict: fix, issues: []}, round2: null}\n",
+        encoding="utf-8")
+    monkeypatch.setattr(qe, "EVALS_DIR", tmp_path)
+    items, _ = load_question_set("ccar-f")
+    assert items[0].labels[1]["verdict"] == "fix" and items[0].labels[2]["verdict"] == "ok"
+    assert 2 not in items[1].labels                                       # round2: null -> 라벨 없음
+
+    judged = summarize_judgement(Judgement.model_validate(BAD))              # B는 proposal, C는 정답일 수 있음
+    r = QuestionResult("r2-q1", "2.3", "A", True, judged, items[0].labels[2])
+    o = option_calibration([r])
+    assert o["kind_compared"] == 2 and o["kind_agreement"] == 0.0           # B: proposal≠requirement, C: requirement≠proposal
+    assert o["valid_compared"] == 2 and o["external_invalid"] == 1 and o["judge_found_invalid"] == 0
+    assert o["false_alarm_rate"] == 1.0                                     # 외부가 유효로 본 B를 무효로 봄
+
+    out = tmp_path / "evaluation"
+    save_round(2, {"judge_version": 2, "rounds_db_set": 4,
+                  "generation": {"planned": 2, "generated": 1, "first_try_rate": 1.0, "mean_tries": 1.0,
+                                 "rejections": {}}},
+               [QuestionResult("r2-q1", "2.3", "A", True, judged, None)], "old", out_dir=out, notes="지시문 보강")
+    m, res, notes = relabel_round(2, items, out_dir=out)
+    assert notes == "지시문 보강" and res[0].external["verdict"] == "ok"
+    assert m["generation"]["generated"] == 1 and m["rounds_db_set"] == 4
+    assert m["calibration"]["judge_ok_on_external_ok"] == 0.0 and m["calibration"]["options"]["valid_compared"] == 2
+    md = render_report(2, m, res, previous=None, notes=notes, judge_model="j")
+    assert "오답 보기 단위" in md and "외부 OK 문제를 판정기도 OK로 봄 0%" in md

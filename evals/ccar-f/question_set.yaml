@@ -1,29 +1,52 @@
 # 문제 생성 품질 평가용 인-아웃 세트(D59).
 # 입력(in): 세부 항목 20개. 라운드마다 같은 세부 항목으로 문제를 새로 만든다.
 # 기대(out): 1라운드 문제(샌드박스 기록의 문제 ID 1~20)에 대한 외부 검토(Claude Opus·GPT 교차 검토, 2026-11-05)의
-#   합의 판정. 판정기(LLM-as-Judge)의 보정에만 쓴다. 이후 라운드 문제는 새 문제라 외부 판정이 없다.
+#   합의 판정. 판정기(LLM-as-Judge)의 보정에만 쓴다.
+# round2: 2라운드 문제(평가용 DB 세트 1, 같은 순서의 번호)에 대한 외부 검토(Opus·GPT 교차 검토 최종안, 2026-11-06) 합의.
+#   issues는 두 검토가 모두 지적한 유형, issues_any는 한쪽이라도 지적한 유형. options는 오답 보기별 violates 종류(kind)와
+#   유효 여부(valid: 요구사항이고 틀린 진짜 이유인가). 두 검토가 다르면 null. 생성에 실패한 세부 항목은 round2: null.
 # issues 값: violates(오답 근거가 요구사항이 아니거나 틀린 이유가 아님), multiple(복수 정답),
 #   fact(사실 오류), translation(번역), fit(시험 적합성: 정답 노출, 중복 오답, 비현실적 상황), stem(지문 모순)
 exam_id: ccar-f
 round1_source: data/sandbox/ledger.sqlite
 items:
-  - {round1_qid: 1,  task_id: "1.2", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 2,  task_id: "3.1", external: {verdict: fix, issues: [violates, fit]}}
-  - {round1_qid: 3,  task_id: "4.1", external: {verdict: fix, issues: [multiple, violates, translation]}}
-  - {round1_qid: 4,  task_id: "1.1", external: {verdict: fix, issues: [fit, stem]}}
-  - {round1_qid: 5,  task_id: "2.1", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 6,  task_id: "1.3", external: {verdict: fix, issues: [stem, translation, violates]}}
-  - {round1_qid: 7,  task_id: "1.4", external: {verdict: drop, issues: [fit, fact]}}
-  - {round1_qid: 8,  task_id: "1.5", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 9,  task_id: "1.6", external: {verdict: fix, issues: [fit]}}
-  - {round1_qid: 10, task_id: "1.7", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 11, task_id: "3.2", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 12, task_id: "3.3", external: {verdict: fix, issues: [multiple]}}
-  - {round1_qid: 13, task_id: "4.2", external: {verdict: fix, issues: [violates, fact]}}
-  - {round1_qid: 14, task_id: "4.3", external: {verdict: fix, issues: [multiple, violates]}}
-  - {round1_qid: 15, task_id: "2.2", external: {verdict: ok, issues: []}}
-  - {round1_qid: 16, task_id: "2.3", external: {verdict: fix, issues: [multiple]}}
-  - {round1_qid: 17, task_id: "3.4", external: {verdict: fix, issues: [violates, fit]}}
-  - {round1_qid: 18, task_id: "3.5", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 19, task_id: "3.6", external: {verdict: fix, issues: [violates]}}
-  - {round1_qid: 20, task_id: "4.4", external: {verdict: fix, issues: [violates, translation]}}
+  - {round1_qid: 1,  task_id: "1.2", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates, stem], issues_any: [violates, fit, stem], options: [{option: A, kind: requirement, valid: true}, {option: B, kind: background, valid: false}, {option: C, kind: requirement, valid: true}]}}
+  - {round1_qid: 2,  task_id: "3.1", external: {verdict: fix, issues: [violates, fit]},
+      round2: {verdict: fix, issues: [violates, stem], issues_any: [violates, fact, stem], options: [{option: A, kind: requirement, valid: true}, {option: B, kind: requirement, valid: false}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 3,  task_id: "4.1", external: {verdict: fix, issues: [multiple, violates, translation]},
+      round2: null}
+  - {round1_qid: 4,  task_id: "1.1", external: {verdict: fix, issues: [fit, stem]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: B, kind: observation, valid: false}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: false}]}}
+  - {round1_qid: 5,  task_id: "2.1", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: A, kind: requirement, valid: true}, {option: B, kind: requirement, valid: true}, {option: D, kind: observation, valid: false}]}}
+  - {round1_qid: 6,  task_id: "1.3", external: {verdict: fix, issues: [stem, translation, violates]},
+      round2: {verdict: fix, issues: [violates, multiple], issues_any: [violates, multiple, stem], options: [{option: B, kind: background, valid: false}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 7,  task_id: "1.4", external: {verdict: drop, issues: [fit, fact]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: B, kind: requirement, valid: null}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 8,  task_id: "1.5", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates, stem], issues_any: [violates, stem], options: [{option: B, kind: requirement, valid: true}, {option: C, kind: requirement, valid: null}, {option: D, kind: requirement, valid: false}]}}
+  - {round1_qid: 9,  task_id: "1.6", external: {verdict: fix, issues: [fit]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates, fit], options: [{option: A, kind: requirement, valid: false}, {option: C, kind: requirement, valid: false}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 10, task_id: "1.7", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates, multiple, stem], issues_any: [violates, multiple, stem], options: [{option: A, kind: requirement, valid: false}, {option: B, kind: requirement, valid: false}, {option: C, kind: requirement, valid: true}]}}
+  - {round1_qid: 11, task_id: "3.2", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: ok, issues: [], issues_any: [], options: [{option: A, kind: requirement, valid: true}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 12, task_id: "3.3", external: {verdict: fix, issues: [multiple]},
+      round2: null}
+  - {round1_qid: 13, task_id: "4.2", external: {verdict: fix, issues: [violates, fact]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: A, kind: observation, valid: false}, {option: B, kind: requirement, valid: true}, {option: C, kind: requirement, valid: true}]}}
+  - {round1_qid: 14, task_id: "4.3", external: {verdict: fix, issues: [multiple, violates]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: A, kind: requirement, valid: false}, {option: C, kind: requirement, valid: true}, {option: D, kind: background, valid: false}]}}
+  - {round1_qid: 15, task_id: "2.2", external: {verdict: ok, issues: []},
+      round2: {verdict: ok, issues: [], issues_any: [], options: [{option: A, kind: requirement, valid: true}, {option: B, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 16, task_id: "2.3", external: {verdict: fix, issues: [multiple]},
+      round2: {verdict: ok, issues: [], issues_any: [], options: [{option: A, kind: requirement, valid: true}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 17, task_id: "3.4", external: {verdict: fix, issues: [violates, fit]},
+      round2: {verdict: fix, issues: [violates, stem], issues_any: [violates, stem], options: [{option: A, kind: null, valid: false}, {option: B, kind: null, valid: false}, {option: D, kind: requirement, valid: null}]}}
+  - {round1_qid: 18, task_id: "3.5", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates, fit, stem], issues_any: [violates, fit, stem], options: [{option: A, kind: observation, valid: false}, {option: B, kind: proposal, valid: false}, {option: D, kind: requirement, valid: null}]}}
+  - {round1_qid: 19, task_id: "3.6", external: {verdict: fix, issues: [violates]},
+      round2: {verdict: fix, issues: [violates], issues_any: [violates], options: [{option: A, kind: observation, valid: false}, {option: B, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}
+  - {round1_qid: 20, task_id: "4.4", external: {verdict: fix, issues: [violates, translation]},
+      round2: {verdict: ok, issues: [], issues_any: [], options: [{option: A, kind: requirement, valid: true}, {option: C, kind: requirement, valid: true}, {option: D, kind: requirement, valid: true}]}}

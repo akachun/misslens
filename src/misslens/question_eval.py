@@ -50,15 +50,56 @@ ISSUE_LABELS = {"violates": "오답 근거(violates)", "multiple": "복수 정�
 class SetItem:
     task_id: str
     round1_qid: int | None = None
-    external: dict | None = None      # {"verdict": "ok"|"fix"|"drop", "issues": [...]}
+    external: dict | None = None      # {"verdict": "ok"|"fix"|"drop", "issues": [...], "options"?: [...]}
+    labels: dict[int, dict] = field(default_factory=dict)   # 라운드 번호 -> 그 라운드 문제의 외부 합의 판정
 
 
 def load_question_set(exam_id: str, path: Path | None = None) -> tuple[list[SetItem], dict]:
     """경로를 주지 않으면 호출 시점의 EVALS_DIR에서 읽는다(테스트가 바꿀 수 있게)."""
     data = yaml.safe_load((path or EVALS_DIR / exam_id / "question_set.yaml").read_text(encoding="utf-8"))
-    items = [SetItem(task_id=str(i["task_id"]), round1_qid=i.get("round1_qid"), external=i.get("external"))
-             for i in data["items"]]
+    items = []
+    for i in data["items"]:
+        labels = {1: i["external"]} if i.get("external") else {}
+        labels.update({int(k[5:]): v for k, v in i.items() if k.startswith("round") and k[5:].isdigit() and v})
+        items.append(SetItem(task_id=str(i["task_id"]), round1_qid=i.get("round1_qid"), external=i.get("external"),
+                             labels=labels))
     return items, data
+
+
+def _option_valid(o: dict) -> bool:
+    """판정기 세부 판정: violates가 요구사항이고 그 보기가 틀린 진짜 이유인가."""
+    return o["violates_kind"] == "requirement" and o["wrong_because_of_violates"]
+
+
+def option_calibration(results: list["QuestionResult"]) -> dict | None:
+    """오답 보기 단위로 판정기와 외부 합의를 비교한다(외부 라벨에 options가 있을 때, 두 검토가 같은 값만)."""
+    kind_n = kind_ok = valid_n = valid_ok = ext_invalid = found = ext_valid = false_alarm = 0
+    for r in results:
+        if not (r.judgement and r.external and r.external.get("options") and r.judgement.get("detail")):
+            continue
+        judge = {o["option"]: o for o in r.judgement["detail"]["wrong_options"]}
+        for e in r.external["options"]:
+            j = judge.get(e["option"])
+            if j is None:
+                continue
+            if e.get("kind"):
+                kind_n += 1
+                kind_ok += j["violates_kind"] == e["kind"]
+            if e.get("valid") is not None:
+                valid_n += 1
+                valid_ok += _option_valid(j) == e["valid"]
+                if e["valid"]:
+                    ext_valid += 1
+                    false_alarm += not _option_valid(j)
+                else:
+                    ext_invalid += 1
+                    found += not _option_valid(j)
+    if not (kind_n or valid_n):
+        return None
+    return {"kind_agreement": _rate(kind_ok, kind_n), "kind_compared": kind_n,
+            "valid_agreement": _rate(valid_ok, valid_n), "valid_compared": valid_n,
+            "invalid_recall": _rate(found, ext_invalid), "external_invalid": ext_invalid, "judge_found_invalid": found,
+            "false_alarm_rate": _rate(false_alarm, ext_valid), "external_valid": ext_valid}
 
 
 # --- 판정기(모델로 보내는 스키마와 프롬프트는 영어, D57) ---------------------------------------
@@ -305,9 +346,14 @@ def metrics(results: list[QuestionResult], gen: GenerationStats | None = None) -
             if flagged:
                 per_issue[k] = {"external": len(flagged),
                                 "judge_found": sum(k in issues_of(r.judgement) for r in flagged)}
+        ext_ok = [r for r in ext if r.external["verdict"] == "ok"]
         m["calibration"] = {"compared": len(ext), "ok_vs_not_ok_agreement": _rate(agree, len(ext)),
-                            "external_ok_rate": _rate(sum(r.external["verdict"] == "ok" for r in ext), len(ext)),
-                            "issue_recall": per_issue}
+                            "external_ok_rate": _rate(len(ext_ok), len(ext)),
+                            "judge_ok_on_external_ok": _rate(sum(r.judgement["verdict"] == "ok" for r in ext_ok),
+                                                             len(ext_ok)),
+                            "judge_ok_on_external_fix": sum(r.judgement["verdict"] == "ok" for r in ext
+                                                            if r.external["verdict"] != "ok"),
+                            "issue_recall": per_issue, "options": option_calibration(results)}
     return m
 
 
@@ -354,6 +400,17 @@ def render_report(round_no: int, m: dict, results: list[QuestionResult], *, prev
                   f"판정기와 OK/비OK 일치 {_pct(c['ok_vs_not_ok_agreement'])} ({c['compared']}문제)",
                   "- 외부 검토가 지적한 유형을 판정기도 찾은 비율:"]
         lines += [f"  - {ISSUE_LABELS[k]}: {v['judge_found']}/{v['external']}" for k, v in c["issue_recall"].items()]
+        if c.get("judge_ok_on_external_ok") is not None:
+            lines.append(f"- 외부 OK 문제를 판정기도 OK로 봄 {_pct(c['judge_ok_on_external_ok'])}(너무 엄격한지), "
+                         f"외부가 수정으로 본 문제를 판정기가 OK로 넘김 {c.get('judge_ok_on_external_fix', 0)}개(너무 관대한지)")
+        o = c.get("options")
+        if o:
+            lines += ["- 오답 보기 단위(두 외부 검토가 같은 값으로 본 보기만):",
+                      f"  - violates 종류 분류 일치 {_pct(o['kind_agreement'])} ({o['kind_compared']}개)",
+                      f"  - 유효 여부(요구사항이고 틀린 진짜 이유인가) 일치 {_pct(o['valid_agreement'])} "
+                      f"({o['valid_compared']}개)",
+                      f"  - 외부가 무효로 본 보기를 판정기도 찾음 {o['judge_found_invalid']}/{o['external_invalid']}"
+                      f" ({_pct(o['invalid_recall'])}), 외부가 유효로 본 보기를 무효로 봄 {_pct(o['false_alarm_rate'])}"]
     lines += ["", "## 문제별 결과", "", "| 문제 | 세부 항목 | 판정 | 직접 푼 답 일치 | 지적 유형 | 외부 판정 | 이유 |",
               "|---|---|---|---|---|---|---|"]
     for r in results:
@@ -369,15 +426,42 @@ def render_report(round_no: int, m: dict, results: list[QuestionResult], *, prev
 
 
 def save_round(round_no: int, m: dict, results: list[QuestionResult], report: str,
-               out_dir: Path | None = None) -> Path:
+               out_dir: Path | None = None, notes: str | None = None) -> Path:
     out_dir = out_dir or REPORT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / f"round{round_no}.json").write_text(json.dumps(
-        {"round": round_no, "metrics": m, "results": [asdict(r) for r in results]}, ensure_ascii=False, indent=1),
-        encoding="utf-8")
+        {"round": round_no, "notes": notes, "metrics": m, "results": [asdict(r) for r in results]},
+        ensure_ascii=False, indent=1), encoding="utf-8")
     path = out_dir / f"round{round_no}_report.md"
     path.write_text(report, encoding="utf-8")
     return path
+
+
+def load_round(round_no: int, out_dir: Path | None = None) -> dict | None:
+    p = (out_dir or REPORT_DIR) / f"round{round_no}.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def relabel_round(round_no: int, items: list[SetItem], out_dir: Path | None = None) -> tuple[dict, list[QuestionResult],
+                                                                                              str | None]:
+    """저장된 판정 결과에 현재 세트 파일의 외부 라벨을 다시 붙여 지표를 계산한다(모델 호출 없음).
+    결과 키의 번호(r<N>-q<n>)는 1라운드는 round1_qid, 이후 라운드는 세트 항목 순서(1부터)다."""
+    data = load_round(round_no, out_dir)
+    if data is None:
+        raise FileNotFoundError(f"round{round_no}.json")
+    by_n = {it.round1_qid: it for it in items} if round_no == 1 else {n + 1: it for n, it in enumerate(items)}
+    results = []
+    for raw in data["results"]:
+        r = QuestionResult(**raw)
+        item = by_n.get(int(r.key.rsplit("q", 1)[1]))
+        r.external = item.labels.get(round_no) if item else None
+        results.append(r)
+    m = metrics(results)
+    for k in ("generation", "rounds_db_set"):
+        if k in data["metrics"]:
+            m[k] = data["metrics"][k]
+    m["judge_version"] = data["metrics"].get("judge_version", m["judge_version"])
+    return m, results, data.get("notes")
 
 
 def load_round_metrics(round_no: int, out_dir: Path | None = None) -> dict | None:
@@ -385,6 +469,7 @@ def load_round_metrics(round_no: int, out_dir: Path | None = None) -> dict | Non
     return json.loads(p.read_text(encoding="utf-8"))["metrics"] if p.exists() else None
 
 
-__all__ = ["BlindAnswer", "GenerationStats", "JUDGE_VERSION", "Judgement", "OptionReview", "QuestionResult", "ROUNDS_DB", "SetItem",
-           "generate_round", "issues_of", "judge_all", "load_question_set", "load_round_metrics", "metrics",
-           "render_report", "save_round", "summarize_judgement"]
+__all__ = ["BlindAnswer", "GenerationStats", "JUDGE_VERSION", "Judgement", "OptionReview", "QuestionResult",
+           "ROUNDS_DB", "SetItem", "generate_round", "issues_of", "judge_all", "load_question_set", "load_round",
+           "load_round_metrics", "metrics", "option_calibration", "relabel_round", "render_report", "save_round",
+           "summarize_judgement"]
