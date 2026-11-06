@@ -50,6 +50,9 @@ CREDENTIAL = re.compile(
     r"((비밀\s*번호|패스워드|password|passwd|\bpw|암호|api[_ ]?key|secret[_ ]?key|access[_ ]?token)[\"']?\s*[:=]\s*\S+|"
     r"(비밀\s*번호|패스워드|password|계정|아이디).{0,30}(알려\s*줄|줄\s*테니|줄게|대신\s*로그인|로그인\s*해\s*줘|"
     r"입력해\s*줘|저장해\s*줘|기억해\s*줘)|"
+    # 영어로 값을 건네는 경우: "my password is hunter2", "use password hunter2 to log in"
+    r"\b(my\s+)?(password|passcode|passwd|pw)\s+(is|was|=)\s+\S+|"
+    r"\b(use|with|here'?s|here\s+is)\s+(my\s+|the\s+)?(password|passcode|credentials?)\b|"
     r"AKIA[0-9A-Z]{16}|bearer\s+[A-Za-z0-9._-]{16,})", re.IGNORECASE)
 INJECTION = re.compile(
     r"(ignore\s+(all\s+|any\s+)?(the\s+|your\s+)?(previous|prior|above|earlier)\s+(instructions|prompts?|rules)|"

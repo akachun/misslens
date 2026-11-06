@@ -51,7 +51,7 @@ class QAService:
     index: Any
     llm: Any
     router_llm: Any
-    reload_index: Callable[[], Any] | None = None   # 색인이 바뀌었으면 새 인스턴스, 아니면 None
+    reload_index: Callable[[], Any] | None = None   # 바뀌었으면 새 색인(없어졌으면 None), 그대로면 UNCHANGED
 
     def ask(self, question: str):
         if self.reload_index is not None:
@@ -59,11 +59,14 @@ class QAService:
                 fresh = self.reload_index()
             except Exception as exc:  # noqa: BLE001 - 지금 색인으로 답하고 다음 질의에서 다시 시도한다
                 logger.warning("index reload failed, keeping the current index: %s", exc)
-                fresh = None
-            if fresh is not None:
-                self.index = fresh
+                fresh = UNCHANGED
+            if fresh is not UNCHANGED:
+                self.index = fresh            # None이면 색인이 지워진 것: 옛 자료로 답하지 않는다
         return answer_query(question, pack=self.pack, ledger=self.ledger, index=self.index, llm=self.llm,
                             router_llm=self.router_llm)
+
+
+UNCHANGED = object()   # 색인이 그대로라는 표시(None은 '색인이 없어졌다'는 뜻이라 따로 둔다)
 
 
 def index_reloader(exam_id: str, opener: Callable[[str], Any], meta_path: Path) -> Callable[[], Any]:
@@ -74,7 +77,7 @@ def index_reloader(exam_id: str, opener: Callable[[str], Any], meta_path: Path) 
     def check() -> Any:
         mtime = meta_path.stat().st_mtime if meta_path.exists() else None
         if mtime == seen["mtime"]:
-            return None
+            return UNCHANGED
         fresh = opener(exam_id)          # 실패하면 예외가 나가고 seen은 그대로라 다음 질의에서 다시 시도한다
         seen["mtime"] = mtime
         return fresh
