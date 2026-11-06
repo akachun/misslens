@@ -30,7 +30,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from misslens.bedrock import PROJECT_ROOT
-from misslens.qa import QueryResult
+from misslens.qa import DATA_STEPS, QueryResult
 from misslens.trace import span
 
 logger = logging.getLogger(__name__)
@@ -85,16 +85,22 @@ class CaseJudgement(BaseModel):
     forbidden: list[TraitCheck] = Field(description="One entry per forbidden item, in order")
 
 
+JUDGE_VERSION = 2   # 1: 답변과 검색 출처만 봄(학습 기록 수치를 근거 없는 숫자로 오판). 2: 학습 기록 도구 출력도 근거로 받음
+
 JUDGE_SYSTEM = """You evaluate a study-coach assistant's answer to one learner query (the learner writes Korean).
 For each expected trait, decide whether the answer satisfies it. For each forbidden item, decide whether the answer
 is free of it (ok=true means it does NOT appear). Judge the answer text as written; be strict but fair: a trait about
 citing a source is met by a "(출처: ...)" mention, a trait about language is about the main answer language.
-The answer may be a fixed refusal or a feature notice; judge it the same way."""
+The answer may be a fixed refusal or a feature notice; judge it the same way.
+"Learning-record data" is the authoritative output of the learner's own study ledger that the assistant read.
+Numbers or phrases in the answer that match that data are real records, not fabricated; numbers that appear in
+neither the data nor the retrieved sources are fabricated."""
 
 
-def judge_case(llm: Any, case: QueryCase, res: QueryResult) -> CaseJudgement:
-    body = (f"Learner query:\n{case.input}\n\nAssistant answer:\n{res.answer}\n\n"
-            f"Retrieved sources: {', '.join(sorted({c['doc_id'] for c in res.contexts})) or 'none'}\n\n"
+def judge_case(llm: Any, case: QueryCase, answer: str, sources: list[str], evidence: list[dict]) -> CaseJudgement:
+    data = "\n".join(f"[{e['step']}] {e['output']}" for e in evidence) or "(none)"
+    body = (f"Learner query:\n{case.input}\n\nAssistant answer:\n{answer}\n\n"
+            f"Retrieved sources: {', '.join(sources) or 'none'}\n\nLearning-record data:\n{data}\n\n"
             "Expected traits:\n" + "\n".join(f"- {t}" for t in case.expected_traits)
             + "\n\nForbidden items:\n" + ("\n".join(f"- {t}" for t in case.forbidden) or "(none)"))
     out = llm.with_structured_output(CaseJudgement).invoke([SystemMessage(JUDGE_SYSTEM), HumanMessage(body)])
@@ -122,19 +128,29 @@ class CaseResult:
     passed: bool
     contexts: list[dict] = field(default_factory=list)
     ragas: dict = field(default_factory=dict)
+    evidence: list[dict] = field(default_factory=list)   # 학습 기록 도구 출력(판정기 근거, v2)
+
+
+def evidence_of(res: QueryResult) -> list[dict]:
+    return [s for s in res.trace if s["step"] in DATA_STEPS]
+
+
+def judgement_ok(case: QueryCase, judgement: CaseJudgement | None) -> tuple[bool, bool]:
+    """-> (기대 특성 모두 충족, 금지 항목 없음). 판정기가 항목을 빠뜨리면 검사하지 않은 조건이 통과로
+    셈해지므로 개수가 맞아야 판정으로 인정한다."""
+    complete = bool(judgement) and (len(judgement.traits) == len(case.expected_traits)
+                                    and len(judgement.forbidden) == len(case.forbidden))
+    return (complete and all(c.ok for c in judgement.traits),
+            complete and all(c.ok for c in judgement.forbidden))
 
 
 def evaluate_case(case: QueryCase, res: QueryResult, judgement: CaseJudgement | None) -> CaseResult:
     missing = [t for t in case.expected_tools if t not in called_tools(res)]
-    # 판정기가 항목을 빠뜨리면 검사하지 않은 조건이 통과로 셈해진다. 개수가 맞아야 판정으로 인정한다.
-    complete = bool(judgement) and (len(judgement.traits) == len(case.expected_traits)
-                                    and len(judgement.forbidden) == len(case.forbidden))
-    traits_ok = complete and all(c.ok for c in judgement.traits)
-    forbidden_ok = complete and all(c.ok for c in judgement.forbidden)
+    traits_ok, forbidden_ok = judgement_ok(case, judgement)
     return CaseResult(case.id, case.category, case.input, res.answer, res.route, res.steps,
                       sorted({c["doc_id"] for c in res.contexts}), not missing, missing, traits_ok, forbidden_ok,
                       judgement.model_dump() if judgement else {}, not missing and traits_ok and forbidden_ok,
-                      res.contexts)
+                      res.contexts, evidence=evidence_of(res))
 
 
 # --- RAGAS ---------------------------------------------------------------------------------
@@ -228,7 +244,8 @@ def run_round(cases: list[QueryCase], ask: Callable[[str], QueryResult], judge_l
         with span("query_eval.case", case=case.id):
             res = ask(case.input)
             try:
-                judgement = judge_case(judge_llm, case, res)
+                judgement = judge_case(judge_llm, case, res.answer, sorted({c["doc_id"] for c in res.contexts}),
+                                       evidence_of(res))
             except Exception as exc:  # noqa: BLE001 - 판정 실패는 미통과로 기록한다
                 logger.warning("judge failed on case %s: %s", case.id, exc)
                 judgement = None
@@ -237,6 +254,32 @@ def run_round(cases: list[QueryCase], ask: Callable[[str], QueryResult], judge_l
         progress(f"{case.id:>2} {case.category:<9} {'통과' if row.passed else '미통과'} · {row.route} · "
                  f"{', '.join(row.steps)}")
     return rows
+
+
+def rejudge_round(round_no: int, cases: list[QueryCase], judge_llm: Any,
+                  evidence_for: Callable[[QueryCase, dict], list[dict]], *, out_dir: Path | None = None,
+                  progress: Callable[[str], None] = lambda m: None) -> tuple[list[CaseResult], str]:
+    """저장된 라운드의 답변을 지금 판정기로 다시 채점한다(답변·도구 호출·RAGAS는 저장본 그대로).
+    `evidence_for`는 저장본에 근거 데이터가 없을 때(판정기 v1 라운드) 같은 ledger에서 다시 계산한다."""
+    saved = json.loads(((out_dir or REPORT_DIR) / f"query_round{round_no}.json").read_text(encoding="utf-8"))
+    by_id = {c.id: c for c in cases}
+    rows = []
+    for r in saved["results"]:
+        case = by_id[r["id"]]
+        evidence = r.get("evidence") or evidence_for(case, r)
+        try:
+            judgement = judge_case(judge_llm, case, r["answer"], r["sources"], evidence)
+        except Exception as exc:  # noqa: BLE001 - 판정 실패는 미통과로 기록한다
+            logger.warning("judge failed on case %s: %s", case.id, exc)
+            judgement = None
+        traits_ok, forbidden_ok = judgement_ok(case, judgement)
+        row = CaseResult(case.id, case.category, case.input, r["answer"], r["route"], r["steps"], r["sources"],
+                         r["tools_ok"], r["missing_tools"], traits_ok, forbidden_ok,
+                         judgement.model_dump() if judgement else {}, r["tools_ok"] and traits_ok and forbidden_ok,
+                         ragas=r.get("ragas") or {}, evidence=evidence)
+        rows.append(row)
+        progress(f"{case.id:>2} {case.category:<9} {'통과' if row.passed else '미통과'} (다시 채점)")
+    return rows, saved.get("notes", "-")
 
 
 def _mean(values: list[float | None]) -> float | None:
@@ -253,7 +296,7 @@ def metrics(rows: list[CaseResult]) -> dict:
         "tools_ok": sum(r.tools_ok for r in rows), "traits_ok": sum(r.traits_ok for r in rows),
         "forbidden_ok": sum(r.forbidden_ok for r in rows),
         "ragas": {key: _mean([r.ragas.get(key) for r in ragas_rows]) for key, _ in RAGAS_METRICS},
-        "ragas_samples": len(ragas_rows),
+        "ragas_samples": len(ragas_rows), "judge_version": JUDGE_VERSION,
     }
 
 
@@ -268,6 +311,8 @@ def render_report(round_no: int, m: dict, rows: list[CaseResult], *, previous: d
              f"- 날짜: {datetime.now():%Y-%m-%d %H:%M}",
              f"- 인-아웃 세트: `test_queries.csv` ({m['total']}건)",
              f"- 답변 모델: `{answer_model}` · 판정기·RAGAS 평가 모델: `{judge_model}` · 임베딩: bge-m3",
+             f"- 판정기 v{m.get('judge_version', 1)}: 답변 + 검색 출처"
+             + (" + 학습 기록 도구 출력(현황·세부 항목 기록)을 근거로 받음" if m.get("judge_version", 1) >= 2 else ""),
              "", "## 이번 라운드", "", notes, "", "## 통과율", "",
              "| 항목 | 이번 라운드 | 앞 라운드 |", "|---|---|---|"]
     p_total = f"{prev['passed']}/{prev['total']}" if prev else "-"
@@ -323,4 +368,4 @@ def load_round_metrics(round_no: int, out_dir: Path | None = None) -> dict | Non
 
 
 __all__ = ["CaseJudgement", "CaseResult", "QueryCase", "evaluate_case", "judge_case", "load_queries", "load_round_metrics",
-           "metrics", "ragas_scores", "render_report", "run_round", "save_round"]
+           "metrics", "ragas_scores", "rejudge_round", "render_report", "run_round", "save_round"]

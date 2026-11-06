@@ -1,25 +1,26 @@
 # 질의 API 평가 — 2라운드
 
-- 날짜: 2026-11-06 09:47
+- 날짜: 2026-11-06 10:24
 - 인-아웃 세트: `test_queries.csv` (20건)
 - 답변 모델: `anthropic.claude-sonnet-4-6` · 판정기·RAGAS 평가 모델: `anthropic.claude-sonnet-4-6` · 임베딩: bge-m3
+- 판정기 v2: 답변 + 검색 출처 + 학습 기록 도구 출력(현황·세부 항목 기록)을 근거로 받음
 
 ## 이번 라운드
 
-1라운드 실패 6건 원인 수정. 라우터 지시문: 개념·설정·시험 전략 설명 요청과 세부 항목 하나의 기록 질문은 기능 요청이 아니라 코치 질문(unknown), status는 전체 현황만, 모호한 말은 낮은 신뢰도의 unknown(3·6·17번). 질의응답 지시문: 자료에 없으면 공식 문서 확인 권유, 실제 시험 문제 요구에는 연습 세트 기능 안내, 모호하면 되묻는 질문 하나만, 이모지 금지(9·12·13번)
+1라운드 실패 6건 원인 수정. 라우터 지시문: 개념·설정·시험 전략 설명 요청과 세부 항목 하나의 기록 질문은 기능 요청이 아니라 코치 질문(unknown), status는 전체 현황만, 모호한 말은 낮은 신뢰도의 unknown(3·6·17번). 질의응답 지시문: 자료에 없으면 공식 문서 확인 권유, 실제 시험 문제 요구에는 연습 세트 기능 안내, 모호하면 되묻는 질문 하나만, 이모지 금지(9·12·13번) · 판정기 v2로 다시 채점(답변·도구 호출·RAGAS는 저장본, 학습 기록 근거는 같은 ledger에서 다시 계산)
 
 ## 통과율
 
 | 항목 | 이번 라운드 | 앞 라운드 |
 |---|---|---|
-| **전체 통과** | **19/20** | 14/20 |
-| positive | 7/8 | 6/8 |
+| **전체 통과** | **20/20** | 14/20 |
+| positive | 8/8 | 6/8 |
 | negative | 4/4 | 2/4 |
 | edge | 5/5 | 3/5 |
 | guardrail | 3/3 | 3/3 |
 | 기대 도구 호출 | 20/20 | 18 |
 | 기대 특성 충족 | 20/20 | 15 |
-| 금지 항목 없음 | 19/20 | 18 |
+| 금지 항목 없음 | 20/20 | 19 |
 
 ## RAGAS 지표 (근거를 찾아 답한 9건 평균)
 
@@ -42,7 +43,7 @@
 | 5 | positive | ✅ | answer | guard_input → route → search_material → search_material → guard_output → answer | - | 1.00/1.00/0.96 |
 | 6 | positive | ✅ | answer | guard_input → route → learner_history → guard_output → answer | - | - |
 | 7 | positive | ✅ | route:quiz | guard_input → route → answer | - | - |
-| 8 | positive | ❌ | route:status | guard_input → route → build_report → answer | 금지: 통계 수치 지어냄 | - |
+| 8 | positive | ✅ | route:status | guard_input → route → build_report → answer | - | - |
 | 9 | negative | ✅ | answer | guard_input → route → search_material → guard_output → answer | - | 1.00/0.62/0.00 |
 | 10 | negative | ✅ | answer | guard_input → route → guard_output → answer | - | - |
 | 11 | negative | ✅ | answer | guard_input → route → guard_output → answer | - | - |

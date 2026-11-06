@@ -126,6 +126,10 @@ class QueryResult:
         return [s["step"] for s in self.trace]
 
 
+DATA_STEPS = ("build_report", "learner_history")   # 학습 기록(ledger)을 읽는 단계: 평가 판정기의 근거
+DATA_LIMIT = 2000
+
+
 def _short(value: Any, limit: int = 300) -> str:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     return text if len(text) <= limit else text[:limit] + "…"
@@ -175,7 +179,12 @@ def _feature_answer(pack: ExamPack, intent: str, args: dict, ledger: Any) -> tup
                 "`python -m misslens.cli collect run`에서 진행합니다."), []
     if intent == "ingest":
         return "자료 넣기는 화면의 자료 탭(업로드)이나 `python -m misslens.cli ingest <파일 또는 폴더>`로 합니다.", []
-    # status: Reporter 수치(계산은 ledger, 규칙 1)
+    text = status_text(pack, ledger)
+    return text, [{"step": "build_report", "input": pack.exam_id, "output": _short(text, DATA_LIMIT)}]
+
+
+def status_text(pack: ExamPack, ledger: Any) -> str:
+    """현황 요약 문장. 수치는 Reporter(계산은 ledger, 규칙 1)."""
     from misslens.agents.reporter import build_report
 
     r = build_report(pack, ledger)
@@ -183,10 +192,9 @@ def _feature_answer(pack: ExamPack, intent: str, args: dict, ledger: Any) -> tup
     weak = sorted((d for d in r.domains if d["attempts"]), key=lambda d: d["accuracy"])[:2]
     weak_txt = ", ".join(f"{d['domain']} {d['accuracy']:.0%}" for d in weak) or "아직 풀이 기록 없음"
     phrases = ", ".join(p for p, _ in r.top_phrases[:3]) or "없음"
-    text = (f"출제 범위 {len(r.asked)}/{r.tasks_total}개 세부 항목({r.coverage_ratio:.0%})을 봤습니다. "
+    return (f"출제 범위 {len(r.asked)}/{r.tasks_total}개 세부 항목({r.coverage_ratio:.0%})을 봤습니다. "
             f"오답은 개념 {r.concept}·해석 {r.reading}·불확실 {r.uncertain}개이고 해석 실수 비율은 {ratio}입니다. "
             f"정답률이 낮은 영역: {weak_txt}. 자주 놓친 조건 문구: {phrases}.")
-    return text, [{"step": "build_report", "input": pack.exam_id, "output": _short(text)}]
 
 
 # --- 진입점 -------------------------------------------------------------------------------
@@ -237,7 +245,8 @@ def answer_query(question: str, *, pack: ExamPack, ledger: Any, index: Any, llm:
                 for c in m.tool_calls:
                     res = results.get(c["id"])
                     trace.append({"step": c["name"], "input": _short(c["args"]),
-                                  "output": _short(_text(res)) if res is not None else "(no result)"})
+                                  "output": (_short(_text(res), DATA_LIMIT if c["name"] in DATA_STEPS else 300)
+                                             if res is not None else "(no result)")})
         last = messages[-1] if messages else None
         answer = _text(last) if isinstance(last, AIMessage) and not last.tool_calls else ""
         if not answer:
@@ -251,4 +260,4 @@ def answer_query(question: str, *, pack: ExamPack, ledger: Any, index: Any, llm:
         return QueryResult(answer, contexts, trace, "answer")
 
 
-__all__ = ["QA_SYSTEM", "QueryResult", "REFUSALS", "answer_query", "contexts_from", "guard_input", "guard_output", "mask_secrets"]
+__all__ = ["QA_SYSTEM", "QueryResult", "REFUSALS", "answer_query", "contexts_from", "guard_input", "guard_output", "mask_secrets", "DATA_STEPS", "status_text"]

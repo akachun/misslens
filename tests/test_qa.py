@@ -250,6 +250,30 @@ def test_test_files_pass_the_handoff_secret_scan():
     assert mod.scan_secrets(sorted((root / "tests").glob("*.py")) + [root / "src/misslens/qa.py"], root) == []
 
 
+def test_judge_sees_ledger_data_and_rejudge_keeps_answers(ledger, tmp_path):
+    """판정기 v2: 학습 기록 도구 출력을 근거로 받는다. 다시 채점은 저장된 답변·RAGAS를 그대로 쓴다."""
+    from misslens.query_eval import JUDGE_VERSION, judge_case, rejudge_round
+
+    case = next(c for c in load_queries() if "route:status" in c.expected_tools)
+    res = answer_query(case.input, pack=PACK, ledger=ledger, index=None, llm=FakeRoleLLM([]),
+                       router_llm=FakeRoleLLM([route("status")]))
+    ok = {"traits": [{"item": x, "ok": True, "reason": "-"} for x in case.expected_traits],
+          "forbidden": [{"item": x, "ok": True, "reason": "-"} for x in case.forbidden]}
+    judge = FakeRoleLLM([ok])
+    judge_case(judge, case, res.answer, [], [s for s in res.trace if s["step"] == "build_report"])
+    assert "Learning-record data:\n[build_report] 출제 범위" in judge.prompts[0][1].content
+
+    row = evaluate_case(case, res, None)                       # v1 시절처럼 판정 실패로 저장
+    row.ragas, row.evidence = {"faithfulness": 0.5}, []
+    m = metrics([row])
+    save_round(1, m, [row], "r", notes="기준선", out_dir=tmp_path)
+    seen = []
+    rows, notes = rejudge_round(1, [case], FakeRoleLLM([ok]), lambda c, saved: seen.append(saved["steps"]) or
+                                [{"step": "build_report", "input": "x", "output": "출제 범위 0/30"}], out_dir=tmp_path)
+    assert rows[0].passed and rows[0].answer == res.answer and rows[0].ragas == {"faithfulness": 0.5}
+    assert seen == [res.steps] and notes == "기준선" and metrics(rows)["judge_version"] == JUDGE_VERSION
+
+
 def test_ragas_imports_with_the_langchain_community_shim():
     from misslens.query_eval import _shim_langchain_community
 

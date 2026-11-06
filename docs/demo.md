@@ -72,7 +72,7 @@
 
 - 터미널: `MISSLENS_SANDBOX=1 python -m misslens.cli trace --last 2` → 방금 시연한 실행이 노드(route → planner → generate …)와 모델 호출(역할·엔드포인트·지연·토큰·전환)로 보인다.
 - `evaluation/README.md`: 외부 검토(Opus·GPT, 20문제 중 OK 1) → 판정기 보정(외부와 일치 25% → 80%) → 지시문 보강 2라운드(OK 25 → 44%, 정답 하나 90 → 100%), 남은 구조 문제(개념 오답의 `violates`).
-- 질의 API(`/docs`): 개념 질문 → 답변·근거 발췌·단계(trace), 주입 시도 → `blocked:injection`(모델 호출 없음, 입력 원문은 trace에 남기지 않음). `evaluation/README.md` 질의 라운드: `test_queries.csv` 14/20 → 19/20, RAGAS 3지표.
+- 질의 API(`/docs`): 개념 질문 → 답변·근거 발췌·단계(trace), 주입 시도 → `blocked:injection`(모델 호출 없음, 입력 원문은 trace에 남기지 않음). `evaluation/README.md` 질의 라운드: `test_queries.csv` 14/20 → 20/20, RAGAS 3지표.
 - README '가드레일' 표: 입력(주입 차단·신뢰도)·출력(검증·베끼기·근거 확인)·통계·도구·보안 단계별 장치와 테스트.
 - 말할 것: "점수가 좋아진 것과 그대로인 것을 같이 보여 드립니다. 그대로인 지표는 설계 규칙을 바꿔야 해서 다음 라운드로 남겼습니다."
 

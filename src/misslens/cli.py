@@ -486,6 +486,8 @@ def main(argv: list[str] | None = None) -> int:
     qv.add_argument("--notes", default="", help="이번 라운드에서 바꾼 것(리포트에 그대로 들어감)")
     qv.add_argument("--limit", type=int, help="앞에서 N건만(시험 실행용)")
     qv.add_argument("--no-ragas", action="store_true", help="RAGAS 지표를 건너뛴다(통과율만)")
+    qv.add_argument("--rejudge", action="store_true",
+                    help="새로 묻지 않고 저장된 라운드의 답변을 지금 판정기로 다시 채점한다(판정기를 바꾼 뒤)")
     qv.add_argument("--exam", default="ccar-f")
     tr = sub.add_parser("trace", help="로컬 트레이스 요약: 역할별 모델 호출·노드 소요 시간·최근 실행(D60)")
     tr.add_argument("--day", help="YYYYMMDD(기본 오늘) 또는 all")
@@ -836,9 +838,11 @@ def query_eval_command(cli: CLI, args: argparse.Namespace) -> int:
 
     cases = load_queries()
     cases = cases[:args.limit] if args.limit else cases
-    svc = _qa_service(cli)
     judge = get_llm("judge")
     say = lambda m: cli.console.print(escape(m))  # noqa: E731
+    if args.rejudge:
+        return query_rejudge(cli, args, cases, judge, say)
+    svc = _qa_service(cli)
     say(f"{len(cases)}건 실행·판정 중")
     rows = run_round(cases, svc.ask, judge, progress=say)
     if not args.no_ragas:
@@ -855,6 +859,48 @@ def query_eval_command(cli: CLI, args: argparse.Namespace) -> int:
     r = m["ragas"]
     cli.console.print(f"통과 {m['passed']}/{m['total']} · RAGAS cp {r['context_precision']} · f {r['faithfulness']} · "
                       f"ar {r['answer_relevancy']} ({m['ragas_samples']}건) → {path}")
+    return 0
+
+
+def query_rejudge(cli: CLI, args: argparse.Namespace, cases: list, judge: Any, say: Callable[[str], None]) -> int:
+    """판정기를 바꾼 뒤 앞 라운드를 같은 판정기로 다시 채점한다. 답변·도구 호출·RAGAS는 저장본 그대로이고,
+    저장본에 학습 기록 근거가 없으면(판정기 v1 라운드) 같은 ledger에서 같은 도구로 다시 계산한다."""
+    import re
+    import shutil
+
+    from misslens.agents.grader.coach import make_tools
+    from misslens.bedrock import load_model_config
+    from misslens.qa import status_text
+    from misslens.query_eval import REPORT_DIR, load_round_metrics, metrics, rejudge_round, render_report, save_round
+
+    pack, ledger = cli.pack, cli.ledger
+    history = next(t for t in make_tools(pack, ledger, None) if t.name == "learner_history")
+
+    def evidence_for(case, saved: dict) -> list[dict]:
+        ev = []
+        if "build_report" in saved["steps"]:
+            ev.append({"step": "build_report", "input": pack.exam_id, "output": status_text(pack, ledger)})
+        if "learner_history" in saved["steps"]:
+            # "2.3에서"처럼 한글이 바로 붙어도 찾는다(\b는 한글을 단어 문자로 본다)
+            for tid in re.findall(r"(?<![\d.])\d\.\d(?![\d.])", case.input):
+                ev.append({"step": "learner_history", "input": json.dumps({"task_id": tid}),
+                           "output": history.invoke({"task_id": tid})})
+        return ev
+
+    for suffix, v1 in ((".json", f"query_round{args.round_no}_judge_v1.json"),
+                       ("_report.md", f"query_round{args.round_no}_judge_v1_report.md")):
+        src = REPORT_DIR / f"query_round{args.round_no}{suffix}"
+        if src.exists() and not (REPORT_DIR / v1).exists():
+            shutil.copy(src, REPORT_DIR / v1)          # 판정기 v1 결과는 따로 남긴다
+    rows, old_notes = rejudge_round(args.round_no, cases, judge, evidence_for, progress=say)
+    m = metrics(rows)
+    notes = (args.notes or old_notes.split(" · 판정기 v")[0]) + (
+        " · 판정기 v2로 다시 채점(답변·도구 호출·RAGAS는 저장본, 학습 기록 근거는 같은 ledger에서 다시 계산)")
+    roles = load_model_config().roles
+    report = render_report(args.round_no, m, rows, previous=load_round_metrics(args.round_no - 1), notes=notes,
+                           judge_model=roles["judge"]["model"], answer_model=roles["explainer"]["model"])
+    path = save_round(args.round_no, m, rows, report, notes=notes)
+    cli.console.print(f"다시 채점: 통과 {m['passed']}/{m['total']} → {path}")
     return 0
 
 

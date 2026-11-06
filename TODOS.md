@@ -60,7 +60,8 @@ v1 범위 밖이거나 구현 중에 발견했지만 마감 전에 하지 않기
 
 ### 질의 API 평가 (D61 이후)
 
-- [ ] 질의 평가 판정기에 도구 결과(`build_report`·`learner_history` 출력)를 넘긴다: 2라운드 8번은 ledger의 실제 수치를 '근거 없는 숫자'로 오판. 고친 뒤 1·2라운드를 다시 실행해 같은 판정기로 비교
+- [x] ~~질의 평가 판정기에 도구 결과를 넘긴다~~ → 판정기 v2 + `--rejudge`로 1·2라운드 재채점(2026-11-06, 2라운드 20/20)
+- [ ] `test_queries.csv`가 20/20으로 포화: 복합 요청("MCP 3문제 내고 tool_choice도 설명"), 여러 도구 결합, 후속 질문, 자료가 얇은 시험 전략 질문(faithfulness 낮음)을 추가
 - [ ] 질의 API의 현황 답에 영역 이름을 함께(지금은 `d1 86%`처럼 ID만)
 - [ ] RAGAS answer_relevancy가 '자료에 없음' 답을 0으로 본다: negative 질의는 RAGAS 표본에서 빼거나 따로 보고
 - [ ] MCP 서버로 `search_material`·`learner_history` 노출(과제 패턴 5), Docker 이미지(bge-m3·Playwright 포함 크기 확인)

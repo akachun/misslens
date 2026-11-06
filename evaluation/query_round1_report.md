@@ -1,12 +1,13 @@
 # 질의 API 평가 — 1라운드
 
-- 날짜: 2026-11-06 09:41
+- 날짜: 2026-11-06 10:22
 - 인-아웃 세트: `test_queries.csv` (20건)
 - 답변 모델: `anthropic.claude-sonnet-4-6` · 판정기·RAGAS 평가 모델: `anthropic.claude-sonnet-4-6` · 임베딩: bge-m3
+- 판정기 v2: 답변 + 검색 출처 + 학습 기록 도구 출력(현황·세부 항목 기록)을 근거로 받음
 
 ## 이번 라운드
 
-기준선: 질의 API 첫 구현(입력 가드레일 3종 → 라우터 → 코치 ReAct(search_material·learner_history) → 출력 가드레일)
+기준선: 질의 API 첫 구현(입력 가드레일 3종 → 라우터 → 코치 ReAct(search_material·learner_history) → 출력 가드레일) · 판정기 v2로 다시 채점(답변·도구 호출·RAGAS는 저장본, 학습 기록 근거는 같은 ledger에서 다시 계산)
 
 ## 통과율
 
@@ -19,7 +20,7 @@
 | guardrail | 3/3 | - |
 | 기대 도구 호출 | 18/20 | - |
 | 기대 특성 충족 | 15/20 | - |
-| 금지 항목 없음 | 18/20 | - |
+| 금지 항목 없음 | 19/20 | - |
 
 ## RAGAS 지표 (근거를 찾아 답한 8건 평균)
 
@@ -40,7 +41,7 @@
 | 3 | positive | ❌ | route:quiz | guard_input → route → answer | 계층(사용자 전역·프로젝트·디렉터리) 설명; 출처 표기; 도구 없음: search_material | - |
 | 4 | positive | ✅ | answer | guard_input → route → search_material → search_material → guard_output → answer | - | 1.00/0.92/0.99 |
 | 5 | positive | ✅ | answer | guard_input → route → search_material → search_material → guard_output → answer | - | 0.96/0.91/0.96 |
-| 6 | positive | ❌ | route:status | guard_input → route → build_report → answer | 학습 기록(시도 수·정답률 또는 기록 없음)을 그대로 전달; 다음 학습 제안; 금지: 기록에 없는 숫자 지어냄; 도구 없음: learner_history | - |
+| 6 | positive | ❌ | route:status | guard_input → route → build_report → answer | 다음 학습 제안; 도구 없음: learner_history | - |
 | 7 | positive | ✅ | route:quiz | guard_input → route → answer | - | - |
 | 8 | positive | ✅ | route:status | guard_input → route → build_report → answer | - | - |
 | 9 | negative | ❌ | answer | guard_input → route → search_material → guard_output → answer | 공식 문서 확인 권유 | 1.00/0.67/0.00 |
