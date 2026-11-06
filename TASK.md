@@ -176,7 +176,7 @@
 - [x] **T25** 문제 품질 라운드 평가(D59, Day 9 과제 '인-아웃 세트 자체 평가·라운드 리포트'): 외부 교차 검토(Opus·GPT, 20문제 중 OK 1) → 원인(지시문에 key constraint 기준 없음, Haiku 근거 확인이 관대) → 출제·근거 확인 지시문 보강. `question-eval`(인-아웃 세트 `evals/ccar-f/question_set.yaml`, 별도 DB, 판정기 `judge` 역할), 판정기 v1→v2 보정(외부 검토와 OK 일치 25%→80%). 1·2라운드 리포트(`evaluation/`): OK 25→44%, 정답 하나 90→100%, 사실 50→83%, 적합성 65→83%, violates 유효 50% 그대로(개념 오답 구조 문제 → TODOS 3라운드). 테스트 `tests/test_question_eval.py` 9개
 - [x] **T26** 트레이스·가드레일(D60, Day 9 과제): 로컬 JSONL 트레이스(`trace.py`: 라우터의 모든 모델 호출, LangGraph 노드 콜백, span), `trace` 요약 명령, 실호출로 노드·토큰·엔드포인트 기록 확인. README '가드레일' 표(단계별 장치·위치·테스트)와 '트레이스' 절, 프로필 권한 0700 테스트 추가, demo.md 8단계(평가와 관측). 테스트 `tests/test_trace.py` 7개
 - [x] **T27** 과제 산출물 규약 맞춤(D61, 과제 안내서 `mini_project.pdf` 대조): 인-아웃 세트 `test_queries.csv`(20건, positive 8·negative 4·edge 5·guardrail 3), 질의 API `POST /query`(FastAPI, `qa.py`: 입력 가드레일 → router `classify` → 코치 ReAct → 출력 가드레일), `query`·`query-eval` 명령, RAGAS 0.4.3(langchain-community 호환 shim, `get_llm("judge")`·bge-m3 어댑터). 1라운드 14/20 → 라우터·질의응답 지시문 수정 → 2라운드 19/20(RAGAS cp 0.81→0.87, f 0.80→0.79, ar 0.77→0.73). SERVICE §10 수익·사내 기여, §12 인-아웃 세트, §13 가드레일 정의, F12. README 제출 요약(패턴 Day 대응·RAGAS·통과율·회고·핵심 코드 위치)·API 절. 테스트 `tests/test_qa.py` 20개, 라우터 실호출 5개 재확인
-- [ ] 시연 캡처(Google Form 업로드용): 화면 주요 단계 + API 응답
+- [x] 시연 캡처(Google Form 업로드용, `data/submission/`, git 제외): 학습 탭·해석 실수 진단(놓친 문구 강조)·코치 해설(출처)·현황·계획 승인(interrupt①)·단어장·`POST /query` 응답·가드레일 차단·평가 리포트. 캡처 중 단어장 코드 블록의 `&quot;` 표시 버그를 발견해 수정(`md_text`, 테스트 추가)
 - [ ] 제출(Google Form, 15:00 마감): GitHub URL + 시연 캡처
 
 ---
@@ -275,3 +275,4 @@
 | 2026-11-06 | 최종 점검: 기본 335·realdata 1 통과, 문서 경로·CLI 명령(README·CLAUDE.md)·결정 ID(D1~D60) 대조 이상 없음. 테스트 수(testing.md·TASK)와 다음 작업 문구 갱신, SERVICE '가정과 위험'에 violates 위험 추가. zip 미리 보기가 고정 폴더만 보여 `evaluation/`이 빠진 것처럼 보이던 출력 수정(실제로는 포함), HANDOFF.md에 '평가와 관측' 안내 추가 |
 | 2026-11-06 | 진행 상황·규칙 점검(통계 집계·모델 ID·interrupt 위치·encoding 위반 없음, 기본 335 통과). `dist/` zip이 D58~D60 이전 것이라 제출 직전 재생성 필요 확인. 리팩토링 후보 5개(Generator 조립 중복, UI→CLI 의존, `cli.main` 분할, 현황 포맷 중복, Ledger 닫기)를 TODOS '구조'에 추가(제출 후) |
 | 2026-11-06 | T27: 과제 안내서 대조 → 빠진 산출물(`test_queries.csv`, `POST /query`, RAGAS 리포트, SERVICE 수익·가드레일·인-아웃 절, README 템플릿 항목) 추가. 질의 평가 1라운드 14/20 → 2라운드 19/20, RAGAS 3지표 기록. 남은 실패 1건은 판정기 오판(TODOS) |
+| 2026-11-06 | Streamlit 샌드박스 서버 재시작(제출 전 세트 0 확인, tmux `misslens-ui`), 질의 API 서버 tmux `misslens-api`(포트 8000). 시연 캡처 9장(`data/submission/`). 단어장 원문 문장의 따옴표가 코드 블록에서 `&quot;`로 보이던 버그 수정 |

@@ -333,6 +333,14 @@ def test_vocab_panel_and_word_book(res):
     assert any("must not store passwords" in m.value and "1회(세트 1개)" in m.value for m in at.markdown)
 
 
+def test_vocab_text_keeps_quotes_but_blocks_tags():
+    """단어장 원문 문장 속 코드 블록에 `&quot;`가 그대로 보이던 문제(시연 캡처에서 발견)."""
+    from misslens.ui.app import md_text
+
+    assert md_text('claude "Scan the codebase"') == 'claude "Scan the codebase"'
+    assert md_text("<script>x</script> & y") == "&lt;script&gt;x&lt;/script&gt; &amp; y"
+
+
 def test_background_signature_and_activity_lines(res):
     """D55: 상태 fragment는 이 시그니처가 바뀔 때만 페이지를 rerun하고, 작업을 한 줄에 나열한다."""
     import threading

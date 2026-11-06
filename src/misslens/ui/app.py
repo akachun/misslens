@@ -512,16 +512,22 @@ def _toggle_known(term_key: str, widget_key: str) -> None:
     r.ledger.mark_known(r.pack.exam_id, term_key, bool(st.session_state.get(widget_key)))
 
 
+def md_text(text: str) -> str:
+    """markdown(unsafe_allow_html)에 넣을 본문. <, >, &만 막는다. 따옴표까지 바꾸면 지문 속 코드 블록에
+    `&quot;`가 그대로 보인다(코드 블록은 엔티티를 풀지 않는다)."""
+    return html.escape(text, quote=False)
+
+
 def vocab_row(item: dict, key: str, stem: str | None = None, extra: str = "") -> None:
     c1, c2 = st.columns([6, 1])
     badge = " · 🔸 놓친 문제" if item.get("from_miss") else ""
-    c1.markdown(f"**{html.escape(item['term'])}** · {KIND_KO.get(item['kind'], item['kind'])} · "
-                f"{html.escape(item['meaning'])}{badge}{extra}", unsafe_allow_html=True)
+    c1.markdown(f"**{md_text(item['term'])}** · {KIND_KO.get(item['kind'], item['kind'])} · "
+                f"{md_text(item['meaning'])}{badge}{extra}", unsafe_allow_html=True)
     if item.get("role"):
         c1.caption(item["role"])
     sentence = context_sentence(stem, item["term"]) if stem else None
     if sentence:
-        c1.markdown("> " + highlight(html.escape(sentence), html.escape(item["term"]), "<mark>", "</mark>"),
+        c1.markdown("> " + highlight(md_text(sentence), md_text(item["term"]), "<mark>", "</mark>"),
                     unsafe_allow_html=True)
     c2.checkbox("외웠어요", value=bool(item.get("known")), key=key, on_change=_toggle_known,
                 args=(item["term_key"], key))
