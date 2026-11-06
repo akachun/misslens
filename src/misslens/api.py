@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from misslens.qa import answer_query
+
+logger = logging.getLogger(__name__)
 
 
 class QueryIn(BaseModel):
@@ -52,7 +55,11 @@ class QAService:
 
     def ask(self, question: str):
         if self.reload_index is not None:
-            fresh = self.reload_index()
+            try:
+                fresh = self.reload_index()
+            except Exception as exc:  # noqa: BLE001 - 지금 색인으로 답하고 다음 질의에서 다시 시도한다
+                logger.warning("index reload failed, keeping the current index: %s", exc)
+                fresh = None
             if fresh is not None:
                 self.index = fresh
         return answer_query(question, pack=self.pack, ledger=self.ledger, index=self.index, llm=self.llm,
@@ -68,8 +75,9 @@ def index_reloader(exam_id: str, opener: Callable[[str], Any], meta_path: Path) 
         mtime = meta_path.stat().st_mtime if meta_path.exists() else None
         if mtime == seen["mtime"]:
             return None
+        fresh = opener(exam_id)          # 실패하면 예외가 나가고 seen은 그대로라 다음 질의에서 다시 시도한다
         seen["mtime"] = mtime
-        return opener(exam_id)
+        return fresh
 
     return check
 
