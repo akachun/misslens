@@ -11,6 +11,7 @@
 | 색인 | `python -m misslens.cli search "tool_choice" --task 2.3` | 시험 가이드와 수집한 교안 청크가 나옴 |
 | 그래프 그림 | README의 Mermaid 그림 | Supervisor → 6개 에이전트, interrupt① ② 표시 |
 | 미리 푼 세트 | `MISSLENS_SANDBOX=1 python -m misslens.cli plan -n 3` 한 번 | 현황 탭에 숫자가 있고, 진단 일치율이 보임 |
+| 질의 API | `MISSLENS_SANDBOX=1 uvicorn misslens.api:app --port 8000` → http://localhost:8000/docs | `POST /query` Try it out으로 answer·contexts·trace 확인 |
 | 앱 | `MISSLENS_SANDBOX=1 streamlit run app/main.py` | 탭 4개와 '샌드박스 모드' 안내가 열림. 처음 열 때 bge-m3 로드로 10초 안팎 걸림. 시연 중 일부러 틀린 답이 실제 학습 기록에 섞이지 않음 |
 
 문제 하나를 만드는 데 30초~1분이 걸린다(Sonnet 생성 + Haiku 근거 검증, 실패하면 재생성). 그래서 시연 세트는 3문제로 하고, 첫 문제가 준비되면 바로 풀기 시작한다.
@@ -71,6 +72,7 @@
 
 - 터미널: `MISSLENS_SANDBOX=1 python -m misslens.cli trace --last 2` → 방금 시연한 실행이 노드(route → planner → generate …)와 모델 호출(역할·엔드포인트·지연·토큰·전환)로 보인다.
 - `evaluation/README.md`: 외부 검토(Opus·GPT, 20문제 중 OK 1) → 판정기 보정(외부와 일치 25% → 80%) → 지시문 보강 2라운드(OK 25 → 44%, 정답 하나 90 → 100%), 남은 구조 문제(개념 오답의 `violates`).
+- 질의 API(`/docs`): 개념 질문 → 답변·근거 발췌·단계(trace), 주입 시도 → `blocked:injection`(모델 호출 없음, 입력 원문은 trace에 남기지 않음). `evaluation/README.md` 질의 라운드: `test_queries.csv` 14/20 → 19/20, RAGAS 3지표.
 - README '가드레일' 표: 입력(주입 차단·신뢰도)·출력(검증·베끼기·근거 확인)·통계·도구·보안 단계별 장치와 테스트.
 - 말할 것: "점수가 좋아진 것과 그대로인 것을 같이 보여 드립니다. 그대로인 지표는 설계 규칙을 바꿔야 해서 다음 라운드로 남겼습니다."
 

@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -46,10 +48,30 @@ class QAService:
     index: Any
     llm: Any
     router_llm: Any
+    reload_index: Callable[[], Any] | None = None   # 색인이 바뀌었으면 새 인스턴스, 아니면 None
 
     def ask(self, question: str):
+        if self.reload_index is not None:
+            fresh = self.reload_index()
+            if fresh is not None:
+                self.index = fresh
         return answer_query(question, pack=self.pack, ledger=self.ledger, index=self.index, llm=self.llm,
                             router_llm=self.router_llm)
+
+
+def index_reloader(exam_id: str, opener: Callable[[str], Any], meta_path: Path) -> Callable[[], Any]:
+    """색인 파일(meta.json)의 수정 시각이 바뀌면 다시 연다. 서버가 떠 있는 동안 화면·CLI가 자료를 넣거나
+    재색인해도 API가 옛 스냅샷(또는 '자료 없음')으로 답하지 않게 한다."""
+    seen: dict = {"mtime": meta_path.stat().st_mtime if meta_path.exists() else None}
+
+    def check() -> Any:
+        mtime = meta_path.stat().st_mtime if meta_path.exists() else None
+        if mtime == seen["mtime"]:
+            return None
+        seen["mtime"] = mtime
+        return opener(exam_id)
+
+    return check
 
 
 @lru_cache(maxsize=1)
@@ -58,9 +80,12 @@ def default_service() -> QAService:
     from misslens.exam_pack import load_exam_pack
     from misslens.ledger import Ledger
     from misslens.llm import get_llm
+    from misslens.retrieval.index import INDEX_ROOT
 
     pack = load_exam_pack(os.environ.get("MISSLENS_EXAM", "ccar-f"))
-    return QAService(pack, Ledger(), open_index(pack.exam_id), get_llm("explainer"), get_llm("router"))
+    reload_index = index_reloader(pack.exam_id, open_index, INDEX_ROOT / pack.exam_id / "meta.json")
+    return QAService(pack, Ledger(), open_index(pack.exam_id), get_llm("explainer"), get_llm("router"),
+                     reload_index=reload_index)
 
 
 def create_app(service_factory=default_service) -> FastAPI:
@@ -80,4 +105,4 @@ def create_app(service_factory=default_service) -> FastAPI:
 
 app = create_app()
 
-__all__ = ["QAService", "QueryIn", "QueryOut", "app", "create_app"]
+__all__ = ["QAService", "QueryIn", "QueryOut", "app", "create_app", "index_reloader"]

@@ -126,8 +126,11 @@ class CaseResult:
 
 def evaluate_case(case: QueryCase, res: QueryResult, judgement: CaseJudgement | None) -> CaseResult:
     missing = [t for t in case.expected_tools if t not in called_tools(res)]
-    traits_ok = bool(judgement) and all(c.ok for c in judgement.traits)
-    forbidden_ok = bool(judgement) and all(c.ok for c in judgement.forbidden)
+    # 판정기가 항목을 빠뜨리면 검사하지 않은 조건이 통과로 셈해진다. 개수가 맞아야 판정으로 인정한다.
+    complete = bool(judgement) and (len(judgement.traits) == len(case.expected_traits)
+                                    and len(judgement.forbidden) == len(case.forbidden))
+    traits_ok = complete and all(c.ok for c in judgement.traits)
+    forbidden_ok = complete and all(c.ok for c in judgement.forbidden)
     return CaseResult(case.id, case.category, case.input, res.answer, res.route, res.steps,
                       sorted({c["doc_id"] for c in res.contexts}), not missing, missing, traits_ok, forbidden_ok,
                       judgement.model_dump() if judgement else {}, not missing and traits_ok and forbidden_ok,
