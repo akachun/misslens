@@ -327,23 +327,31 @@ def make_services(pack: ExamPack, ledger: Ledger):
     from misslens.llm import get_llm
     from misslens.practice import PracticeSamples, load_bank
 
-    index = open_index(pack.exam_id)
     bank = load_bank(pack.exam_id)
     samples = PracticeSamples(bank) if bank else None
-    context = RetrievalContext(index) if index is not None and len(index) else None
+    svc: Services | None = None
 
+    # 색인 인스턴스는 하나만 둔다. 자료 넣기·수집 색인(Ingestor)이 이 인스턴스를 고치고 저장하므로, 서버를 다시
+    # 띄우지 않아도 다음 세트 출제와 코치 검색이 새 자료를 본다(Codex 리뷰: 처음 연 색인에 고정되던 문제).
     def make_generator() -> Generator:
+        index = svc.index if svc is not None else None
+        context = RetrievalContext(index) if index is not None and len(index) else None
         return Generator(pack, ledger, context=context, samples=samples,
                          copy_guard=samples.copy_reason if samples else None)
+
+    def make_ingestor() -> Ingestor:
+        if svc.index is None:                       # 처음 넣는 자료: 새 색인을 만들어 모두가 같이 쓴다
+            svc.index = open_index(pack.exam_id, must_exist=True)
+        return Ingestor(pack, ledger, svc.index)
 
     try:
         sources = load_sources(pack.exam_id)
     except FileNotFoundError:
         sources = None
-    return Services(pack=pack, ledger=ledger, make_generator=make_generator, router_llm=get_llm("router"), index=index,
-                    planner_llm=get_llm("planner"),
-                    make_ingestor=lambda: Ingestor(pack, ledger, open_index(pack.exam_id, must_exist=True)),
-                    sources=sources, fetchers={n: Crawl4AIFetcher(n) for n in (sources.sites if sources else {})})
+    svc = Services(pack=pack, ledger=ledger, make_generator=make_generator, router_llm=get_llm("router"),
+                   index=open_index(pack.exam_id), planner_llm=get_llm("planner"), make_ingestor=make_ingestor,
+                   sources=sources, fetchers={n: Crawl4AIFetcher(n) for n in (sources.sites if sources else {})})
+    return svc
 
 
 def run_supervisor(cli: "CLI", request: dict, *, explainer: Any = None, svc: Any = None,

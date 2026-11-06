@@ -155,7 +155,8 @@ def with_tracing(config: dict) -> dict:
 def load_events(day: str | None = None, directory: Path | None = None) -> list[dict]:
     """day: YYYYMMDD(기본 오늘), "all"이면 전부."""
     d = directory or trace_dir()
-    files = sorted(d.glob("*.jsonl")) if day == "all" else [d / f"{day or datetime.now():%Y%m%d}.jsonl"]
+    stamp = day or f"{datetime.now():%Y%m%d}"     # 문자열에 날짜 서식을 붙이면 ValueError(Codex 리뷰)
+    files = sorted(d.glob("*.jsonl")) if day == "all" else [d / f"{stamp}.jsonl"]
     out = []
     for f in files:
         if f.exists():

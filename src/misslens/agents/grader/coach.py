@@ -251,6 +251,11 @@ def coach_ask(llm: Any, pack: ExamPack, question: str, *, ledger: Ledger | None,
     """coach thread에 질문 하나를 보낸다. 새 thread(아직 설명을 요청하지 않았거나 학습자가 맞힌 문제)에서는
     `row`가 문제 맥락을 주므로 학습자 자신의 질문으로 대화를 시작할 수 있다.
     예외를 던지지 않는다. 실패하면 짧은 안내가 된다."""
+    from misslens.qa import REFUSALS, guard_input   # qa가 이 모듈을 쓰므로 여기서 가져온다
+
+    if guard_input(question) == "credential":
+        # 비밀번호·키는 모델에 보내지도, 대화 기록(checkpointer)에 남기지도 않는다(규칙 7, Codex 리뷰)
+        return CoachResult(REFUSALS["credential"])
     try:
         graph = build_coach_graph(llm, make_tools(pack, ledger, index), checkpointer=checkpointer)
         started = checkpointer.get_tuple({"configurable": {"thread_id": thread_id}}) is not None

@@ -139,3 +139,11 @@ def test_cli_without_traces(tmp_path):
     from misslens.cli import main
 
     assert main(["trace"]) == 1
+
+
+def test_load_events_accepts_a_day_string(tmp_path):
+    """`trace --day 20261105`가 ValueError로 죽던 문제(Codex 리뷰)."""
+    from misslens.trace import load_events
+
+    (tmp_path / "20261105.jsonl").write_text('{"kind": "llm"}\n', encoding="utf-8")
+    assert load_events("20261105", directory=tmp_path) == [{"kind": "llm"}]

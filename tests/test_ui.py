@@ -224,6 +224,15 @@ def _diagnosis(at, res, wrong: bool):
     return res.ledger.set_attempts(sid)[0]
 
 
+def test_correct_answer_can_be_marked_invalid(res):
+    """F8: 맞힌 문제도 문제 자체가 잘못됐으면 통계에서 뺄 수 있다(Codex 리뷰)."""
+    at = run(AppTest.from_file(APP, default_timeout=30))
+    att = _diagnosis(at, res, wrong=False)
+    assert att["is_correct"]
+    run(at.button(key=f"inv_{att['id']}").click())
+    assert res.ledger.set_attempts(att["set_id"])[0]["invalid"]
+
+
 @pytest.mark.parametrize("wrong", [True, False])
 def test_question_box_is_there_before_any_explanation(res, wrong):
     """①: 실수를 직접 묻는다. ②: 정답으로 답한 문제에 대해 묻는다."""

@@ -479,6 +479,10 @@ def study_diagnosis(r: Resources, quiz: dict) -> None:
                 st.markdown("**해설**")
                 st.write(q["explanation_native"])
                 coach_panel(r, row)
+                # 맞혔어도 문제 자체가 잘못됐으면 정답률·범위·미끼 기준선에서 빼야 한다(F8, Codex 리뷰)
+                if row.attempt_id not in invalid and st.button("문제 이상(통계에서 빼기)", key=f"inv_{row.attempt_id}"):
+                    r.ledger.mark_invalid(row.attempt_id)
+                    st.rerun()
             continue
         chosen = "-" if row.chosen_index is None else LETTERS[row.chosen_index]
         title = (f"문제 {row.seq + 1} · {LABELS.get(row.miss_type, row.miss_type or '-')} · "

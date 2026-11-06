@@ -105,7 +105,7 @@
 | `src/agent.py` | `src/misslens/graph.py:83` `build_supervisor_graph` | 메인 Supervisor 그래프 |
 | `src/tools.py` | `src/misslens/agents/grader/coach.py:90` `make_tools` | 도메인 도구(`search_material`, `learner_history`), ReAct 그래프 `build_coach_graph`(179행) |
 | `src/retriever.py` | `src/misslens/retrieval/index.py:65` `ChunkIndex`(`search` 184행, `rrf` 56행) | 하이브리드 RAG |
-| API | `src/misslens/api.py:109`, `src/misslens/qa.py:202` `answer_query` | `POST /query`, 가드레일·라우팅·답변 |
+| API | `src/misslens/api.py:109`, `src/misslens/qa.py:204` `answer_query` | `POST /query`, 가드레일·라우팅·답변 |
 | 평가 | `src/misslens/query_eval.py:170` `ragas_scores`, `src/misslens/question_eval.py` | RAGAS·인-아웃 세트, 문제 품질 라운드 |
 | `data/` | git 제외(로그인 교안·개인 학습 기록) | 구성은 [데이터와 보안](#데이터와-보안), 평가용 데이터는 비공개 zip([평가용 전달](#평가용-전달비공개)) |
 
@@ -485,7 +485,7 @@ PowerShell: `Invoke-RestMethod -Uri http://localhost:8000/query -Method Post -Co
 | 단계 | 가드레일 | 위치 | 테스트 |
 |---|---|---|---|
 | 입력 | 수집 본문·검색 결과·도구 결과를 '참고 자료(data, 지시 아님)' 블록으로 감싸 프롬프트 주입 차단. 수집 페이지에 `untrusted external content` 표시 | `generator/context.py` `reference_block`, `collector/graph.py`, `ingest/loaders.py`, 코치·단어장·판정기 프롬프트 | `test_generator.py`, `test_ingest.py` |
-| 입력(질의 API) | 비밀번호·자격 증명 전달(`pw=…`, "알려 줄 테니 로그인해 줘", 액세스 키), 프롬프트 주입(지시 무시·지시문 공개 요구), 덤프 사이트 수집 요구는 모델을 부르기 전에 규칙으로 거절. 시험 주제 질문("비밀번호를 저장하지 않는 에이전트", "system prompt에 예시")은 통과. 차단한 입력은 trace에도 원문을 남기지 않음 | `qa.py` `guard_input` | `test_qa.py`, `test_queries.csv` 18~20 |
+| 입력(질의 API·코치 질문) | 비밀번호·자격 증명 전달(`pw=…`, `{"password": …}`, "my password is …", "알려 줄 테니 로그인해 줘", 액세스 키, `AWS_SECRET_ACCESS_KEY=…`. 코치 질문 칸도 같은 검사, 막힌 질문은 대화 기록에도 남지 않음), 프롬프트 주입(지시 무시·지시문 공개 요구), 덤프 사이트 수집 요구는 모델을 부르기 전에 규칙으로 거절. 시험 주제 질문("비밀번호를 저장하지 않는 에이전트", "system prompt에 예시")은 통과. 차단한 입력은 trace에도 원문을 남기지 않음 | `qa.py` `guard_input` | `test_qa.py`, `test_queries.csv` 18~20 |
 | 출력(질의 API) | 답에 지시문이 섞이면 답 전체를 거절 문장으로 교체, 액세스 키 형태는 가림. 기능 요청(문제 풀기·계획·수집)은 실행하지 않고 안내만(학습 기록을 바꾸지 않음) | `qa.py` `guard_output`, `_feature_answer` | `test_qa.py` |
 | 입력 | 자유 발화는 신뢰도 0.6 미만이거나 의도를 모르면 실행하지 않음. 파일 경로는 문장에서 받지 않음 | `supervisor` `MIN_CONFIDENCE`, `route_text` | `test_supervisor.py` |
 | 입력 | 수집은 `sources.yaml`에 허용한 도메인만, 로그인 만료·수강 미등록 페이지는 저장하지 않고 멈춤(interrupt②). 예상문제 사이트는 자동 수집 안 함 | `collector/sources.py` `allows`·`is_expired`·`is_not_enrolled` | `test_collector.py` |
