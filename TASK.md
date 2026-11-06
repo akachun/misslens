@@ -283,3 +283,4 @@
 | 2026-11-06 | 최종 전체 점검 + Codex 전체 리뷰(gpt-6.1-sol, git 추적 파일만, `.env`·`data/` 읽기 금지): 기본 372·realdata 1·live 9 통과(라우터 변경 뒤 live 재확인), 규칙 1~7 위반 없음, 공개 파일 자격 증명 0. 고친 것: 코치 질문 칸이 자격 증명 가드레일을 거치지 않음(규칙 7), `AWS_SECRET_ACCESS_KEY=`·`AWS_SESSION_TOKEN=` 형식 차단·가림, 화면·Supervisor가 처음 연 색인에 고정(자료를 넣어도 출제·코치가 옛 색인) → 색인 인스턴스 하나를 Ingestor와 공유, `trace --day YYYYMMDD` ValueError, 맞힌 문제에 '문제 이상' 버튼 없음. 미룬 것: 영역별 문제 수 상한(TODOS). 테스트 6개 추가 |
 | 2026-11-06 | 비공개 평가용 zip 생성(`512d36f` 기준, sandbox 기록). Streamlit·API 서버 재시작(제출 전 세트 0 확인) |
 | 2026-11-06 | 시연 캡처 9장을 `docs/screenshots/`로 공개하고 README '시연 화면' 절에 표로 붙임(학습자 결정). `08_api_query.png`는 guide.pdf 발췌가 보여 제외(Form 업로드용으로만), GitHub 화면 캡처는 중복이라 제외. `eval_misses.yaml`은 공개 유지(학습자 결정). zip 다시 생성 |
+| 2026-11-06 | `08_api_query.png`(API 응답, guide.pdf 짧은 발췌 포함)도 공개(학습자 결정). README 시연 화면 표에 추가, zip 다시 생성 |

@@ -359,6 +359,7 @@ flowchart LR
 | ![현황](docs/screenshots/05_status.png) | **현황**: 범위 20/30, 해석 실수 비율과 미끼 기준선, 영역별 정답률, 놓친 조건 문구 순위, 진단 일치율 |
 | ![계획 승인](docs/screenshots/06_plan_approval.png) | **계획 승인 대기(interrupt①)**: 영역별 문제 수와 근거를 보고 고쳐서 승인, 새로고침해도 이어짐 |
 | ![단어장](docs/screenshots/07_vocab.png) | **단어장**: 놓친 문제의 조건 표현을 원문 문장과 함께, 외운 표현 숨기기 |
+| ![API 응답](docs/screenshots/08_api_query.png) | **`POST /query` 응답**: 근거 기반 답변(`answer`)과 검색 발췌(`contexts`, 출처 `doc_id`). Swagger(`/docs`)에서 실행 |
 | ![API 가드레일](docs/screenshots/09_api_guardrail.png) | **`POST /query` 가드레일**: 프롬프트 주입 시도 → `blocked:injection`, 모델 호출 없음, 입력 원문은 trace에 남기지 않음 |
 
 ## 설치
